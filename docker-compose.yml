@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - MENU_SERVICE_URL=http://menu-service:3002
+      - ORDER_SERVICE_URL=http://order-service:3003
+      - TABLE_SERVICE_URL=http://table-service:3004
+      - PAYMENT_SERVICE_URL=http://payment-service:3005
+    depends_on:
+      - auth-service
+      - menu-service
+      - order-service
+
+  # Auth Service
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/restaurant-auth
+      - JWT_SECRET=your-secret-key
+    depends_on:
+      - mongodb
+
+  # Menu Service
+  menu-service:
+    build: ./services/menu-service
+    ports:
+      - "3002:3002"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/restaurant-menu
+    depends_on:
+      - mongodb
+
+  # Order Service
+  order-service:
+    build: ./services/order-service
+    ports:
+      - "3003:3003"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/restaurant-orders
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    depends_on:
+      - mongodb
+      - rabbitmq
+
+  # MongoDB
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  # Table Service
+  table-service:
+    build: ./services/table-service
+    ports:
+      - "3004:3004"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/restaurant-tables
+      - SESSION_SECRET=your-session-secret
+    depends_on:
+      - mongodb
+
+  # Frontend Admin Web
+  frontend-admin:
+    build: ./frontend-admin
+    ports:
+      - "3001:3000"
+    environment:
+      - REACT_APP_API_GATEWAY_URL=http://localhost:3000/api
+    depends_on:
+      - api-gateway
+
+volumes:
+  mongodb_data:
