@@ -1,0 +1,41 @@
+# Docker Compose Override Example
+# Copy file này thành docker-compose.override.yml để customize
+# File docker-compose.override.yml sẽ tự động được merge với docker-compose.yml
+
+# Ví dụ: Development mode với hot reload
+services:
+  api-gateway:
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+
+  auth-service:
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+
+  menu-service:
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+
+  order-service:
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+
+  table-service:
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+
+# Ví dụ: Thay đổi ports
+#  frontend-admin:
+#    ports:
+#      - "8081:80"
+
+# Ví dụ: Thêm environment variables
+#  auth-service:
+#    environment:
+#      - JWT_SECRET=my-custom-secret
+#      - JWT_EXPIRES_IN=30d

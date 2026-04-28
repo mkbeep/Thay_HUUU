@@ -5,7 +5,7 @@
 ```
 restaurant-management/
 ├── mobile-app/           # React Native - App khách hàng (iOS/Android)
-├── frontend-admin/       # ReactJS Web - Quản lý nhân viên/admin
+├── frontend-admin/       # ReactJS Web - Quản lý nhân viên/admin (TailwindCSS + Responsive)
 ├── services/             # Microservices Backend
 │   ├── api-gateway/      # API Gateway
 │   ├── auth-service/     # Xác thực & phân quyền (JWT)
@@ -40,11 +40,13 @@ restaurant-management/
 - React Navigation
 - AsyncStorage
 
-### Web Admin (Nhân viên)
-- ReactJS
+### Web Admin (Nhân viên & Quản lý)
+- ReactJS (Desktop + Mobile Web - Responsive)
 - Redux Toolkit
-- Material-UI
+- TailwindCSS
 - React Router
+- JWT Authentication
+- Role-based access control
 
 ### Backend
 - Node.js/Express
@@ -55,9 +57,61 @@ restaurant-management/
 
 ## Cài đặt và chạy
 
+### 🐳 Cách 1: Sử dụng Docker (Khuyến nghị - Cực đơn giản!)
+
+**Yêu cầu:** Docker Desktop
+
+```bash
+# Chỉ cần 1 lệnh - tất cả sẽ tự động chạy!
+docker-compose up --build
+
+# Hoặc chạy ở background
+docker-compose up --build -d
+```
+
+Docker sẽ tự động:
+- ✅ Build tất cả services
+- ✅ Khởi động MongoDB & RabbitMQ
+- ✅ Khởi động tất cả microservices
+- ✅ Tự động seed dữ liệu mẫu
+- ✅ Khởi động Frontend Admin
+
+**Dừng services:**
+```bash
+docker-compose down
+```
+
+Xem hướng dẫn chi tiết: [DOCKER.md](./DOCKER.md)
+
+### 💻 Cách 2: Chạy thủ công (Development)
+
 Xem hướng dẫn chi tiết trong [SETUP.md](./SETUP.md)
 
-### Chạy nhanh (Windows)
+#### macOS/Linux
+
+```bash
+# 1. Cài đặt dependencies cho tất cả services
+npm install --prefix services/api-gateway
+npm install --prefix services/auth-service
+npm install --prefix services/menu-service
+npm install --prefix services/order-service
+npm install --prefix services/table-service
+
+# 2. Khởi động MongoDB
+docker run -d -p 27017:27017 --name mongodb mongo:7
+
+# 3. Seed dữ liệu
+cd scripts && npm install && node seed-data.js && cd ..
+
+# 4. Chạy từng service trong terminal riêng
+cd services/api-gateway && npm start
+cd services/auth-service && npm start
+cd services/menu-service && npm start
+cd services/order-service && npm start
+cd services/table-service && npm start
+```
+
+#### Windows
 
 ```bash
 # 1. Cài đặt dependencies

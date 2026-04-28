@@ -2,6 +2,15 @@
 
 Web app ReactJS cho nhân viên và quản lý nhà hàng.
 
+## Công nghệ
+
+- **ReactJS** - UI Framework
+- **TailwindCSS** - Styling (Responsive Design)
+- **Redux Toolkit** - State Management
+- **React Router** - Routing
+- **JWT** - Authentication
+- **Axios** - HTTP Client
+
 ## Cài đặt
 
 ```bash
@@ -15,14 +24,21 @@ npm install
 npm start
 ```
 
+## Build production
+
+```bash
+npm run build
+```
+
 ## Tính năng
 
-- Đăng nhập JWT
-- Phân quyền theo role (ADMIN, MANAGER, WAITER, CHEF)
-- Quản lý thực đơn
-- Quản lý đơn hàng
-- Quản lý bàn
-- Quản lý nhân viên (chỉ ADMIN)
+- ✅ **Responsive Design** (Desktop + Mobile Web)
+- ✅ Đăng nhập JWT
+- ✅ Phân quyền theo role (ADMIN, MANAGER, WAITER, CHEF)
+- ✅ Quản lý thực đơn
+- ✅ Quản lý đơn hàng
+- ✅ Quản lý bàn
+- ✅ Quản lý nhân viên (chỉ ADMIN)
 
 ## Roles
 
