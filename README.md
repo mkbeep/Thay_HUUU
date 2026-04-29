@@ -1,143 +1,138 @@
-# Hệ thống quản lý nhà hàng - Kiến trúc Microservice
+# Ứng dụng Quản lý Nhà hàng
 
-## Cấu trúc dự án
+Ứng dụng demo quản lý nhà hàng được xây dựng bằng React Native với TypeScript, theo kiến trúc phân tầng (Layered Architecture).
 
-```
-restaurant-management/
-├── mobile-app/           # React Native - App khách hàng (iOS/Android)
-├── frontend-admin/       # ReactJS Web - Quản lý nhân viên/admin (TailwindCSS + Responsive)
-├── services/             # Microservices Backend
-│   ├── api-gateway/      # API Gateway
-│   ├── auth-service/     # Xác thực & phân quyền (JWT)
-│   ├── menu-service/     # Quản lý thực đơn
-│   ├── order-service/    # Quản lý đơn hàng
-│   ├── table-service/    # Quản lý bàn & session
-│   ├── payment-service/  # Thanh toán
-│   └── notification-service/ # Thông báo
-├── shared/               # Code dùng chung
-└── docker-compose.yml    # Docker orchestration
-```
+## 🏗️ Kiến trúc
 
-## Phân quyền
+Dự án được tổ chức theo mô hình 3 tầng:
 
-### Khách hàng (Mobile App)
-- React Native (iOS/Android)
-- Không cần login
-- Session-based với tableId
-- Chức năng: Chọn bàn → Xem menu → Đặt món → Theo dõi đơn hàng
+### 1. **Presentation Layer** (`src/presentation/`)
+- Chứa các màn hình (Screens) và components UI
+- Xử lý tương tác người dùng
+- Hiển thị dữ liệu từ Business Layer
 
-### Nhân viên & Quản lý (Web Admin)
-- ReactJS Web Desktop
-- Login với JWT
-- Role-based access control
-- Roles: ADMIN, MANAGER, WAITER, CHEF
+### 2. **Business Logic Layer** (`src/business/`)
+- Chứa các Services xử lý logic nghiệp vụ
+- Điều phối giữa Presentation và Data Layer
+- Xử lý các quy tắc kinh doanh
 
-## Công nghệ sử dụng
+### 3. **Data Layer** (`src/data/`)
+- Chứa Repositories quản lý dữ liệu
+- Xử lý CRUD operations
+- Có thể kết nối với API hoặc database
 
-### Mobile App (Khách hàng)
-- React Native + Expo
-- Redux Toolkit
-- React Navigation
-- AsyncStorage
+### Domain Models (`src/domain/`)
+- Định nghĩa các entities và interfaces
+- Được sử dụng xuyên suốt các tầng
 
-### Web Admin (Nhân viên & Quản lý)
-- ReactJS (Desktop + Mobile Web - Responsive)
-- Redux Toolkit
-- TailwindCSS
-- React Router
-- JWT Authentication
-- Role-based access control
+## 📱 Tính năng
 
-### Backend
-- Node.js/Express
-- MongoDB
-- RabbitMQ
-- JWT + Session
-- Docker
+### 1. Quản lý Thực đơn
+- Xem danh sách món ăn
+- Phân loại theo danh mục (Khai vị, Món chính, Tráng miệng, Đồ uống)
+- Đánh dấu món còn/hết
 
-## Cài đặt và chạy
+### 2. Quản lý Đơn hàng
+- Xem danh sách đơn hàng đang hoạt động
+- Cập nhật trạng thái đơn hàng (Chờ xử lý → Đang chuẩn bị → Sẵn sàng → Hoàn thành)
+- Hủy đơn hàng
 
-### 🐳 Cách 1: Sử dụng Docker (Khuyến nghị - Cực đơn giản!)
+### 3. Quản lý Bàn ăn
+- Xem trạng thái các bàn (Trống, Đang sử dụng, Đã đặt)
+- Thay đổi trạng thái bàn
+- Hiển thị thông tin đơn hàng của bàn
 
-**Yêu cầu:** Docker Desktop
+### 4. Thống kê
+- Thống kê đơn hàng (tổng đơn, doanh thu, giá trị trung bình)
+- Thống kê bàn ăn (tổng số, trạng thái, tỷ lệ sử dụng)
 
+## 🚀 Cài đặt
+
+### Yêu cầu
+- Node.js (v16 trở lên)
+- npm hoặc yarn
+- Expo CLI
+
+### Các bước cài đặt
+
+1. Cài đặt dependencies:
 ```bash
-# Chỉ cần 1 lệnh - tất cả sẽ tự động chạy!
-docker-compose up --build
-
-# Hoặc chạy ở background
-docker-compose up --build -d
+npm install
 ```
 
-Docker sẽ tự động:
-- ✅ Build tất cả services
-- ✅ Khởi động MongoDB & RabbitMQ
-- ✅ Khởi động tất cả microservices
-- ✅ Tự động seed dữ liệu mẫu
-- ✅ Khởi động Frontend Admin
-
-**Dừng services:**
+2. Khởi chạy ứng dụng:
 ```bash
-docker-compose down
+npm start
 ```
 
-Xem hướng dẫn chi tiết: [DOCKER.md](./DOCKER.md)
+3. Chạy trên thiết bị:
+- iOS: `npm run ios`
+- Android: `npm run android`
+- Web: `npm run web`
 
-### 💻 Cách 2: Chạy thủ công (Development)
+## 📂 Cấu trúc thư mục
 
-Xem hướng dẫn chi tiết trong [SETUP.md](./SETUP.md)
-
-#### macOS/Linux
-
-```bash
-# 1. Cài đặt dependencies cho tất cả services
-npm install --prefix services/api-gateway
-npm install --prefix services/auth-service
-npm install --prefix services/menu-service
-npm install --prefix services/order-service
-npm install --prefix services/table-service
-
-# 2. Khởi động MongoDB
-docker run -d -p 27017:27017 --name mongodb mongo:7
-
-# 3. Seed dữ liệu
-cd scripts && npm install && node seed-data.js && cd ..
-
-# 4. Chạy từng service trong terminal riêng
-cd services/api-gateway && npm start
-cd services/auth-service && npm start
-cd services/menu-service && npm start
-cd services/order-service && npm start
-cd services/table-service && npm start
+```
+restaurant-management-app/
+├── src/
+│   ├── domain/
+│   │   └── models/          # Định nghĩa entities
+│   │       ├── MenuItem.ts
+│   │       ├── Order.ts
+│   │       └── Table.ts
+│   ├── data/
+│   │   └── repositories/    # Quản lý dữ liệu
+│   │       ├── MenuRepository.ts
+│   │       ├── OrderRepository.ts
+│   │       └── TableRepository.ts
+│   ├── business/
+│   │   └── services/        # Logic nghiệp vụ
+│   │       ├── MenuService.ts
+│   │       ├── OrderService.ts
+│   │       └── TableService.ts
+│   └── presentation/
+│       └── screens/         # Màn hình UI
+│           ├── MenuScreen.tsx
+│           ├── OrdersScreen.tsx
+│           ├── TablesScreen.tsx
+│           └── StatsScreen.tsx
+├── App.tsx                  # Entry point
+├── package.json
+└── tsconfig.json
 ```
 
-#### Windows
+## 🎨 Công nghệ sử dụng
 
-```bash
-# 1. Cài đặt dependencies
-npm run install-all
+- **React Native** - Framework mobile
+- **TypeScript** - Type safety
+- **Expo** - Development platform
+- **React Navigation** - Điều hướng
+- **React Native Safe Area Context** - Xử lý safe area
 
-# 2. Khởi động MongoDB
-docker run -d -p 27017:27017 --name mongodb mongo:7
+## 🔄 Luồng dữ liệu
 
-# 3. Seed dữ liệu
-cd scripts && npm install && node seed-data.js && cd ..
-
-# 4. Chạy tất cả services
-scripts\start-dev.bat
+```
+User Interaction (Screen)
+    ↓
+Service (Business Logic)
+    ↓
+Repository (Data Access)
+    ↓
+Data Source (Mock Data / API)
 ```
 
-### Tài khoản test
+## 📝 Ghi chú
 
-| Username | Password | Role |
-|----------|----------|------|
-| admin | admin123 | ADMIN |
-| manager | manager123 | MANAGER |
-| waiter | waiter123 | WAITER |
-| chef | chef123 | CHEF |
+- Hiện tại ứng dụng sử dụng dữ liệu mock trong memory
+- Có thể mở rộng để kết nối với backend API
+- Có thể thêm state management (Redux, MobX, Zustand) nếu cần
+- Có thể thêm local storage (AsyncStorage) để lưu trữ dữ liệu
 
-### URLs
+## 🚧 Phát triển tiếp
 
-- Web Admin: http://localhost:3000
-- API Gateway: http://localhost:3000/api
-- Mobile App: Quét QR từ Expo
+- [ ] Kết nối với backend API
+- [ ] Thêm authentication
+- [ ] Thêm tính năng đặt món
+- [ ] Thêm in hóa đơn
+- [ ] Thêm quản lý nhân viên
+- [ ] Thêm báo cáo chi tiết
