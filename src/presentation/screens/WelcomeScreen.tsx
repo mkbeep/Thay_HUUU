@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { IMAGES } from '../../domain/constants/images';
 
 interface WelcomeScreenProps {
   tableNumber?: number;
@@ -42,7 +43,7 @@ export default function WelcomeScreen({
         {/* Hero Section with Background Image */}
         <View style={styles.heroSection}>
           <ImageBackground
-            source={{
+            source={IMAGES.hero.welcomeBanner || {
               uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxxoc1rGNFxwCoY3tmMsoqGdmoOlkcnd5n8A5pVMekOdHHMhbRUI3b7a6V4Q5grF1vq0la5TZiVivoG1eDJFN9104Qp9yFdISWbF6386-njZy2e8Gr8Ir8xrqIlK_LiHXhZfeHjBTK2uMjQ5MHcwCWO6kfGALmY6ys_NkhrnUzorOmAkyQhseO6YqyOrkOQhyUYdEfpAeoCnQ52VJSDLQBaWrXejpm7klJxNP9RUdnwRp9nWULAO0yQJn48xEo3YdT7SSbrZHR5w',
             }}
             style={styles.heroImage}

@@ -136,3 +136,6 @@ Data Source (Mock Data / API)
 - [ ] Thêm in hóa đơn
 - [ ] Thêm quản lý nhân viên
 - [ ] Thêm báo cáo chi tiết
+
+
+npx expo start --clear       
