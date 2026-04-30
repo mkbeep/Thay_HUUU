@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { IMAGES } from '../../domain/constants/images';
 import { MOCK_MENU_ITEMS } from '../../data/mockData/menuItems';
+import { useCart } from '../context/CartContext';
 
 interface MenuItem {
   id: string;
@@ -48,8 +49,11 @@ export default function HomeMenuScreen({
 }: HomeMenuScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [cartCount] = useState(3);
-  const [cartTotal] = useState('740.880đ');
+  
+  // Sử dụng CartContext
+  const { addItem, getItemCount, getGrandTotal } = useCart();
+  const cartCount = getItemCount();
+  const cartTotal = `${getGrandTotal().toFixed(1)}k`;
 
   // Filter menu items theo category và search
   const filteredMenuItems = MOCK_MENU_ITEMS.filter((item) => {
@@ -134,6 +138,18 @@ export default function HomeMenuScreen({
             ]}
             disabled={!item.available}
             activeOpacity={0.7}
+            onPress={() => {
+              // Thêm món vào giỏ hàng
+              const priceNumber = parseFloat(item.price.replace('k', ''));
+              addItem({
+                id: item.id,
+                name: item.name,
+                price: priceNumber,
+                priceDisplay: item.price,
+                image: item.image,
+                category: item.category,
+              });
+            }}
           >
             <Ionicons 
               name="add" 
