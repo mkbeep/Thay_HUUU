@@ -24,13 +24,15 @@ interface MenuItem {
   badge?: string;
   badgeColor?: string;
   available: boolean;
-  category: string; // Thêm category
+  category: string;
+  description?: string;
 }
 
 interface HomeMenuScreenProps {
   tableNumber?: number;
   onCartPress?: () => void;
   onNavigate?: (screen: string) => void;
+  onMenuItemPress?: (item: MenuItem) => void;
 }
 
 const CATEGORIES = [
@@ -45,7 +47,8 @@ const CATEGORIES = [
 export default function HomeMenuScreen({ 
   tableNumber = 12,
   onCartPress,
-  onNavigate 
+  onNavigate,
+  onMenuItemPress,
 }: HomeMenuScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -89,10 +92,19 @@ export default function HomeMenuScreen({
   };
 
   const renderMenuItem = ({ item }: { item: MenuItem }) => (
-    <View style={[
-      styles.menuCard,
-      !item.available && styles.menuCardDisabled,
-    ]}>
+    <TouchableOpacity
+      style={[
+        styles.menuCard,
+        !item.available && styles.menuCardDisabled,
+      ]}
+      onPress={() => {
+        if (item.available && onMenuItemPress) {
+          onMenuItemPress(item);
+        }
+      }}
+      activeOpacity={0.9}
+      disabled={!item.available}
+    >
       {!item.available && (
         <View style={styles.outOfStockOverlay}>
           <View style={styles.outOfStockBadge}>
@@ -138,7 +150,10 @@ export default function HomeMenuScreen({
             ]}
             disabled={!item.available}
             activeOpacity={0.7}
-            onPress={() => {
+            onPress={(e) => {
+              // Ngăn event bubble lên parent TouchableOpacity
+              e.stopPropagation();
+              
               // Thêm món vào giỏ hàng
               const priceNumber = parseFloat(item.price.replace('k', ''));
               addItem({
@@ -159,7 +174,7 @@ export default function HomeMenuScreen({
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -291,7 +306,7 @@ export default function HomeMenuScreen({
 
         <TouchableOpacity 
           style={styles.navItem}
-          onPress={() => onNavigate?.('history')}
+          onPress={() => onNavigate?.('orders')}
         >
           <Ionicons name="receipt" size={26} color="#A8A29E" />
           <Text style={styles.navText}>Lịch sử</Text>

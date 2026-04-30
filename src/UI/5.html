@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+
+<html class="light" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Theo dõi đơn hàng - Table 12</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcf9f8;
+        }
+        h1, h2, h3, .font-headline {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-fixed": "#6bfe9c",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#1c1b1b",
+                        "tertiary-fixed-dim": "#4ae183",
+                        "surface-dim": "#dcd9d9",
+                        "on-secondary": "#ffffff",
+                        "surface-tint": "#b12d00",
+                        "on-tertiary-fixed-variant": "#005228",
+                        "on-secondary-container": "#636262",
+                        "surface-variant": "#e5e2e1",
+                        "inverse-surface": "#313030",
+                        "on-surface-variant": "#5c4038",
+                        "tertiary": "#006a35",
+                        "surface-container": "#f0eded",
+                        "on-tertiary-container": "#f6fff4",
+                        "background": "#fcf9f8",
+                        "outline": "#916f67",
+                        "on-background": "#1c1b1b",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed": "#00210c",
+                        "primary-fixed": "#ffdbd1",
+                        "on-secondary-fixed-variant": "#474746",
+                        "secondary": "#5f5e5e",
+                        "surface-container-high": "#eae7e7",
+                        "primary-fixed-dim": "#ffb5a0",
+                        "primary-container": "#d83900",
+                        "outline-variant": "#e5beb3",
+                        "on-error-container": "#93000a",
+                        "on-primary": "#ffffff",
+                        "inverse-primary": "#ffb5a0",
+                        "error": "#ba1a1a",
+                        "primary": "#ad2c00",
+                        "on-primary-fixed": "#3b0900",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "inverse-on-surface": "#f3f0ef",
+                        "secondary-fixed": "#e5e2e1",
+                        "tertiary-container": "#008645",
+                        "surface-container-low": "#f6f3f2",
+                        "surface-bright": "#fcf9f8",
+                        "secondary-container": "#e2dfde",
+                        "surface": "#fcf9f8",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-primary-fixed-variant": "#872000",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e5e2e1",
+                        "on-primary-container": "#fffbff"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface antialiased">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-white/80 dark:bg-stone-900/80 backdrop-blur-md shadow-sm shadow-stone-200/50 flex items-center justify-between px-6 h-16">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-orange-700 dark:text-orange-500">restaurant</span>
+<h1 class="font-plus-jakarta text-lg font-bold tracking-tight text-orange-700">Table 12</h1>
+</div>
+<div class="flex items-center">
+<button class="hover:opacity-80 transition-opacity scale-95 active:duration-150 p-2">
+<span class="material-symbols-outlined text-stone-500">notifications</span>
+</button>
+</div>
+</header>
+<main class="pt-20 pb-32 px-4 max-w-2xl mx-auto space-y-6">
+<!-- In-app Notification Banner -->
+<div class="bg-primary-container text-on-primary-container p-4 rounded-lg flex items-center gap-4 shadow-lg shadow-primary/10 border-l-4 border-primary">
+<div class="bg-white/20 p-2 rounded-full">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">skillet</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-medium leading-tight">Bếp đang làm món Burger Bò Wagyu của bạn!</p>
+</div>
+<button class="opacity-70 hover:opacity-100">
+<span class="material-symbols-outlined text-sm">close</span>
+</button>
+</div>
+<!-- Order Hero Status -->
+<section class="bg-surface-container-lowest p-6 rounded-lg shadow-sm">
+<div class="flex justify-between items-start mb-8">
+<div>
+<span class="text-xs font-bold text-secondary uppercase tracking-widest opacity-60">Đơn hàng hiện tại</span>
+<h2 class="text-2xl font-extrabold font-headline mt-1 tracking-tight">#GT-8892</h2>
+</div>
+<div class="bg-primary/10 px-4 py-1.5 rounded-full">
+<span class="text-primary font-bold text-xs">Bếp đang làm</span>
+</div>
+</div>
+<!-- Stepper Progress -->
+<div class="relative flex justify-between items-start">
+<!-- Line background -->
+<div class="absolute top-5 left-0 w-full h-0.5 bg-surface-container-highest -z-0"></div>
+<!-- Active line progress -->
+<div class="absolute top-5 left-0 w-3/5 h-0.5 bg-primary -z-0"></div>
+<div class="flex flex-col items-center gap-3 z-10">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white shadow-md">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="text-[10px] font-bold text-center uppercase tracking-tighter text-on-surface">Đã thanh toán</span>
+</div>
+<div class="flex flex-col items-center gap-3 z-10">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white shadow-md">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">person_check</span>
+</div>
+<span class="text-[10px] font-bold text-center uppercase tracking-tighter text-on-surface">Xác nhận</span>
+</div>
+<div class="flex flex-col items-center gap-3 z-10">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white shadow-[0_0_20px_rgba(173,44,0,0.4)] ring-4 ring-primary-fixed">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">skillet</span>
+</div>
+<span class="text-[10px] font-bold text-center uppercase tracking-tighter text-primary">Đang nấu</span>
+</div>
+<div class="flex flex-col items-center gap-3 z-10">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-stone-400">
+<span class="material-symbols-outlined text-xl">restaurant_menu</span>
+</div>
+<span class="text-[10px] font-bold text-center uppercase tracking-tighter text-stone-400">Sẵn sàng</span>
+</div>
+<div class="flex flex-col items-center gap-3 z-10">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-stone-400">
+<span class="material-symbols-outlined text-xl">done_all</span>
+</div>
+<span class="text-[10px] font-bold text-center uppercase tracking-tighter text-stone-400">Phục vụ</span>
+</div>
+</div>
+</section>
+<!-- Order Timeline Section -->
+<section class="space-y-4">
+<h3 class="text-lg font-bold font-headline px-2">Lịch sử đơn hàng tại bàn</h3>
+<div class="space-y-4">
+<!-- Current Order Card -->
+<div class="bg-surface-container-lowest rounded-lg overflow-hidden group hover:shadow-md transition-shadow">
+<div class="flex h-32">
+<div class="w-32 h-full shrink-0 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Juicy gourmet wagyu beef burger with melting cheese, fresh lettuce, and caramelized onions on a brioche bun, editorial food photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2Jv0Ece5LT06zBl0znrBGVWGoVPHxcAzyFTI7EOKdMWscmAdqvCQzk3nGSV3tJ1h8JU-smTkCClFQk-Og3Ow0LJIqfA0Cw5d-K7RwN3Lx-3wbzlF942cL3AxwR-Y3mIIpKArcldJ6v7d3YbFSk1S4Ox8aLbBqT9BEusp6lTZfCH9L7X4fa6PBGBwDflLpPPgKBTEdoTIyiEDyQg8jzFkYk5G-BgTPwpcdMZ_8ae36H4D1euUpvQ6WPMDHngAj9rE5cCxaB_25xg"/>
+</div>
+<div class="p-4 flex flex-col justify-between flex-1">
+<div>
+<div class="flex justify-between items-start">
+<span class="text-[10px] font-bold text-primary uppercase">Mới nhất • 12:45</span>
+<span class="material-symbols-outlined text-primary text-lg">schedule</span>
+</div>
+<h4 class="font-bold text-on-surface line-clamp-1">Burger Bò Wagyu &amp; Khoai tây</h4>
+<p class="text-xs text-secondary mt-1">Gói Combo A1, Sốt đặc biệt</p>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-xs font-semibold text-primary">Bếp đang thực hiện...</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Previous Order Card -->
+<div class="bg-surface-container-low rounded-lg overflow-hidden opacity-80">
+<div class="flex h-32">
+<div class="w-32 h-full shrink-0 overflow-hidden grayscale">
+<img class="w-full h-full object-cover" data-alt="Refreshing sparkling citrus soda with fresh mint leaves and ice in a tall glass, bright high-end restaurant lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSMq5Xm_N9uA0lVK4vcZ_vCRrsZBI1gE2_M6rAq3LtwsCAGAfRukr1QBTUUDY_Gs2bdlVz4Jbe9Jmeav5_WlSpJKdie-YLHeZa1u_2Zh74JN-qZ5TEdqK0qe-RY4sk_0Rxvn1T_x7BHI1IZljNiowCHpv0c-nsxolE9Zx6LYwwLuwsq-_Y4_ub7MrNqqoKK5GxOm8mg-VMAlMJskEHC40kowZJtgzL-N3-oxOBHbuZaPnU0Ld3N0of8RCWuItF2JrN6-UWU-Zn0w"/>
+</div>
+<div class="p-4 flex flex-col justify-between flex-1">
+<div>
+<div class="flex justify-between items-start">
+<span class="text-[10px] font-bold text-secondary uppercase">Đã xong • 12:30</span>
+<span class="material-symbols-outlined text-tertiary text-lg" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<h4 class="font-bold text-on-surface opacity-60">Soda Chanh Dây &amp; Bạc Hà</h4>
+<p class="text-xs text-secondary mt-1">Không đường, thêm đá</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-semibold text-tertiary">Đã phục vụ</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Another Previous Order Card -->
+<div class="bg-surface-container-low rounded-lg overflow-hidden opacity-80">
+<div class="flex h-32">
+<div class="w-32 h-full shrink-0 overflow-hidden grayscale">
+<img class="w-full h-full object-cover" data-alt="Crispy golden fried chicken wings with honey garlic glaze on a ceramic plate, warm restaurant ambiance" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfkkO0uMpkoPnq_rACok3d50O10-4Cl9bWd_u2MfMi6Ka_yslLBAkdTqOk0wkrDBsvjULqnuNN-fEgguLv9zKiaAOjyERnS4VTPU70v_uMo3R2fvM533D_1EeddEpEtZ7qCpOBbuIisAVv7jqZsEQYdjjiKU8fCOXxGwZW72ALUX9LhQR60xe1x2DhPNgg3K78UIQa7WxPCbYpesbPge3EIl2UFY66U4Ge00P6bXPLq2g3JnsCA5wfNRHfGFeGqnxSy96Ef44wtg"/>
+</div>
+<div class="p-4 flex flex-col justify-between flex-1">
+<div>
+<div class="flex justify-between items-start">
+<span class="text-[10px] font-bold text-secondary uppercase">Đã xong • 12:15</span>
+<span class="material-symbols-outlined text-tertiary text-lg" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<h4 class="font-bold text-on-surface opacity-60">Cánh gà chiên mắm</h4>
+<p class="text-xs text-secondary mt-1">Phần 6 miếng, Cay vừa</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-semibold text-tertiary">Đã phục vụ</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Help Section (Extra) -->
+<div class="bg-secondary-container rounded-lg p-4 flex items-center justify-between mt-8">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary">support_agent</span>
+<div>
+<p class="text-sm font-bold">Cần hỗ trợ?</p>
+<p class="text-xs text-secondary">Yêu cầu nhân viên đến bàn</p>
+</div>
+</div>
+<button class="bg-white text-on-surface px-4 py-2 rounded-full text-xs font-bold shadow-sm active:scale-95 transition-transform">Gọi ngay</button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-[3rem] bg-white/80 dark:bg-stone-900/80 backdrop-blur-xl shadow-[0_-8px_30px_rgb(0,0,0,0.04)] flex justify-around items-center h-24 px-4 pb-6">
+<a class="flex flex-col items-center justify-center text-stone-400 dark:text-stone-500 px-6 py-2 hover:text-orange-600 transition-colors" href="#">
+<span class="material-symbols-outlined">restaurant_menu</span>
+<span class="font-plus-jakarta text-[11px] font-semibold uppercase tracking-widest mt-1">Menu</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 rounded-full px-6 py-2 transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+<span class="font-plus-jakarta text-[11px] font-semibold uppercase tracking-widest mt-1">Orders</span>
+</a>
+<a class="flex flex-col items-center justify-center text-stone-400 dark:text-stone-500 px-6 py-2 hover:text-orange-600 transition-colors" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-plus-jakarta text-[11px] font-semibold uppercase tracking-widest mt-1">Profile</span>
+</a>
+</nav>
+</body></html>

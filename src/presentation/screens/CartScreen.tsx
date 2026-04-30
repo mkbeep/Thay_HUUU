@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCart } from '../context/CartContext';
+import { useOrder } from '../context/OrderContext';
 
 interface CartItem {
   id: string;
@@ -36,6 +37,7 @@ export default function CartScreen({
   tableNumber = 12,
 }: CartScreenProps) {
   const { items, removeItem, updateQuantity, getTotal, getTax, getServiceFee, getGrandTotal, clearCart } = useCart();
+  const { createOrder } = useOrder();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   const subtotal = getTotal();
@@ -82,8 +84,15 @@ export default function CartScreen({
         { 
           text: 'Gửi đơn', 
           onPress: () => {
+            // Tạo order trong OrderContext
+            createOrder(items, total, tableNumber);
+            
+            // Xóa giỏ hàng
             clearCart();
+            
+            // Gọi callback
             onSubmitOrder();
+            
             Alert.alert('Thành công', 'Đơn hàng đã được gửi đến bếp!');
           }
         },
