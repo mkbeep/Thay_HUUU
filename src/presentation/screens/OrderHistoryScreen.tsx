@@ -13,6 +13,8 @@ import { useOrder, OrderStatus } from '../context/OrderContext';
 
 interface OrderHistoryScreenProps {
   onBack: () => void;
+  onPayment?: () => void;
+  onSupport?: () => void;
   tableNumber?: number;
 }
 
@@ -26,6 +28,8 @@ const STATUS_CONFIG = {
 
 export default function OrderHistoryScreen({
   onBack,
+  onPayment,
+  onSupport,
   tableNumber = 12,
 }: OrderHistoryScreenProps) {
   const { orders, currentOrder } = useOrder();
@@ -264,10 +268,32 @@ export default function OrderHistoryScreen({
               <Text style={styles.helpSubtitle}>Yêu cầu nhân viên đến bàn</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.helpButton}>
+          <TouchableOpacity style={styles.helpButton} onPress={onSupport}>
             <Text style={styles.helpButtonText}>Gọi ngay</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Payment Button */}
+        {orders.some((order) => order.status === 'served') && onPayment && (
+          <TouchableOpacity
+            style={styles.paymentCard}
+            onPress={onPayment}
+            activeOpacity={0.9}
+          >
+            <View style={styles.paymentCardContent}>
+              <View style={styles.paymentCardLeft}>
+                <Ionicons name="receipt-outline" size={32} color="#AD2C00" />
+                <View>
+                  <Text style={styles.paymentCardTitle}>Xem tổng hóa đơn</Text>
+                  <Text style={styles.paymentCardSubtitle}>
+                    Chi tiết tất cả đơn đã gọi
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#AD2C00" />
+            </View>
+          </TouchableOpacity>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -605,5 +631,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#1C1B1B',
+  },
+  paymentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 24,
+    shadowColor: '#AD2C00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#AD2C00',
+  },
+  paymentCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  paymentCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  paymentCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1C1B1B',
+  },
+  paymentCardSubtitle: {
+    fontSize: 14,
+    color: '#5F5E5E',
+    marginTop: 2,
   },
 });

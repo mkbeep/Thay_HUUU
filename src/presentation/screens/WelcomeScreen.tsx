@@ -57,14 +57,14 @@ export default function WelcomeScreen({
                 {/* Location Badge */}
                 <View style={styles.locationBadge}>
                   <Ionicons name="location" size={14} color="#AD2C00" />
-                  <Text style={styles.locationText}>IN-RESTAURANT DINING</Text>
+                  <Text style={styles.locationText}>DÙNG BỮA TẠI NHÀ HÀNG</Text>
                 </View>
 
                 {/* Table Number */}
-                <Text style={styles.tableNumber}>Table {tableNumber}</Text>
+                <Text style={styles.tableNumber}>Bàn {tableNumber}</Text>
                 
                 {/* Welcome Text */}
-                <Text style={styles.welcomeText}>Welcome to Gourmet Tech</Text>
+                <Text style={styles.welcomeText}>Chào mừng đến Gourmet Tech</Text>
               </View>
             </LinearGradient>
           </ImageBackground>
@@ -75,18 +75,18 @@ export default function WelcomeScreen({
           <View style={styles.contentContainer}>
             {/* Description */}
             <Text style={styles.description}>
-              Experience our seasonal menu crafted with precision. Our Digital Maître d' is ready to guide you through today's chef specials.
+              Trải nghiệm thực đơn theo mùa được chế biến tỉ mỉ. Hệ thống đặt món thông minh của chúng tôi sẵn sàng hướng dẫn bạn qua các món đặc biệt hôm nay.
             </Text>
 
             {/* Feature Cards */}
             <View style={styles.featureGrid}>
               <View style={styles.featureCard}>
                 <Ionicons name="sparkles" size={24} color="#AD2C00" />
-                <Text style={styles.featureText}>Daily Specials</Text>
+                <Text style={styles.featureText}>Món đặc biệt hàng ngày</Text>
               </View>
               <View style={styles.featureCard}>
                 <Ionicons name="leaf" size={24} color="#006A35" />
-                <Text style={styles.featureText}>Fresh Ingredients</Text>
+                <Text style={styles.featureText}>Nguyên liệu tươi sống</Text>
               </View>
             </View>
 
@@ -103,7 +103,7 @@ export default function WelcomeScreen({
                   end={{ x: 1, y: 1 }}
                   style={styles.primaryButtonGradient}
                 >
-                  <Text style={styles.primaryButtonText}>Explore Our Menu</Text>
+                  <Text style={styles.primaryButtonText}>Khám phá thực đơn</Text>
                   <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
                 </LinearGradient>
               </TouchableOpacity>
@@ -113,7 +113,7 @@ export default function WelcomeScreen({
                 onPress={onViewDrinks}
                 activeOpacity={0.8}
               >
-                <Text style={styles.secondaryButtonText}>View Drink Selection</Text>
+                <Text style={styles.secondaryButtonText}>Xem danh sách đồ uống</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -124,8 +124,8 @@ export default function WelcomeScreen({
       <View style={styles.footer}>
         <View style={styles.footerContent}>
           <View style={styles.footerBadge}>
-            <Ionicons name="person-remove" size={14} color="#A8A29E" />
-            <Text style={styles.footerText}>NO LOGIN REQUIRED - JUST SCAN & ENJOY</Text>
+            <Ionicons name="qr-code" size={14} color="#A8A29E" />
+            <Text style={styles.footerText}>KHÔNG CẦN ĐĂNG NHẬP - CHỈ CẦN QUÉT VÀ THƯỞNG THỨC</Text>
           </View>
           <View style={styles.footerIndicator} />
         </View>

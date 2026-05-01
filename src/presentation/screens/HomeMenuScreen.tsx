@@ -314,18 +314,18 @@ export default function HomeMenuScreen({
 
         <TouchableOpacity 
           style={styles.navItem}
-          onPress={() => onNavigate?.('favorites')}
+          onPress={() => onNavigate?.('support')}
         >
-          <Ionicons name="heart" size={26} color="#A8A29E" />
-          <Text style={styles.navText}>Yêu thích</Text>
+          <Ionicons name="hand-right" size={26} color="#A8A29E" />
+          <Text style={styles.navText}>Hỗ trợ</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
           style={styles.navItem}
-          onPress={() => onNavigate?.('profile')}
+          onPress={() => onNavigate?.('table')}
         >
-          <Ionicons name="person-circle" size={26} color="#A8A29E" />
-          <Text style={styles.navText}>Tài khoản</Text>
+          <Ionicons name="restaurant" size={26} color="#A8A29E" />
+          <Text style={styles.navText}>Bàn của tôi</Text>
         </TouchableOpacity>
       </View>
     </View>
