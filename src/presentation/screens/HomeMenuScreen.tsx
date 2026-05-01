@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { IMAGES } from '../../domain/constants/images';
-import { MOCK_MENU_ITEMS } from '../../data/mockData/menuItems';
+import { MenuService } from '../../business/services/MenuService';
 import { useCart } from '../context/CartContext';
+import { MenuItem as DomainMenuItem } from '../../domain/models/MenuItem';
 
 interface MenuItem {
   id: string;
@@ -52,14 +53,60 @@ export default function HomeMenuScreen({
 }: HomeMenuScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Sử dụng CartContext
   const { addItem, getItemCount, getGrandTotal } = useCart();
   const cartCount = getItemCount();
   const cartTotal = `${getGrandTotal().toFixed(1)}k`;
 
+  // Khởi tạo MenuService
+  const menuService = new MenuService();
+
+  // Load menu items từ service
+  useEffect(() => {
+    loadMenuItems();
+  }, []);
+
+  const loadMenuItems = async () => {
+    try {
+      setLoading(true);
+      const items: DomainMenuItem[] = await menuService.getMenuItems();
+      // Chuyển đổi từ domain MenuItem sang presentation MenuItem
+      const displayItems: MenuItem[] = items.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: `${(item.price / 1000).toFixed(0)}k`, // 145000 -> "145k"
+        image: item.image,
+        badge: item.badge,
+        badgeColor: item.badgeColor,
+        available: item.available,
+        category: mapCategoryToId(item.category),
+        description: item.description,
+      }));
+      setMenuItems(displayItems);
+    } catch (error) {
+      console.error('Error loading menu items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper để map MenuCategory enum sang category id
+  const mapCategoryToId = (category: any): string => {
+    const categoryMap: { [key: string]: string } = {
+      'Khai vị': 'starters',
+      'Món chính': 'main',
+      'Tráng miệng': 'desserts',
+      'Đồ uống': 'drinks',
+      'Đặc biệt': 'specials',
+    };
+    return categoryMap[category] || 'main';
+  };
+
   // Filter menu items theo category và search
-  const filteredMenuItems = MOCK_MENU_ITEMS.filter((item) => {
+  const filteredMenuItems = menuItems.filter((item) => {
     const matchCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchCategory && matchSearch;
