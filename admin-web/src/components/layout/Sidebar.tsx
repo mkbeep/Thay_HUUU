@@ -19,10 +19,18 @@ const navigation = [
 
 export default function Sidebar() {
   return (
-    <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+    <div className="w-64 bg-[#F6F3F2] border-r border-stone-200/20 flex flex-col">
       {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-primary-500">Gourmet Tech</h1>
+      <div className="flex items-center gap-3 px-6 py-6 border-b border-stone-200/20">
+        <div className="w-10 h-10 rounded-full bg-[#AD2C00] flex items-center justify-center text-white">
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/>
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-lg font-black text-stone-900 leading-tight">Gourmet Tech</h2>
+          <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Quản Trị Viên</p>
+        </div>
       </div>
 
       {/* Navigation */}
@@ -33,10 +41,10 @@ export default function Sidebar() {
             to={item.href}
             end={item.href === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+              `flex items-center gap-3 px-4 py-3 rounded-full text-sm font-semibold transition-all duration-200 ${
                 isActive
-                  ? 'bg-primary-50 text-primary-700'
-                  : 'text-gray-700 hover:bg-gray-50'
+                  ? 'bg-orange-50 text-orange-700'
+                  : 'text-stone-600 hover:bg-stone-200/50 hover:text-stone-900'
               }`
             }
           >
@@ -47,8 +55,11 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-200">
-        <p className="text-xs text-gray-500 text-center">
+      <div className="mt-auto border-t border-stone-200/50 p-4">
+        <button className="w-full bg-gradient-to-br from-[#AD2C00] to-[#D83900] text-white rounded-full py-3 font-semibold text-sm shadow-lg shadow-[#AD2C00]/20 mb-4 hover:scale-[1.02] active:scale-95 transition-transform">
+          Đơn Nhanh
+        </button>
+        <p className="text-xs text-stone-500 text-center">
           © 2026 Gourmet Tech
         </p>
       </div>
