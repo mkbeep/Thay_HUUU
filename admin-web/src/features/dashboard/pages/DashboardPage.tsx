@@ -14,6 +14,7 @@ import {
   ChevronRight
 } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 // Types
 type TimeFilter = 'daily' | 'weekly' | 'monthly'
@@ -205,6 +206,7 @@ const generateMockData = (filter: TimeFilter) => {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('daily')
   const [hoveredBar, setHoveredBar] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -695,7 +697,10 @@ export default function DashboardPage() {
             Nguyên liệu "Cá Hồi" sắp hết (còn 15 phần). Dự kiến hết trong 1 giờ
             dựa trên tốc độ bán hiện tại.
           </p>
-          <button className="bg-white text-[#AD2C00] px-6 py-2 rounded-full font-bold w-fit hover:bg-[#FFB5A0] transition-colors">
+          <button 
+            onClick={() => navigate('/inventory')}
+            className="bg-white text-[#AD2C00] px-6 py-2 rounded-full font-bold w-fit hover:bg-[#FFB5A0] transition-colors"
+          >
             Nhập Hàng Ngay
           </button>
         </div>

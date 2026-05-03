@@ -4,8 +4,10 @@ import {
   UtensilsCrossed,
   ShoppingCart,
   Users,
-  Settings,
+  Gift,
   Table,
+  BarChart3,
+  Package,
 } from 'lucide-react'
 
 const navigation = [
@@ -13,8 +15,10 @@ const navigation = [
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
   { name: 'Đơn hàng', href: '/orders', icon: ShoppingCart },
   { name: 'Bàn', href: '/tables', icon: Table },
+  { name: 'Kho', href: '/inventory', icon: Package },
+  { name: 'Khuyến mãi', href: '/promotions', icon: Gift },
+  { name: 'Báo cáo', href: '/reports', icon: BarChart3 },
   { name: 'Nhân viên', href: '/staff', icon: Users },
-  { name: 'Cài đặt', href: '/settings', icon: Settings },
 ]
 
 export default function Sidebar() {
@@ -56,9 +60,6 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="mt-auto border-t border-stone-200/50 p-4">
-        <button className="w-full bg-gradient-to-br from-[#AD2C00] to-[#D83900] text-white rounded-full py-3 font-semibold text-sm shadow-lg shadow-[#AD2C00]/20 mb-4 hover:scale-[1.02] active:scale-95 transition-transform">
-          Đơn Nhanh
-        </button>
         <p className="text-xs text-stone-500 text-center">
           © 2026 Gourmet Tech
         </p>

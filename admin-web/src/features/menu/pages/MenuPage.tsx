@@ -181,8 +181,8 @@ export default function MenuPage() {
       {/* Header */}
       <div className="flex justify-between items-end mb-12">
         <div className="space-y-1">
-          <h1 className="text-4xl font-extrabold tracking-tight">Quản Lý Menu</h1>
-          <p className="text-[#5F5E5E] font-medium">
+          <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">Quản Lý Menu</h1>
+          <p className="text-gray-600 font-medium">
             Quản lý món ăn và tùy chỉnh thực đơn của bạn.
           </p>
         </div>
@@ -200,7 +200,7 @@ export default function MenuPage() {
         {Object.entries(groupedItems).map(([category, items]) => (
           <section key={category}>
             <div className="flex items-center gap-4 mb-8">
-              <h2 className="text-2xl font-bold">{category}</h2>
+              <h2 className="text-2xl font-bold text-gray-900">{category}</h2>
               <div className="h-[2px] flex-1 bg-[#E5E2E1] rounded-full"></div>
               <span className="text-sm font-bold text-[#AD2C00] px-3 py-1 bg-[#FFDBD1] rounded-full">
                 {items.length.toString().padStart(2, '0')} Món
@@ -230,7 +230,7 @@ export default function MenuPage() {
                   {/* Content */}
                   <div className="p-6 flex-1 flex flex-col">
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-lg font-bold">{item.name}</h3>
+                      <h3 className="text-lg font-bold text-gray-900">{item.name}</h3>
                       {/* Toggle Switch */}
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -243,7 +243,7 @@ export default function MenuPage() {
                       </label>
                     </div>
 
-                    <p className="text-sm text-[#5F5E5E] line-clamp-2 mb-6">
+                    <p className="text-sm text-gray-600 line-clamp-2 mb-6">
                       {item.description}
                     </p>
 
@@ -284,10 +284,10 @@ export default function MenuPage() {
             {/* Header */}
             <div className="p-8 flex items-center justify-between border-b border-[#E5E2E1]">
               <div>
-                <h2 className="text-2xl font-bold">
+                <h2 className="text-2xl font-bold text-gray-900">
                   {editingItem ? 'Chỉnh Sửa Món' : 'Thêm Món Mới'}
                 </h2>
-                <p className="text-[#5F5E5E] text-sm">
+                <p className="text-gray-600 text-sm">
                   Cập nhật thông tin món ăn và topping
                 </p>
               </div>
@@ -295,7 +295,7 @@ export default function MenuPage() {
                 onClick={() => setShowDrawer(false)}
                 className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#E5E2E1] transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-gray-700" />
               </button>
             </div>
 
@@ -303,11 +303,11 @@ export default function MenuPage() {
             <div className="flex-1 overflow-y-auto px-8 space-y-8 pb-10 pt-8">
               {/* Image Upload */}
               <div className="w-full aspect-video bg-[#E5E2E1] rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-[#916F67]/50 group cursor-pointer hover:bg-orange-50/30 hover:border-[#AD2C00]/50 transition-all">
-                <Upload className="w-10 h-10 text-[#5F5E5E] mb-2 group-hover:text-[#AD2C00]" />
-                <p className="text-sm font-bold text-[#5F5E5E] group-hover:text-[#AD2C00]">
+                <Upload className="w-10 h-10 text-gray-600 mb-2 group-hover:text-[#AD2C00]" />
+                <p className="text-sm font-bold text-gray-700 group-hover:text-[#AD2C00]">
                   Click để tải ảnh món ăn
                 </p>
-                <p className="text-[10px] text-[#916F67] mt-1 uppercase tracking-wider">
+                <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
                   JPG, PNG tối đa 5MB
                 </p>
               </div>
@@ -315,23 +315,24 @@ export default function MenuPage() {
               {/* Basic Fields */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold uppercase tracking-widest text-[#5F5E5E] mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-700 mb-2">
                     Tên Món
                   </label>
                   <input
                     type="text"
-                    className="w-full bg-[#F6F3F2] border-none rounded-sm px-4 py-3 focus:ring-2 focus:ring-[#AD2C00]/20 outline-none"
+                    className="w-full bg-[#F6F3F2] border-none rounded-sm px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:ring-2 focus:ring-[#AD2C00]/20 outline-none"
+                    placeholder="Nhập tên món ăn"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-[#5F5E5E] mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-700 mb-2">
                     Danh Mục
                   </label>
                   <select
-                    className="w-full bg-[#F6F3F2] border-none rounded-sm px-4 py-3 focus:ring-2 focus:ring-[#AD2C00]/20 outline-none"
+                    className="w-full bg-[#F6F3F2] border-none rounded-sm px-4 py-3 text-gray-900 focus:ring-2 focus:ring-[#AD2C00]/20 outline-none"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   >
@@ -342,24 +343,26 @@ export default function MenuPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-[#5F5E5E] mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-700 mb-2">
                     Giá (₫)
                   </label>
                   <input
                     type="number"
-                    className="w-full bg-[#F6F3F2] border-none rounded-sm px-4 py-3 focus:ring-2 focus:ring-[#AD2C00]/20 outline-none"
+                    className="w-full bg-[#F6F3F2] border-none rounded-sm px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:ring-2 focus:ring-[#AD2C00]/20 outline-none"
+                    placeholder="0"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
                   />
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold uppercase tracking-widest text-[#5F5E5E] mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-700 mb-2">
                     Mô Tả
                   </label>
                   <textarea
-                    className="w-full bg-[#F6F3F2] border-none rounded-sm px-4 py-3 focus:ring-2 focus:ring-[#AD2C00]/20 outline-none"
+                    className="w-full bg-[#F6F3F2] border-none rounded-sm px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:ring-2 focus:ring-[#AD2C00]/20 outline-none"
                     rows={3}
+                    placeholder="Mô tả món ăn..."
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   />
@@ -369,7 +372,7 @@ export default function MenuPage() {
               {/* Topping Configuration */}
               <div className="pt-6 border-t border-[#E5E2E1]">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-bold text-lg">Cấu Hình Topping</h3>
+                  <h3 className="font-bold text-lg text-gray-900">Cấu Hình Topping</h3>
                   <button
                     onClick={handleAddTopping}
                     className="text-[#AD2C00] text-sm font-bold flex items-center gap-1 hover:underline"
@@ -387,14 +390,14 @@ export default function MenuPage() {
                     >
                       <input
                         type="text"
-                        className="bg-white border-none rounded-sm text-sm px-3 py-2 outline-none"
+                        className="bg-white border-none rounded-sm text-sm px-3 py-2 text-gray-900 placeholder:text-gray-500 outline-none"
                         placeholder="Tên topping"
                         value={topping.name}
                         onChange={(e) => handleToppingChange(topping.id, 'name', e.target.value)}
                       />
                       <input
                         type="number"
-                        className="bg-white border-none rounded-sm text-sm px-3 py-2 outline-none"
+                        className="bg-white border-none rounded-sm text-sm px-3 py-2 text-gray-900 placeholder:text-gray-500 outline-none"
                         placeholder="+ 0₫"
                         value={topping.price}
                         onChange={(e) => handleToppingChange(topping.id, 'price', parseFloat(e.target.value))}
@@ -426,7 +429,7 @@ export default function MenuPage() {
             <div className="p-8 bg-[#F6F3F2] flex gap-4 border-t border-[#E5E2E1]">
               <button
                 onClick={() => setShowDrawer(false)}
-                className="flex-1 bg-[#E5E2E1] text-[#1C1B1B] py-4 rounded-xl font-bold transition-all active:scale-98 hover:bg-[#DCD9D9]"
+                className="flex-1 bg-[#E5E2E1] text-gray-900 py-4 rounded-xl font-bold transition-all active:scale-98 hover:bg-[#DCD9D9]"
               >
                 Hủy Bỏ
               </button>

@@ -6,6 +6,10 @@ interface User {
   email: string
   name: string
   role: 'admin' | 'manager' | 'staff'
+  avatar?: string
+  phone?: string
+  position?: string
+  joinedDate?: string
 }
 
 interface AuthState {
@@ -15,24 +19,29 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>
   logout: () => void
   setUser: (user: User, token: string) => void
+  updateAvatar: (avatar: string) => void
+  updateProfile: (data: Partial<User>) => void
+  updatePassword: (currentPassword: string, newPassword: string) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
 
       login: async (email: string, password: string) => {
-        // TODO: Call API
-        // Mock login for now
         if (email === 'admin@gourmet.com' && password === 'admin123') {
           const user: User = {
             id: '1',
             email: 'admin@gourmet.com',
             name: 'Admin User',
             role: 'admin',
+            avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCznXIT2M2jGQTSPmUDv6ehnbXsyBDkJKZXBkXu0nGV0gNOdFs04N22RveuUGsej1T1kgffMRLS-PcV31O3qNEXzK8rToKxV5t5gU0vEDt1oNiEJKnlcFvcEomQBKN9KzYDBgEEj0HcP8ai8juyIEujPg_kAVSdC1U9uazsGlD3i0HeDNVdQALfPlebOgXJWwLy0kfoRLMDHrWZu0UWSeyaf4be0dLwmEoB7BHv0_96ocKYLGfF4CWIK569lWLKgBrytOAng44FYQ',
+            phone: '0901234567',
+            position: 'Quản trị viên hệ thống',
+            joinedDate: '2024-01-15'
           }
           const token = 'mock-jwt-token'
           set({ user, token, isAuthenticated: true })
@@ -48,6 +57,25 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user: User, token: string) => {
         set({ user, token, isAuthenticated: true })
       },
+
+      updateAvatar: (avatar: string) => {
+        const currentUser = get().user
+        if (currentUser) {
+          set({ user: { ...currentUser, avatar } })
+        }
+      },
+
+      updateProfile: (data: Partial<User>) => {
+        const currentUser = get().user
+        if (currentUser) {
+          set({ user: { ...currentUser, ...data } })
+        }
+      },
+
+      updatePassword: async (currentPassword: string, newPassword: string) => {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        console.log('Đổi mật khẩu từ:', currentPassword, 'sang:', newPassword)
+      }
     }),
     {
       name: 'auth-storage',

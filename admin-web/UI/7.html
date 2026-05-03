@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Table Map Management | Gourmet Tech</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container-highest": "#e5e2e1",
+                      "on-primary-fixed-variant": "#872000",
+                      "on-secondary-fixed-variant": "#474746",
+                      "on-tertiary-container": "#f6fff4",
+                      "on-primary-fixed": "#3b0900",
+                      "inverse-primary": "#ffb5a0",
+                      "on-primary": "#ffffff",
+                      "surface-tint": "#b12d00",
+                      "error-container": "#ffdad6",
+                      "primary-fixed-dim": "#ffb5a0",
+                      "surface": "#fcf9f8",
+                      "secondary": "#5f5e5e",
+                      "on-background": "#1c1b1b",
+                      "background": "#fcf9f8",
+                      "on-surface": "#1c1b1b",
+                      "on-secondary-container": "#636262",
+                      "on-tertiary-fixed": "#00210c",
+                      "surface-container-high": "#eae7e7",
+                      "on-primary-container": "#fffbff",
+                      "on-surface-variant": "#5c4038",
+                      "surface-dim": "#dcd9d9",
+                      "secondary-container": "#e2dfde",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-container": "#f0eded",
+                      "surface-bright": "#fcf9f8",
+                      "secondary-fixed": "#e5e2e1",
+                      "on-error": "#ffffff",
+                      "inverse-surface": "#313030",
+                      "tertiary-fixed-dim": "#4ae183",
+                      "on-tertiary": "#ffffff",
+                      "secondary-fixed-dim": "#c8c6c5",
+                      "outline-variant": "#e5beb3",
+                      "surface-variant": "#e5e2e1",
+                      "outline": "#916f67",
+                      "tertiary-fixed": "#6bfe9c",
+                      "on-error-container": "#93000a",
+                      "inverse-on-surface": "#f3f0ef",
+                      "primary-container": "#d83900",
+                      "surface-container-low": "#f6f3f2",
+                      "on-secondary": "#ffffff",
+                      "tertiary": "#006a35",
+                      "primary": "#ad2c00",
+                      "primary-fixed": "#ffdbd1",
+                      "on-tertiary-fixed-variant": "#005228",
+                      "tertiary-container": "#008645",
+                      "on-secondary-fixed": "#1c1b1b",
+                      "error": "#ba1a1a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "1rem",
+                      "lg": "2rem",
+                      "xl": "3rem",
+                      "full": "9999px"
+              },
+              "fontFamily": {
+                      "headline": ["Plus Jakarta Sans"],
+                      "body": ["Inter"],
+                      "label": ["Inter"]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .brand-font { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface flex min-h-screen overflow-hidden">
+<!-- SideNavBar Shell -->
+<aside class="h-screen w-72 border-r-0 bg-stone-50 dark:bg-stone-950 flex flex-col p-6 space-y-8 font-['Plus_Jakarta_Sans'] font-medium tracking-tight">
+<div class="flex flex-col space-y-2">
+<h1 class="text-2xl font-black tracking-tighter text-stone-900 dark:text-stone-50">Gourmet Tech</h1>
+<p class="text-xs text-stone-500 uppercase tracking-widest font-bold">Admin Terminal</p>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="flex items-center gap-3 px-4 py-3 text-stone-500 dark:text-stone-400 hover:bg-stone-200/50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-stone-500 dark:text-stone-400 hover:bg-stone-200/50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="receipt_long">receipt_long</span>
+<span>Orders</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-stone-500 dark:text-stone-400 hover:bg-stone-200/50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="restaurant_menu">restaurant_menu</span>
+<span>Menu Editor</span>
+</div>
+<!-- Active State -->
+<div class="flex items-center gap-3 px-4 py-3 bg-white dark:bg-stone-900 text-orange-700 dark:text-orange-500 rounded-full shadow-sm font-bold scale-98 transition-transform duration-200">
+<span class="material-symbols-outlined" data-icon="grid_view" style="font-variation-settings: 'FILL' 1;">grid_view</span>
+<span>Table Map</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-stone-500 dark:text-stone-400 hover:bg-stone-200/50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="assessment">assessment</span>
+<span>Reports</span>
+</div>
+</nav>
+<div class="pt-6 border-t border-stone-200/50 space-y-1">
+<div class="flex items-center gap-3 px-4 py-3 text-stone-500 dark:text-stone-400 hover:bg-stone-200/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-stone-500 dark:text-stone-400 hover:bg-stone-200/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Support</span>
+</div>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="flex-1 flex flex-col relative overflow-hidden bg-surface-container-low">
+<!-- TopAppBar Shell -->
+<header class="w-full h-20 flex justify-between items-center px-8 bg-transparent">
+<div class="flex items-center gap-6">
+<div class="relative group">
+<span class="absolute inset-y-0 left-4 flex items-center text-stone-400 group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</span>
+<input class="pl-12 pr-6 py-2.5 bg-surface-container-high border-none rounded-sm focus:ring-2 focus:ring-primary/40 w-80 text-sm transition-all outline-none" placeholder="Search tables, zones..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-stone-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden border-2 border-white shadow-sm">
+<img class="w-full h-full object-cover" data-alt="professional portrait of a restaurant manager in a clean white shirt with a focused expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDdZ0lllRxed7xBgB654QmMQjfrwS9R-iwkSzXFwpfFHg-CjWNbUdwhUPySK68A01kWIkZDlADpfiyVy18eKL9PIWyzZ7T-ol0ApCgMd3IKbkCMbMhFw-rJcimM4SfTM4oSs7QWqWvJ-wH9BiVt-SYNzYMhSmHPfb_Um79Nc0hBv-KEJ1uOzuTbTCQciKz6Xt2rVn54TQI52An3dAwchwSgofItUQFdZ5cdFsN2w9OEB7dJ5s94vKq7pNWgwuffQZUU6iyJtlUJyg"/>
+</div>
+</div>
+</header>
+<!-- Content Area -->
+<div class="flex-1 px-8 pb-8 overflow-y-auto">
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="text-4xl font-extrabold tracking-tight text-on-surface font-headline mb-1">Table Map</h2>
+<div class="flex items-center gap-3 text-secondary text-sm">
+<span class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+                            Live Terminal
+                        </span>
+<span class="w-1 h-1 rounded-full bg-stone-300"></span>
+<span>Last updated 10s ago</span>
+</div>
+</div>
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-8 py-4 rounded-xl flex items-center gap-2 font-bold shadow-lg hover:scale-[1.02] active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+                    Add New Table
+                </button>
+</div>
+<!-- Bento Layout Content -->
+<div class="grid grid-cols-12 gap-8 h-full items-start">
+<!-- Main Map Grid -->
+<div class="col-span-12 xl:col-span-9 space-y-8">
+<!-- Zone Selector & Legend -->
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div class="flex bg-surface-container p-1 rounded-xl">
+<button class="px-6 py-2 bg-surface-container-lowest shadow-sm rounded-lg font-semibold text-primary">Main Dining</button>
+<button class="px-6 py-2 text-secondary hover:text-on-surface transition-colors">Terrace</button>
+<button class="px-6 py-2 text-secondary hover:text-on-surface transition-colors">Private Room</button>
+</div>
+<div class="flex items-center gap-6 px-6 py-2 bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="flex items-center gap-2 text-xs font-semibold">
+<span class="w-3 h-3 rounded-full bg-tertiary"></span>
+<span class="text-secondary uppercase tracking-tighter">Available</span>
+</div>
+<div class="flex items-center gap-2 text-xs font-semibold">
+<span class="w-3 h-3 rounded-full bg-primary"></span>
+<span class="text-secondary uppercase tracking-tighter">Occupied</span>
+</div>
+<div class="flex items-center gap-2 text-xs font-semibold">
+<span class="w-3 h-3 rounded-full bg-sky-500"></span>
+<span class="text-secondary uppercase tracking-tighter">Billing</span>
+</div>
+</div>
+</div>
+<!-- Visual Grid of Tables -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+<!-- Table Card: Available -->
+<div class="group bg-surface-container-lowest p-6 rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 relative border border-transparent hover:border-tertiary/20">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-tertiary/10 text-tertiary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Available</div>
+<button class="text-stone-300 hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="qr_code_2">qr_code_2</span>
+</button>
+</div>
+<div class="text-center py-4">
+<div class="w-20 h-20 mx-auto rounded-full bg-surface-container border-4 border-white shadow-inner flex items-center justify-center mb-3">
+<span class="text-2xl font-black text-on-surface">01</span>
+</div>
+<h3 class="font-bold text-on-surface">Standard Window</h3>
+<p class="text-xs text-secondary">2-4 Guests • Indoors</p>
+</div>
+<!-- Hover Actions Overlay -->
+<div class="absolute inset-0 bg-white/95 rounded-lg opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-3 transition-opacity p-6 backdrop-blur-sm">
+<button class="w-full py-2.5 bg-primary text-white rounded-full font-bold text-sm shadow-md">Edit Table</button>
+<button class="w-full py-2.5 bg-surface-container text-on-surface rounded-full font-bold text-sm">View QR Code</button>
+<button class="w-full py-2.5 border border-error/20 text-error rounded-full font-bold text-sm hover:bg-error/5">Delete</button>
+</div>
+</div>
+<!-- Table Card: Occupied -->
+<div class="group bg-surface-container-lowest p-6 rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 relative">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Occupied</div>
+<button class="text-stone-300 hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="qr_code_2">qr_code_2</span>
+</button>
+</div>
+<div class="text-center py-4">
+<div class="w-20 h-20 mx-auto rounded-full bg-primary/20 border-4 border-white shadow-inner flex items-center justify-center mb-3">
+<span class="text-2xl font-black text-primary">02</span>
+</div>
+<h3 class="font-bold text-on-surface">Center Booth</h3>
+<p class="text-xs text-secondary">4-6 Guests • Indoors</p>
+</div>
+<!-- Hover Actions -->
+<div class="absolute inset-0 bg-white/95 rounded-lg opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-3 transition-opacity p-6 backdrop-blur-sm">
+<button class="w-full py-2.5 bg-primary text-white rounded-full font-bold text-sm shadow-md">Edit Table</button>
+<button class="w-full py-2.5 bg-surface-container text-on-surface rounded-full font-bold text-sm">View QR Code</button>
+</div>
+</div>
+<!-- Table Card: Billing -->
+<div class="group bg-surface-container-lowest p-6 rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 relative">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-sky-500/10 text-sky-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Billing</div>
+<button class="text-stone-300 hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="qr_code_2">qr_code_2</span>
+</button>
+</div>
+<div class="text-center py-4">
+<div class="w-20 h-20 mx-auto rounded-xl bg-sky-100 border-4 border-white shadow-inner flex items-center justify-center mb-3">
+<span class="text-2xl font-black text-sky-600">03</span>
+</div>
+<h3 class="font-bold text-on-surface">Corner Table</h3>
+<p class="text-xs text-secondary">2 Guests • Indoors</p>
+</div>
+<!-- Hover Actions -->
+<div class="absolute inset-0 bg-white/95 rounded-lg opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-3 transition-opacity p-6 backdrop-blur-sm">
+<button class="w-full py-2.5 bg-primary text-white rounded-full font-bold text-sm shadow-md">Edit Table</button>
+<button class="w-full py-2.5 bg-surface-container text-on-surface rounded-full font-bold text-sm">Print QR</button>
+</div>
+</div>
+<!-- Table Card: Available Large -->
+<div class="group bg-surface-container-lowest p-6 rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 relative">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-tertiary/10 text-tertiary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Available</div>
+<button class="text-stone-300 hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="qr_code_2">qr_code_2</span>
+</button>
+</div>
+<div class="text-center py-4">
+<div class="w-20 h-20 mx-auto rounded-full bg-surface-container border-4 border-white shadow-inner flex items-center justify-center mb-3">
+<span class="text-2xl font-black text-on-surface">04</span>
+</div>
+<h3 class="font-bold text-on-surface">Garden View</h3>
+<p class="text-xs text-secondary">2-4 Guests • Indoors</p>
+</div>
+<div class="absolute inset-0 bg-white/95 rounded-lg opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-3 transition-opacity p-6 backdrop-blur-sm">
+<button class="w-full py-2.5 bg-primary text-white rounded-full font-bold text-sm shadow-md">Edit Table</button>
+<button class="w-full py-2.5 border border-error/20 text-error rounded-full font-bold text-sm">Delete</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Side Panel: Add/Edit -->
+<aside class="col-span-12 xl:col-span-3 glass-panel p-8 rounded-lg shadow-2xl border border-white sticky top-0 h-fit">
+<div class="flex justify-between items-start mb-8">
+<div>
+<h3 class="text-xl font-extrabold text-on-surface font-headline">Quick Edit</h3>
+<p class="text-xs text-secondary">Manage Table 01 details</p>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container text-secondary">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</button>
+</div>
+<div class="space-y-6">
+<div class="space-y-2">
+<label class="text-[10px] uppercase tracking-widest font-black text-secondary">Table Identity</label>
+<input class="w-full bg-surface-container-high border-none rounded-sm px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none" type="text" value="Table 01"/>
+</div>
+<div class="space-y-2">
+<label class="text-[10px] uppercase tracking-widest font-black text-secondary">Floor Zone</label>
+<select class="w-full bg-surface-container-high border-none rounded-sm px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none">
+<option>Main Dining</option>
+<option>Terrace</option>
+<option>Lounge</option>
+</select>
+</div>
+<div class="space-y-4 pt-6 border-t border-surface-container-highest">
+<label class="text-[10px] uppercase tracking-widest font-black text-secondary block">QR Code Preview</label>
+<div class="aspect-square w-full bg-white rounded-xl p-6 border-2 border-dashed border-stone-200 flex flex-col items-center justify-center gap-4 group cursor-pointer hover:border-primary/50 transition-colors">
+<div class="w-32 h-32 bg-stone-50 flex items-center justify-center relative overflow-hidden rounded-lg">
+<img class="w-full h-full object-contain mix-blend-multiply opacity-80" data-alt="a clean high contrast QR code for digital restaurant menus placed on a white minimalist background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCVcJRjYr-ho8HE0fqx7Wz7uFYb-Rkr77026Q4adFMub1h3wW-338AOiPi66k5EKwb2SL94FS_lnBWMKc15IB82ZFfUPx2qjI7xVkMzCw6Oe3V3W_Ff9BTuGF2HRYg7zRxtRTdFy5H9Qg8ZKUujbuoABVpAdlLUuxVYcOwo4sxTYp1WHxa33C2TO8S0kWLGn_ooGGnnSnfD2xULk1nWafD52OkFX_6mBTiWl8M8qc5InJ-ZN2wsj0crsMFuUgNaJXpEXdbFB7-zjQ"/>
+</div>
+<span class="text-[10px] font-bold text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-xs" data-icon="sync">sync</span>
+                                    Auto-generating...
+                                </span>
+</div>
+<p class="text-[10px] text-secondary text-center italic">Scanning this QR will direct customers to the digital menu for Table 01.</p>
+</div>
+<div class="grid grid-cols-2 gap-4 pt-4">
+<button class="py-3 px-4 bg-surface-container text-on-surface font-bold text-sm rounded-xl hover:bg-surface-container-high transition-colors">Cancel</button>
+<button class="py-3 px-4 bg-gradient-to-br from-primary to-primary-container text-white font-bold text-sm rounded-xl shadow-lg hover:brightness-110 transition-all">Save Changes</button>
+</div>
+</div>
+</aside>
+</div>
+</div>
+<!-- Float Map Actions (Mobile FAB - only visible on small screens) -->
+<button class="md:hidden fixed bottom-8 right-8 w-16 h-16 rounded-full bg-primary text-white shadow-2xl flex items-center justify-center z-50">
+<span class="material-symbols-outlined text-3xl" data-icon="add">add</span>
+</button>
+</main>
+</body></html>
