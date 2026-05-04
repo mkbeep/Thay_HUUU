@@ -32,6 +32,26 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       login: async (email: string, password: string) => {
+        // Check registered users first
+        const registeredUsers = JSON.parse(localStorage.getItem('registered-users') || '[]')
+        const foundUser = registeredUsers.find((u: any) => u.email === email && u.password === password)
+        
+        if (foundUser) {
+          const user: User = {
+            id: Math.random().toString(36).substr(2, 9),
+            email: foundUser.email,
+            name: foundUser.name,
+            role: 'manager',
+            phone: foundUser.phone,
+            position: 'Quản lý',
+            joinedDate: new Date().toISOString().split('T')[0]
+          }
+          const token = 'mock-jwt-token-' + user.id
+          set({ user, token, isAuthenticated: true })
+          return
+        }
+        
+        // Check default admin account
         if (email === 'admin@gourmet.com' && password === 'admin123') {
           const user: User = {
             id: '1',
@@ -45,9 +65,10 @@ export const useAuthStore = create<AuthState>()(
           }
           const token = 'mock-jwt-token'
           set({ user, token, isAuthenticated: true })
-        } else {
-          throw new Error('Invalid credentials')
+          return
         }
+        
+        throw new Error('Invalid credentials')
       },
 
       logout: () => {

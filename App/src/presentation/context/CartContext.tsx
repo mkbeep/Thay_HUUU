@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { MenuItem } from '../../domain/models/MenuItem';
 
+// CartItem extends MenuItem và thêm các thuộc tính cho giỏ hàng
 export interface CartItem {
   id: string;
   name: string;
-  price: number; // Giá dạng số để tính toán
+  price: number; // Giá dạng số để tính toán (đơn vị: đồng)
   priceDisplay: string; // Giá hiển thị "145k"
   image: any;
   quantity: number;

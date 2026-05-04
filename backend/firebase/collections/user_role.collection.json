@@ -1,0 +1,51 @@
+{
+  "collectionName": "user_role",
+  "description": "Collection liên kết người dùng với vai trò (many-to-many relationship)",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "userId": {
+      "type": "string",
+      "description": "ID người dùng (reference to users)",
+      "required": true,
+      "indexed": true
+    },
+    "roleId": {
+      "type": "string",
+      "description": "ID vai trò (reference to role)",
+      "required": true,
+      "indexed": true
+    },
+    "assignedAt": {
+      "type": "timestamp",
+      "description": "Thời gian gán vai trò",
+      "required": true,
+      "indexed": true
+    },
+    "assignedBy": {
+      "type": "string",
+      "description": "ID người gán vai trò",
+      "required": false,
+      "indexed": false
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["userId", "roleId"],
+      "queryScope": "COLLECTION",
+      "unique": true
+    },
+    {
+      "fields": ["userId"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["roleId"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

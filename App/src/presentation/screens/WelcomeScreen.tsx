@@ -17,12 +17,14 @@ interface WelcomeScreenProps {
   tableNumber?: number;
   onExploreMenu: () => void;
   onViewDrinks: () => void;
+  onQRScan?: () => void;
 }
 
 export default function WelcomeScreen({ 
-  tableNumber = 12, 
+  tableNumber, 
   onExploreMenu,
-  onViewDrinks 
+  onViewDrinks,
+  onQRScan
 }: WelcomeScreenProps) {
   return (
     <View style={styles.container}>
@@ -60,8 +62,18 @@ export default function WelcomeScreen({
                   <Text style={styles.locationText}>DÙNG BỮA TẠI NHÀ HÀNG</Text>
                 </View>
 
-                {/* Table Number */}
-                <Text style={styles.tableNumber}>Bàn {tableNumber}</Text>
+                {/* Table Number or QR Scan */}
+                {tableNumber ? (
+                  <Text style={styles.tableNumber}>Bàn {tableNumber}</Text>
+                ) : (
+                  <TouchableOpacity 
+                    style={styles.qrScanButton}
+                    onPress={onQRScan}
+                  >
+                    <Ionicons name="qr-code" size={32} color="#AD2C00" />
+                    <Text style={styles.qrScanText}>Quét mã QR bàn</Text>
+                  </TouchableOpacity>
+                )}
                 
                 {/* Welcome Text */}
                 <Text style={styles.welcomeText}>Chào mừng đến Gourmet Tech</Text>
@@ -209,8 +221,26 @@ const styles = StyleSheet.create({
     fontSize: 56,
     fontWeight: '900',
     color: '#1C1B1B',
-    letterSpacing: -2,
     marginBottom: 8,
+    letterSpacing: -2,
+  },
+  qrScanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#AD2C00',
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  qrScanText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#AD2C00',
   },
   welcomeText: {
     fontFamily: 'System',

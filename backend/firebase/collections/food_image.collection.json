@@ -1,0 +1,54 @@
+{
+  "collectionName": "food_image",
+  "description": "Collection lưu trữ hình ảnh của món ăn",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "foodId": {
+      "type": "string",
+      "description": "ID món ăn (reference to food)",
+      "required": true,
+      "indexed": true
+    },
+    "imageUrl": {
+      "type": "string",
+      "description": "URL hình ảnh từ Firebase Storage",
+      "required": true,
+      "indexed": false
+    },
+    "isPrimary": {
+      "type": "boolean",
+      "description": "Ảnh chính của món",
+      "required": true,
+      "indexed": true,
+      "default": false
+    },
+    "order": {
+      "type": "number",
+      "description": "Thứ tự hiển thị",
+      "required": false,
+      "indexed": false,
+      "default": 0
+    },
+    "createdAt": {
+      "type": "timestamp",
+      "description": "Thời gian tạo",
+      "required": true,
+      "indexed": false
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["foodId", "isPrimary"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["foodId", "order"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

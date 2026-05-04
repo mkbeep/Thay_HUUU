@@ -1,0 +1,93 @@
+{
+  "collectionName": "inventory",
+  "description": "Collection quản lý kho nguyên liệu",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "name": {
+      "type": "string",
+      "description": "Tên nguyên liệu",
+      "required": true,
+      "indexed": true
+    },
+    "category": {
+      "type": "string",
+      "description": "Danh mục",
+      "required": true,
+      "indexed": true
+    },
+    "unit": {
+      "type": "string",
+      "description": "Đơn vị tính",
+      "required": true,
+      "indexed": false
+    },
+    "currentStock": {
+      "type": "number",
+      "description": "Số lượng hiện tại",
+      "required": true,
+      "indexed": true
+    },
+    "minStock": {
+      "type": "number",
+      "description": "Ngưỡng tồn kho tối thiểu",
+      "required": true,
+      "indexed": true
+    },
+    "estimatedDaysLeft": {
+      "type": "number",
+      "description": "Số ngày dự kiến còn lại",
+      "required": false,
+      "indexed": false
+    },
+    "lastRestocked": {
+      "type": "string",
+      "description": "Ngày nhập kho gần nhất (YYYY-MM-DD)",
+      "required": false,
+      "indexed": true
+    },
+    "supplier": {
+      "type": "string",
+      "description": "Tên nhà cung cấp",
+      "required": false,
+      "indexed": false
+    },
+    "status": {
+      "type": "string",
+      "description": "Trạng thái tồn kho",
+      "required": true,
+      "indexed": true,
+      "enum": ["in-stock", "low-stock", "out-of-stock"]
+    },
+    "createdAt": {
+      "type": "timestamp",
+      "description": "Thời gian tạo",
+      "required": true,
+      "indexed": false
+    },
+    "updatedAt": {
+      "type": "timestamp",
+      "description": "Thời gian cập nhật",
+      "required": true,
+      "indexed": false
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["category", "status"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["status", "currentStock"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["name"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

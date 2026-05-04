@@ -2,13 +2,8 @@ import {
   DollarSign, 
   ShoppingCart, 
   Receipt, 
-  TrendingUp, 
-  TrendingDown,
-  Bell,
-  Settings as SettingsIcon,
+  TrendingUp,
   Clock,
-  AlertTriangle,
-  Users,
   Calendar,
   ChevronLeft,
   ChevronRight
@@ -19,46 +14,39 @@ import { useNavigate } from 'react-router-dom'
 // Types
 type TimeFilter = 'daily' | 'weekly' | 'monthly'
 
-interface BestSeller {
-  id: number
+interface Category {
   name: string
-  orders: number
   revenue: number
-  image: string
-}
-
-interface ChartData {
-  label: string
-  height: number
-  revenue: number
-}
-
-interface KPIData {
-  totalRevenue: number
-  revenueChange: number
-  completedOrders: number
-  ordersChange: number
-  avgOrderValue: number
-  avgChange: number
-  previousRevenue: number
-  avgOrdersPerHour: number
-  previousAvgValue: number
+  percentage: number
 }
 
 // Mock data generator
+// TODO: Replace with real API calls to backend
+// API endpoints needed:
+// - GET /api/v1/reports/revenue?filter=daily|weekly|monthly&date=YYYY-MM-DD
+// - GET /api/v1/reports/orders?filter=daily|weekly|monthly&date=YYYY-MM-DD
+// - GET /api/v1/reports/best-sellers?filter=daily|weekly|monthly&date=YYYY-MM-DD
+// - GET /api/v1/reports/categories?filter=daily|weekly|monthly&date=YYYY-MM-DD
 const generateMockData = (filter: TimeFilter) => {
+  // Calculate real percentage changes based on current vs previous data
+  const calculateChange = (current: number, previous: number): number => {
+    if (previous === 0) return 0
+    return Number((((current - previous) / previous) * 100).toFixed(1))
+  }
+
   const data = {
     daily: {
       kpi: {
         totalRevenue: 12842500,
-        revenueChange: 15.4,
-        completedOrders: 342,
-        ordersChange: 8.2,
-        avgOrderValue: 37550,
-        avgChange: -2.1,
         previousRevenue: 11128000,
+        get revenueChange() { return calculateChange(this.totalRevenue, this.previousRevenue) },
+        completedOrders: 342,
+        previousOrders: 315,
+        get ordersChange() { return calculateChange(this.completedOrders, this.previousOrders) },
+        avgOrderValue: 37550,
+        previousAvgValue: 35325,
+        get avgChange() { return calculateChange(this.avgOrderValue, this.previousAvgValue) },
         avgOrdersPerHour: 42.7,
-        previousAvgValue: 38350
       },
       chart: [
         { label: '12:00', height: 15, revenue: 450000 },
@@ -102,14 +90,15 @@ const generateMockData = (filter: TimeFilter) => {
     weekly: {
       kpi: {
         totalRevenue: 89896500,
-        revenueChange: 12.8,
-        completedOrders: 2394,
-        ordersChange: 10.5,
-        avgOrderValue: 37550,
-        avgChange: 2.1,
         previousRevenue: 79896000,
+        get revenueChange() { return calculateChange(this.totalRevenue, this.previousRevenue) },
+        completedOrders: 2394,
+        previousOrders: 2166,
+        get ordersChange() { return calculateChange(this.completedOrders, this.previousOrders) },
+        avgOrderValue: 37550,
+        previousAvgValue: 36880,
+        get avgChange() { return calculateChange(this.avgOrderValue, this.previousAvgValue) },
         avgOrdersPerHour: 342,
-        previousAvgValue: 36800
       },
       chart: [
         { label: 'T2', height: 45, revenue: 11200000 },
@@ -152,14 +141,15 @@ const generateMockData = (filter: TimeFilter) => {
     monthly: {
       kpi: {
         totalRevenue: 385680000,
-        revenueChange: 18.5,
-        completedOrders: 10272,
-        ordersChange: 15.2,
-        avgOrderValue: 37550,
-        avgChange: 2.9,
         previousRevenue: 325480000,
+        get revenueChange() { return calculateChange(this.totalRevenue, this.previousRevenue) },
+        completedOrders: 10272,
+        previousOrders: 8915,
+        get ordersChange() { return calculateChange(this.completedOrders, this.previousOrders) },
+        avgOrderValue: 37550,
+        previousAvgValue: 36515,
+        get avgChange() { return calculateChange(this.avgOrderValue, this.previousAvgValue) },
         avgOrdersPerHour: 342,
-        previousAvgValue: 36500
       },
       chart: [
         { label: 'T1', height: 35, revenue: 38568000 },
@@ -478,14 +468,7 @@ export default function DashboardPage() {
             <div className="p-3 bg-[#AD2C00]/10 rounded-full text-[#AD2C00]">
               <DollarSign className="w-6 h-6" />
             </div>
-            <span className={`flex items-center gap-1 text-sm font-bold px-2 py-1 rounded-full ${
-              currentData.kpi.revenueChange > 0 
-                ? 'text-[#006A35] bg-[#006A35]/10' 
-                : 'text-[#BA1A1A] bg-[#BA1A1A]/10'
-            }`}>
-              {currentData.kpi.revenueChange > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {currentData.kpi.revenueChange > 0 ? '+' : ''}{currentData.kpi.revenueChange}%
-            </span>
+            {/* Removed fake percentage badge */}
           </div>
           <p className="text-[#5F5E5E] text-sm font-medium uppercase tracking-widest">
             Tổng Doanh Thu
@@ -502,14 +485,7 @@ export default function DashboardPage() {
             <div className="p-3 bg-[#5F5E5E]/10 rounded-full text-[#5F5E5E]">
               <ShoppingCart className="w-6 h-6" />
             </div>
-            <span className={`flex items-center gap-1 text-sm font-bold px-2 py-1 rounded-full ${
-              currentData.kpi.ordersChange > 0 
-                ? 'text-[#006A35] bg-[#006A35]/10' 
-                : 'text-[#BA1A1A] bg-[#BA1A1A]/10'
-            }`}>
-              {currentData.kpi.ordersChange > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {currentData.kpi.ordersChange > 0 ? '+' : ''}{currentData.kpi.ordersChange}%
-            </span>
+            {/* Removed fake percentage badge */}
           </div>
           <p className="text-[#5F5E5E] text-sm font-medium uppercase tracking-widest">
             Đơn Hoàn Thành
@@ -526,14 +502,7 @@ export default function DashboardPage() {
             <div className="p-3 bg-[#006A35]/10 rounded-full text-[#006A35]">
               <Receipt className="w-6 h-6" />
             </div>
-            <span className={`flex items-center gap-1 text-sm font-bold px-2 py-1 rounded-full ${
-              currentData.kpi.avgChange > 0 
-                ? 'text-[#006A35] bg-[#006A35]/10' 
-                : 'text-[#BA1A1A] bg-[#BA1A1A]/10'
-            }`}>
-              {currentData.kpi.avgChange > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {currentData.kpi.avgChange > 0 ? '+' : ''}{currentData.kpi.avgChange}%
-            </span>
+            {/* Removed fake percentage badge */}
           </div>
           <p className="text-[#5F5E5E] text-sm font-medium uppercase tracking-widest">
             Giá Trị Đơn TB

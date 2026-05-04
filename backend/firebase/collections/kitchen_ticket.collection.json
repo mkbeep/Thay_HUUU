@@ -1,0 +1,94 @@
+{
+  "collectionName": "kitchen_ticket",
+  "description": "Collection quản lý phiếu bếp (ticket cho từng món)",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "orderItemId": {
+      "type": "string",
+      "description": "ID order item (reference to order_item)",
+      "required": true,
+      "indexed": true
+    },
+    "foodId": {
+      "type": "string",
+      "description": "ID món ăn (reference to food)",
+      "required": true,
+      "indexed": true
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Số lượng cần làm",
+      "required": true,
+      "indexed": false
+    },
+    "status": {
+      "type": "string",
+      "description": "Trạng thái phiếu bếp",
+      "required": true,
+      "indexed": true,
+      "enum": ["pending", "in_progress", "completed", "cancelled"],
+      "default": "pending"
+    },
+    "assignedChefId": {
+      "type": "string",
+      "description": "ID đầu bếp được gán (reference to users)",
+      "required": false,
+      "indexed": true
+    },
+    "startedAt": {
+      "type": "timestamp",
+      "description": "Thời gian bắt đầu làm",
+      "required": false,
+      "indexed": true
+    },
+    "finishedAt": {
+      "type": "timestamp",
+      "description": "Thời gian hoàn thành",
+      "required": false,
+      "indexed": true
+    },
+    "createdAt": {
+      "type": "timestamp",
+      "description": "Thời gian tạo phiếu",
+      "required": true,
+      "indexed": true
+    },
+    "priority": {
+      "type": "string",
+      "description": "Độ ưu tiên",
+      "required": false,
+      "indexed": true,
+      "enum": ["low", "normal", "high", "urgent"],
+      "default": "normal"
+    },
+    "note": {
+      "type": "string",
+      "description": "Ghi chú từ khách",
+      "required": false,
+      "indexed": false
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["status", "createdAt"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["assignedChefId", "status"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["orderItemId"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["priority", "status", "createdAt"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "collectionName": "table_session",
+  "description": "Collection quản lý phiên làm việc của bàn",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "tableId": {
+      "type": "string",
+      "description": "ID bàn (reference to dining_table)",
+      "required": true,
+      "indexed": true
+    },
+    "status": {
+      "type": "string",
+      "description": "Trạng thái phiên",
+      "required": true,
+      "indexed": true,
+      "enum": ["active", "completed", "cancelled"],
+      "default": "active"
+    },
+    "startTime": {
+      "type": "timestamp",
+      "description": "Thời gian bắt đầu phiên",
+      "required": true,
+      "indexed": true
+    },
+    "endTime": {
+      "type": "timestamp",
+      "description": "Thời gian kết thúc phiên",
+      "required": false,
+      "indexed": true
+    },
+    "createdBy": {
+      "type": "string",
+      "description": "ID nhân viên tạo phiên (reference to users)",
+      "required": true,
+      "indexed": true
+    },
+    "customerCount": {
+      "type": "number",
+      "description": "Số lượng khách",
+      "required": false,
+      "indexed": false
+    },
+    "totalRevenue": {
+      "type": "number",
+      "description": "Tổng doanh thu của phiên",
+      "required": false,
+      "indexed": false,
+      "default": 0
+    },
+    "note": {
+      "type": "string",
+      "description": "Ghi chú",
+      "required": false,
+      "indexed": false
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["tableId", "status", "startTime"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["status", "startTime"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["createdBy", "startTime"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

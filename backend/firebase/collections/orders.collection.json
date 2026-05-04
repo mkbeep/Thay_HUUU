@@ -1,0 +1,144 @@
+{
+  "collectionName": "orders",
+  "description": "Collection quản lý đơn hàng",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "tableId": {
+      "type": "string",
+      "description": "ID bàn (reference to dining_table)",
+      "required": true,
+      "indexed": true
+    },
+    "sessionId": {
+      "type": "string",
+      "description": "ID phiên (reference to table_session)",
+      "required": false,
+      "indexed": true
+    },
+    "status": {
+      "type": "string",
+      "description": "Trạng thái đơn hàng",
+      "required": true,
+      "indexed": true,
+      "enum": ["pending", "preparing", "ready", "served", "completed", "cancelled"],
+      "default": "pending"
+    },
+    "totalAmount": {
+      "type": "number",
+      "description": "Tổng tiền",
+      "required": true,
+      "indexed": false
+    },
+    "note": {
+      "type": "string",
+      "description": "Ghi chú đơn hàng",
+      "required": false,
+      "indexed": false
+    },
+    "customerName": {
+      "type": "string",
+      "description": "Tên khách hàng",
+      "required": false,
+      "indexed": false
+    },
+    "customerPhone": {
+      "type": "string",
+      "description": "Số điện thoại khách",
+      "required": false,
+      "indexed": false
+    },
+    "assignedWaiterId": {
+      "type": "string",
+      "description": "ID nhân viên phục vụ (reference to users)",
+      "required": false,
+      "indexed": true
+    },
+    "tax": {
+      "type": "number",
+      "description": "Thuế (VNĐ)",
+      "required": true,
+      "indexed": false,
+      "default": 0
+    },
+    "serviceFee": {
+      "type": "number",
+      "description": "Phí dịch vụ (VNĐ)",
+      "required": true,
+      "indexed": false,
+      "default": 0
+    },
+    "discount": {
+      "type": "number",
+      "description": "Giảm giá (VNĐ)",
+      "required": true,
+      "indexed": false,
+      "default": 0
+    },
+    "promotionId": {
+      "type": "string",
+      "description": "ID khuyến mãi áp dụng (reference to promotion)",
+      "required": false,
+      "indexed": true
+    },
+    "grandTotal": {
+      "type": "number",
+      "description": "Tổng cộng (totalAmount + tax + serviceFee - discount)",
+      "required": true,
+      "indexed": false
+    },
+    "completedAt": {
+      "type": "timestamp",
+      "description": "Thời gian hoàn thành",
+      "required": false,
+      "indexed": true
+    },
+    "cancelledAt": {
+      "type": "timestamp",
+      "description": "Thời gian hủy",
+      "required": false,
+      "indexed": false
+    },
+    "cancelReason": {
+      "type": "string",
+      "description": "Lý do hủy",
+      "required": false,
+      "indexed": false
+    },
+    "createdAt": {
+      "type": "timestamp",
+      "description": "Thời gian tạo",
+      "required": true,
+      "indexed": true
+    },
+    "updatedAt": {
+      "type": "timestamp",
+      "description": "Thời gian cập nhật",
+      "required": true,
+      "indexed": false
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["tableId", "status"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["sessionId", "status"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["status", "createdAt"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["createdAt"],
+      "queryScope": "COLLECTION",
+      "order": "DESCENDING"
+    }
+  ]
+}

@@ -13,10 +13,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useOrder } from '../context/OrderContext';
 
 interface MyTableScreenProps {
-  tableNumber?: number;
+  tableNumber?: string | number; // Support both string and number
   onBack: () => void;
   onNavigate?: (screen: string) => void;
   onPayment?: () => void;
+  onQRScan?: () => void;
 }
 
 export default function MyTableScreen({
@@ -24,6 +25,7 @@ export default function MyTableScreen({
   onBack,
   onNavigate,
   onPayment,
+  onQRScan,
 }: MyTableScreenProps) {
   const { orders } = useOrder();
 
@@ -85,9 +87,13 @@ export default function MyTableScreen({
           <TouchableOpacity
             style={styles.qrButton}
             onPress={() => {
-              Alert.alert('Mã QR', `Mã QR của bàn ${tableNumber}`, [
-                { text: 'OK' },
-              ]);
+              if (onQRScan) {
+                onQRScan();
+              } else {
+                Alert.alert('Mã QR', `Mã QR của bàn ${tableNumber}`, [
+                  { text: 'OK' },
+                ]);
+              }
             }}
           >
             <Ionicons name="qr-code" size={24} color="#5F5E5E" />
@@ -354,9 +360,9 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   tableNumberBadge: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -365,9 +371,11 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   tableNumberText: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: '900',
     color: '#FFFFFF',
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   tableTitle: {
     fontSize: 24,

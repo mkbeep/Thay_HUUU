@@ -1,0 +1,76 @@
+{
+  "collectionName": "order_item",
+  "description": "Collection chứa chi tiết món ăn trong đơn hàng",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "orderId": {
+      "type": "string",
+      "description": "ID đơn hàng (reference to orders)",
+      "required": true,
+      "indexed": true
+    },
+    "foodId": {
+      "type": "string",
+      "description": "ID món ăn (reference to food)",
+      "required": true,
+      "indexed": true
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Số lượng",
+      "required": true,
+      "indexed": false
+    },
+    "unitPrice": {
+      "type": "number",
+      "description": "Đơn giá tại thời điểm đặt",
+      "required": true,
+      "indexed": false
+    },
+    "totalPrice": {
+      "type": "number",
+      "description": "Thành tiền (quantity * unitPrice)",
+      "required": true,
+      "indexed": false
+    },
+    "status": {
+      "type": "string",
+      "description": "Trạng thái món",
+      "required": true,
+      "indexed": true,
+      "enum": ["pending", "preparing", "ready", "served", "cancelled"],
+      "default": "pending"
+    },
+    "note": {
+      "type": "string",
+      "description": "Ghi chú cho món",
+      "required": false,
+      "indexed": false
+    },
+    "createdAt": {
+      "type": "timestamp",
+      "description": "Thời gian tạo",
+      "required": true,
+      "indexed": true
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["orderId", "status"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["foodId", "createdAt"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["status", "createdAt"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

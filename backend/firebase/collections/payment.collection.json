@@ -1,0 +1,97 @@
+{
+  "collectionName": "payment",
+  "description": "Collection quản lý thanh toán",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "orderId": {
+      "type": "string",
+      "description": "ID đơn hàng (reference to orders)",
+      "required": true,
+      "indexed": true
+    },
+    "amount": {
+      "type": "number",
+      "description": "Số tiền thanh toán (VNĐ)",
+      "required": true,
+      "indexed": false
+    },
+    "method": {
+      "type": "string",
+      "description": "Phương thức thanh toán",
+      "required": true,
+      "indexed": true,
+      "enum": ["cash", "card", "momo", "zalopay", "banking"]
+    },
+    "status": {
+      "type": "string",
+      "description": "Trạng thái thanh toán",
+      "required": true,
+      "indexed": true,
+      "enum": ["pending", "completed", "failed", "refunded"],
+      "default": "pending"
+    },
+    "paidAt": {
+      "type": "timestamp",
+      "description": "Thời gian thanh toán thành công",
+      "required": false,
+      "indexed": true
+    },
+    "processedBy": {
+      "type": "string",
+      "description": "ID nhân viên xử lý (reference to users)",
+      "required": false,
+      "indexed": true
+    },
+    "transactionCode": {
+      "type": "string",
+      "description": "Mã giao dịch từ cổng thanh toán",
+      "required": false,
+      "indexed": true
+    },
+    "note": {
+      "type": "string",
+      "description": "Ghi chú thanh toán",
+      "required": false,
+      "indexed": false
+    },
+    "createdAt": {
+      "type": "timestamp",
+      "description": "Thời gian tạo",
+      "required": true,
+      "indexed": true
+    },
+    "updatedAt": {
+      "type": "timestamp",
+      "description": "Thời gian cập nhật",
+      "required": true,
+      "indexed": false
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["orderId", "status"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["status", "createdAt"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["method", "paidAt"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["transactionCode"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["processedBy", "paidAt"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

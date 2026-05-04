@@ -1,0 +1,141 @@
+{
+  "collectionName": "promotion",
+  "description": "Collection quản lý chương trình khuyến mãi",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "code": {
+      "type": "string",
+      "description": "Mã khuyến mãi (unique)",
+      "required": true,
+      "indexed": true,
+      "unique": true
+    },
+    "name": {
+      "type": "string",
+      "description": "Tên chương trình",
+      "required": true,
+      "indexed": false
+    },
+    "description": {
+      "type": "string",
+      "description": "Mô tả chi tiết",
+      "required": true,
+      "indexed": false
+    },
+    "type": {
+      "type": "string",
+      "description": "Loại khuyến mãi",
+      "required": true,
+      "indexed": true,
+      "enum": ["percentage", "fixed_amount", "buy_x_get_y", "free_item", "combo"]
+    },
+    "discountValue": {
+      "type": "number",
+      "description": "Giá trị giảm (% hoặc số tiền)",
+      "required": true,
+      "indexed": false
+    },
+    "maxDiscount": {
+      "type": "number",
+      "description": "Giảm giá tối đa (VNĐ)",
+      "required": false,
+      "indexed": false
+    },
+    "minOrderAmount": {
+      "type": "number",
+      "description": "Giá trị đơn hàng tối thiểu",
+      "required": false,
+      "indexed": false
+    },
+    "applicableFoodIds": {
+      "type": "array",
+      "description": "Danh sách ID món áp dụng (references to food)",
+      "required": false,
+      "indexed": false,
+      "itemType": "string"
+    },
+    "applicableCategories": {
+      "type": "array",
+      "description": "Danh mục món áp dụng",
+      "required": false,
+      "indexed": false,
+      "itemType": "string"
+    },
+    "startDate": {
+      "type": "timestamp",
+      "description": "Ngày bắt đầu",
+      "required": true,
+      "indexed": true
+    },
+    "endDate": {
+      "type": "timestamp",
+      "description": "Ngày kết thúc",
+      "required": true,
+      "indexed": true
+    },
+    "usageLimit": {
+      "type": "number",
+      "description": "Số lần sử dụng tối đa",
+      "required": false,
+      "indexed": false
+    },
+    "usageCount": {
+      "type": "number",
+      "description": "Số lần đã sử dụng",
+      "required": true,
+      "indexed": false,
+      "default": 0
+    },
+    "usageLimitPerCustomer": {
+      "type": "number",
+      "description": "Giới hạn sử dụng mỗi khách",
+      "required": false,
+      "indexed": false
+    },
+    "isActive": {
+      "type": "boolean",
+      "description": "Trạng thái kích hoạt",
+      "required": true,
+      "indexed": true,
+      "default": true
+    },
+    "createdBy": {
+      "type": "string",
+      "description": "ID người tạo (reference to users)",
+      "required": true,
+      "indexed": false
+    },
+    "createdAt": {
+      "type": "timestamp",
+      "description": "Thời gian tạo",
+      "required": true,
+      "indexed": false
+    },
+    "updatedAt": {
+      "type": "timestamp",
+      "description": "Thời gian cập nhật",
+      "required": true,
+      "indexed": false
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["code"],
+      "queryScope": "COLLECTION",
+      "unique": true
+    },
+    {
+      "fields": ["isActive", "startDate", "endDate"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["type", "isActive"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

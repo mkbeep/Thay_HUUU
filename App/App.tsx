@@ -5,7 +5,125 @@ import { StatusBar } from 'expo-status-bar';
 
 import { CartProvider } from './src/presentation/context/CartContext';
 import { OrderProvider } from './src/presentation/context/OrderContext';
+import { TableProvider, useTable } from './src/presentation/context/TableContext';
 import WelcomeScreen from './src/presentation/screens/WelcomeScreen';
+
+// Wrapper components to use hooks
+function WelcomeScreenWrapper({ onExploreMenu, onViewDrinks, onQRScan }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <WelcomeScreen
+      tableNumber={tableNumber || undefined}
+      onExploreMenu={onExploreMenu}
+      onViewDrinks={onViewDrinks}
+      onQRScan={onQRScan}
+    />
+  );
+}
+
+function HomeMenuScreenWrapper({ onCartPress, onNavigate, onMenuItemPress }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <HomeMenuScreen
+      tableNumber={tableNumber || undefined}
+      onCartPress={onCartPress}
+      onNavigate={onNavigate}
+      onMenuItemPress={onMenuItemPress}
+    />
+  );
+}
+
+function CartScreenWrapper({ onBack, onSubmitOrder }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <CartScreen
+      tableNumber={tableNumber || undefined}
+      onBack={onBack}
+      onSubmitOrder={onSubmitOrder}
+    />
+  );
+}
+
+function OrderHistoryScreenWrapper({ onBack, onPayment, onSupport }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <OrderHistoryScreen
+      tableNumber={tableNumber || undefined}
+      onBack={onBack}
+      onPayment={onPayment}
+      onSupport={onSupport}
+    />
+  );
+}
+
+function OrderSummaryScreenWrapper({ onBack, onPayment }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <OrderSummaryScreen
+      tableNumber={tableNumber || undefined}
+      onBack={onBack}
+      onPayment={onPayment}
+    />
+  );
+}
+
+function PaymentScreenWrapper({ onBack, onPaymentComplete }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <PaymentScreen
+      tableNumber={tableNumber || undefined}
+      onBack={onBack}
+      onPaymentComplete={onPaymentComplete}
+    />
+  );
+}
+
+function SupportScreenWrapper({ onBack }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <SupportScreen
+      tableNumber={tableNumber || undefined}
+      onBack={onBack}
+    />
+  );
+}
+
+function SupportRequestScreenWrapper({ onBack, onNavigate, onRequestSent }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <SupportRequestScreen
+      tableNumber={tableNumber || undefined}
+      onBack={onBack}
+      onNavigate={onNavigate}
+      onRequestSent={onRequestSent}
+    />
+  );
+}
+
+function StaffComingScreenWrapper({ requestType, onBack, onNavigate }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <StaffComingScreen
+      tableNumber={tableNumber || undefined}
+      requestType={requestType}
+      onBack={onBack}
+      onNavigate={onNavigate}
+    />
+  );
+}
+
+function MyTableScreenWrapper({ onBack, onNavigate, onPayment, onQRScan }: any) {
+  const { tableNumber } = useTable();
+  return (
+    <MyTableScreen
+      tableNumber={tableNumber || undefined}
+      onBack={onBack}
+      onNavigate={onNavigate}
+      onPayment={onPayment}
+      onQRScan={onQRScan}
+    />
+  );
+}
 import HomeMenuScreen from './src/presentation/screens/HomeMenuScreen';
 import CartScreen from './src/presentation/screens/CartScreen';
 import MenuItemDetailScreen from './src/presentation/screens/MenuItemDetailScreen';
@@ -16,8 +134,9 @@ import SupportScreen from './src/presentation/screens/SupportScreen';
 import SupportRequestScreen from './src/presentation/screens/SupportRequestScreen';
 import MyTableScreen from './src/presentation/screens/MyTableScreen';
 import StaffComingScreen from './src/presentation/screens/StaffComingScreen';
+import QRScannerScreen from './src/presentation/screens/QRScannerScreen';
 
-type Screen = 'welcome' | 'home' | 'cart' | 'detail' | 'orders' | 'summary' | 'payment' | 'support' | 'supportRequest' | 'table' | 'staffComing';
+type Screen = 'welcome' | 'home' | 'cart' | 'detail' | 'orders' | 'summary' | 'payment' | 'support' | 'supportRequest' | 'table' | 'staffComing' | 'qrScanner';
 
 interface SelectedMenuItem {
   id: string;
@@ -38,17 +157,16 @@ export default function App() {
     switch (currentScreen) {
       case 'welcome':
         return (
-          <WelcomeScreen
-            tableNumber={12}
+          <WelcomeScreenWrapper
             onExploreMenu={() => setCurrentScreen('home')}
             onViewDrinks={() => setCurrentScreen('home')}
+            onQRScan={() => setCurrentScreen('qrScanner')}
           />
         );
       
       case 'home':
         return (
-          <HomeMenuScreen 
-            tableNumber={12}
+          <HomeMenuScreenWrapper
             onCartPress={() => setCurrentScreen('cart')}
             onNavigate={(screen) => {
               if (screen === 'orders') {
@@ -60,7 +178,6 @@ export default function App() {
               }
             }}
             onMenuItemPress={(item) => {
-              // Chuyển đổi MenuItem sang SelectedMenuItem
               const priceNumber = parseFloat(item.price.replace('k', ''));
               setSelectedItem({
                 id: item.id,
@@ -78,8 +195,7 @@ export default function App() {
       
       case 'cart':
         return (
-          <CartScreen
-            tableNumber={12}
+          <CartScreenWrapper
             onBack={() => setCurrentScreen('home')}
             onSubmitOrder={() => {
               console.log('Order submitted!');
@@ -90,8 +206,7 @@ export default function App() {
       
       case 'orders':
         return (
-          <OrderHistoryScreen
-            tableNumber={12}
+          <OrderHistoryScreenWrapper
             onBack={() => setCurrentScreen('home')}
             onPayment={() => setCurrentScreen('summary')}
             onSupport={() => setCurrentScreen('support')}
@@ -100,16 +215,14 @@ export default function App() {
       
       case 'support':
         return (
-          <SupportScreen
-            tableNumber={12}
+          <SupportScreenWrapper
             onBack={() => setCurrentScreen('orders')}
           />
         );
       
       case 'summary':
         return (
-          <OrderSummaryScreen
-            tableNumber={12}
+          <OrderSummaryScreenWrapper
             onBack={() => setCurrentScreen('orders')}
             onPayment={() => setCurrentScreen('payment')}
           />
@@ -117,8 +230,7 @@ export default function App() {
       
       case 'payment':
         return (
-          <PaymentScreen
-            tableNumber={12}
+          <PaymentScreenWrapper
             onBack={() => setCurrentScreen('summary')}
             onPaymentComplete={() => {
               setCurrentScreen('home');
@@ -137,8 +249,7 @@ export default function App() {
       
       case 'supportRequest':
         return (
-          <SupportRequestScreen
-            tableNumber={12}
+          <SupportRequestScreenWrapper
             onBack={() => setCurrentScreen('home')}
             onNavigate={(screen) => {
               if (screen === 'explore') {
@@ -158,8 +269,7 @@ export default function App() {
       
       case 'staffComing':
         return (
-          <StaffComingScreen
-            tableNumber={12}
+          <StaffComingScreenWrapper
             requestType={requestType}
             onBack={() => setCurrentScreen('supportRequest')}
             onNavigate={(screen) => {
@@ -176,8 +286,7 @@ export default function App() {
       
       case 'table':
         return (
-          <MyTableScreen
-            tableNumber={12}
+          <MyTableScreenWrapper
             onBack={() => setCurrentScreen('home')}
             onNavigate={(screen) => {
               if (screen === 'explore') {
@@ -189,6 +298,18 @@ export default function App() {
               }
             }}
             onPayment={() => setCurrentScreen('summary')}
+            onQRScan={() => setCurrentScreen('qrScanner')}
+          />
+        );
+      
+      case 'qrScanner':
+        return (
+          <QRScannerScreen
+            onSuccess={(tableNum) => {
+              console.log('QR scanned, table:', tableNum);
+              setCurrentScreen('table');
+            }}
+            onCancel={() => setCurrentScreen('table')}
           />
         );
       
@@ -199,14 +320,16 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <OrderProvider>
-        <CartProvider>
-          <NavigationContainer>
-            {renderScreen()}
-            <StatusBar style="dark" />
-          </NavigationContainer>
-        </CartProvider>
-      </OrderProvider>
+      <TableProvider>
+        <OrderProvider>
+          <CartProvider>
+            <NavigationContainer>
+              {renderScreen()}
+              <StatusBar style="dark" />
+            </NavigationContainer>
+          </CartProvider>
+        </OrderProvider>
+      </TableProvider>
     </SafeAreaProvider>
   );
 }

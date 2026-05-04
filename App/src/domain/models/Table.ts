@@ -1,6 +1,6 @@
 export interface Table {
   id: string;
-  number: number;
+  number: string | number; // Support both string (G01, T05) and number (1, 2, 3)
   capacity: number;
   status: TableStatus;
   currentOrderId?: string;

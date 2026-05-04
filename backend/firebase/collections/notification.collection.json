@@ -1,0 +1,117 @@
+{
+  "collectionName": "notification",
+  "description": "Collection quản lý thông báo",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "ID tự động tạo bởi Firestore",
+      "required": true,
+      "indexed": true
+    },
+    "type": {
+      "type": "string",
+      "description": "Loại thông báo",
+      "required": true,
+      "indexed": true,
+      "enum": ["order_new", "order_ready", "order_cancelled", "table_request", "reservation_new", "inventory_low", "review_new", "system"]
+    },
+    "title": {
+      "type": "string",
+      "description": "Tiêu đề",
+      "required": true,
+      "indexed": false
+    },
+    "message": {
+      "type": "string",
+      "description": "Nội dung",
+      "required": true,
+      "indexed": false
+    },
+    "targetUserIds": {
+      "type": "array",
+      "description": "Danh sách ID người nhận (references to users)",
+      "required": false,
+      "indexed": false,
+      "itemType": "string"
+    },
+    "targetRoles": {
+      "type": "array",
+      "description": "Danh sách vai trò nhận",
+      "required": false,
+      "indexed": true,
+      "itemType": "string"
+    },
+    "relatedEntityType": {
+      "type": "string",
+      "description": "Loại entity liên quan",
+      "required": false,
+      "indexed": false,
+      "enum": ["order", "table", "reservation", "inventory", "review"]
+    },
+    "relatedEntityId": {
+      "type": "string",
+      "description": "ID entity liên quan",
+      "required": false,
+      "indexed": true
+    },
+    "priority": {
+      "type": "string",
+      "description": "Mức độ ưu tiên",
+      "required": true,
+      "indexed": true,
+      "enum": ["low", "normal", "high", "urgent"],
+      "default": "normal"
+    },
+    "isRead": {
+      "type": "boolean",
+      "description": "Đã đọc",
+      "required": true,
+      "indexed": true,
+      "default": false
+    },
+    "readBy": {
+      "type": "array",
+      "description": "Danh sách ID người đã đọc",
+      "required": true,
+      "indexed": false,
+      "itemType": "string",
+      "default": []
+    },
+    "actionUrl": {
+      "type": "string",
+      "description": "URL hành động",
+      "required": false,
+      "indexed": false
+    },
+    "expiresAt": {
+      "type": "timestamp",
+      "description": "Thời gian hết hạn",
+      "required": false,
+      "indexed": true
+    },
+    "createdAt": {
+      "type": "timestamp",
+      "description": "Thời gian tạo",
+      "required": true,
+      "indexed": true
+    }
+  },
+  "indexes": [
+    {
+      "fields": ["targetRoles", "isRead", "createdAt"],
+      "queryScope": "COLLECTION_GROUP"
+    },
+    {
+      "fields": ["priority", "isRead", "createdAt"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["type", "createdAt"],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "fields": ["relatedEntityId"],
+      "queryScope": "COLLECTION"
+    }
+  ]
+}

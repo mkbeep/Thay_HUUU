@@ -1,7 +1,11 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { Order as DomainOrder, OrderStatus as DomainOrderStatus } from '../../domain/models/Order';
+import { OrderService } from '../../business/services/OrderService';
 
+// Presentation layer status mapping
 export type OrderStatus = 'paid' | 'confirmed' | 'cooking' | 'ready' | 'served';
 
+// Presentation layer OrderItem (simplified for UI)
 export interface OrderItem {
   id: string;
   name: string;
@@ -13,6 +17,7 @@ export interface OrderItem {
   note?: string;
 }
 
+// Presentation layer Order (for UI display)
 export interface Order {
   id: string;
   orderNumber: string;
@@ -35,8 +40,45 @@ interface OrderContextType {
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
+// Helper: Map domain OrderStatus to presentation OrderStatus
+const mapDomainStatusToPresentation = (domainStatus: DomainOrderStatus): OrderStatus => {
+  switch (domainStatus) {
+    case DomainOrderStatus.PENDING:
+      return 'paid';
+    case DomainOrderStatus.PREPARING:
+      return 'cooking';
+    case DomainOrderStatus.READY:
+      return 'ready';
+    case DomainOrderStatus.COMPLETED:
+      return 'served';
+    case DomainOrderStatus.CANCELLED:
+      return 'served'; // Treat cancelled as served for UI
+    default:
+      return 'paid';
+  }
+};
+
+// Helper: Map presentation OrderStatus to domain OrderStatus
+const mapPresentationStatusToDomain = (presentationStatus: OrderStatus): DomainOrderStatus => {
+  switch (presentationStatus) {
+    case 'paid':
+      return DomainOrderStatus.PENDING;
+    case 'confirmed':
+      return DomainOrderStatus.PENDING;
+    case 'cooking':
+      return DomainOrderStatus.PREPARING;
+    case 'ready':
+      return DomainOrderStatus.READY;
+    case 'served':
+      return DomainOrderStatus.COMPLETED;
+    default:
+      return DomainOrderStatus.PENDING;
+  }
+};
+
 export const OrderProvider = ({ children }: { children: ReactNode }) => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const orderService = new OrderService();
 
   const generateOrderNumber = () => {
     const random = Math.floor(Math.random() * 9000) + 1000;

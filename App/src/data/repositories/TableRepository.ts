@@ -1,34 +1,112 @@
 import { Table, TableStatus } from '../../domain/models/Table';
+import axios from 'axios';
+
+const API_BASE_URL = process.env.API_URL || 'http://192.168.1.100:3000/api/v1';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 10000,
+});
 
 export class TableRepository {
-  private tables: Table[] = [
-    { id: '1', number: 1, capacity: 4, status: TableStatus.AVAILABLE },
-    { id: '2', number: 2, capacity: 2, status: TableStatus.OCCUPIED, currentOrderId: '1' },
-    { id: '3', number: 3, capacity: 6, status: TableStatus.OCCUPIED, currentOrderId: '2' },
-    { id: '4', number: 4, capacity: 4, status: TableStatus.AVAILABLE },
-    { id: '5', number: 5, capacity: 8, status: TableStatus.RESERVED },
-    { id: '6', number: 6, capacity: 2, status: TableStatus.AVAILABLE },
-  ];
-
   async getAllTables(): Promise<Table[]> {
-    return Promise.resolve([...this.tables]);
+    try {
+      const response = await apiClient.get('/tables');
+      return response.data.data.map(this.mapToTable);
+    } catch (error) {
+      console.error('Error fetching tables:', error);
+      return [];
+    }
   }
 
   async getTableById(id: string): Promise<Table | undefined> {
-    return Promise.resolve(this.tables.find(table => table.id === id));
+    try {
+      const response = await apiClient.get(`/tables/${id}`);
+      return this.mapToTable(response.data.data);
+    } catch (error) {
+      console.error('Error fetching table:', error);
+      return undefined;
+    }
+  }
+
+  async getTableByNumber(tableNumber: string | number): Promise<Table | undefined> {
+    try {
+      const response = await apiClient.get(`/tables/by-number/${tableNumber}`);
+      return this.mapToTable(response.data.data);
+    } catch (error) {
+      console.error('Error fetching table by number:', error);
+      return undefined;
+    }
   }
 
   async getTablesByStatus(status: TableStatus): Promise<Table[]> {
-    return Promise.resolve(this.tables.filter(table => table.status === status));
+    try {
+      const response = await apiClient.get('/tables', {
+        params: { status }
+      });
+      return response.data.data.map(this.mapToTable);
+    } catch (error) {
+      console.error('Error fetching tables by status:', error);
+      return [];
+    }
   }
 
   async updateTableStatus(id: string, status: TableStatus, orderId?: string): Promise<Table | undefined> {
-    const index = this.tables.findIndex(table => table.id === id);
-    if (index !== -1) {
-      this.tables[index].status = status;
-      this.tables[index].currentOrderId = orderId;
-      return Promise.resolve(this.tables[index]);
+    try {
+      const response = await apiClient.patch(`/tables/${id}/status`, {
+        status,
+        order_id: orderId,
+      });
+      return this.mapToTable(response.data.data);
+    } catch (error) {
+      console.error('Error updating table status:', error);
+      return undefined;
     }
-    return Promise.resolve(undefined);
+  }
+
+  async createTableSession(tableId: string, customerCount: number): Promise<any> {
+    try {
+      const response = await apiClient.post(`/tables/${tableId}/session`, {
+        customer_count: customerCount,
+      });
+      return response.data.data;
+    } catch (error) {
+      console.error('Error creating table session:', error);
+      throw error;
+    }
+  }
+
+  async endTableSession(sessionId: string): Promise<any> {
+    try {
+      const response = await apiClient.patch(`/tables/session/${sessionId}/end`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error ending table session:', error);
+      throw error;
+    }
+  }
+
+  private mapToTable = (data: any): Table => {
+    // Keep table_number as string or number
+    let tableNumber: string | number = 0;
+    
+    if (data.table_number) {
+      // If it's a string like "G01", "T05", keep as string
+      // If it's a number or numeric string, convert to number
+      if (typeof data.table_number === 'string' && /^\d+$/.test(data.table_number)) {
+        tableNumber = parseInt(data.table_number);
+      } else {
+        tableNumber = data.table_number; // Keep as string (G01, T05, V03)
+      }
+    }
+    
+    return {
+      id: data.id,
+      number: tableNumber,
+      capacity: data.capacity,
+      status: data.status as TableStatus,
+      currentOrderId: data.current_session?.id,
+    };
   }
 }

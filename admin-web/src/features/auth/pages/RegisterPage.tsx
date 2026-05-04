@@ -28,17 +28,33 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validation
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Mật khẩu xác nhận không khớp')
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email)) {
+      toast.error('Email không đúng định dạng. Vui lòng nhập email hợp lệ (ví dụ: user@example.com)')
       return
     }
 
+    // Password validation
     if (formData.password.length < 6) {
       toast.error('Mật khẩu phải có ít nhất 6 ký tự')
       return
     }
 
+    // Confirm password validation
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Mật khẩu xác nhận không khớp')
+      return
+    }
+
+    // Phone validation
+    const phoneRegex = /^[0-9]{10,11}$/
+    if (!phoneRegex.test(formData.phone)) {
+      toast.error('Số điện thoại không hợp lệ. Vui lòng nhập 10-11 chữ số')
+      return
+    }
+
+    // Terms validation
     if (!agreeTerms) {
       toast.error('Vui lòng đồng ý với điều khoản sử dụng')
       return
@@ -49,6 +65,17 @@ export default function RegisterPage() {
     try {
       // TODO: Call API register
       await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      // Store registered user data in localStorage for demo
+      const registeredUsers = JSON.parse(localStorage.getItem('registered-users') || '[]')
+      registeredUsers.push({
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        phone: formData.phone,
+      })
+      localStorage.setItem('registered-users', JSON.stringify(registeredUsers))
+      
       toast.success('Đăng ký thành công! Vui lòng đăng nhập.')
       navigate('/login')
     } catch (error) {
