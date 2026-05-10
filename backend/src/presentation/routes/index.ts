@@ -10,6 +10,7 @@ import notificationRoutes from './notification.routes';
 import orderRoutes from './order.routes';
 import tableRoutes from './table.routes';
 import inventoryRoutes from './inventory.routes';
+import supportRequestRoutes from './support-request.routes';
 
 const router = Router();
 
@@ -29,5 +30,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/orders', orderRoutes);
 router.use('/tables', tableRoutes);
 router.use('/inventory', inventoryRoutes);
+router.use('/support-requests', supportRequestRoutes);
 
 export default router;

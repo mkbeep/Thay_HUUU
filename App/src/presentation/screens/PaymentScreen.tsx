@@ -35,7 +35,7 @@ export default function PaymentScreen({
   onPaymentComplete,
   tableNumber = 12,
 }: PaymentScreenProps) {
-  const { orders } = useOrder();
+  const { orders, requestPaymentForServedOrders, hasPendingPaymentConfirmation } = useOrder();
   const [splitMethod, setSplitMethod] = useState<SplitMethod>('equal');
   const [numberOfPeople, setNumberOfPeople] = useState(2);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('momo');
@@ -72,23 +72,26 @@ export default function PaymentScreen({
 
   const handlePayment = () => {
     Alert.alert(
-      'Xác nhận thanh toán',
+      'Gửi yêu cầu thanh toán',
       `Tổng tiền: ${total.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ\nPhương thức: ${
         PAYMENT_METHODS.find((m) => m.id === selectedPayment)?.name
-      }\n\nBạn có chắc muốn thanh toán?`,
+      }\n\nYêu cầu sẽ được gửi cho nhân viên/admin xác nhận.`,
       [
         { text: 'Hủy', style: 'cancel' },
         {
-          text: 'Xác nhận',
+          text: 'Gửi yêu cầu',
           onPress: () => {
-            // Simulate payment processing
-            setTimeout(() => {
-              Alert.alert(
-                'Thanh toán thành công!',
-                'Cảm ơn bạn đã sử dụng dịch vụ của chúng tôi.',
-                [{ text: 'OK', onPress: onPaymentComplete }]
-              );
-            }, 1000);
+            const requested = requestPaymentForServedOrders();
+            if (!requested) {
+              Alert.alert('Không có đơn cần thanh toán', 'Vui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
+              return;
+            }
+
+            Alert.alert(
+              'Đã gửi yêu cầu xác nhận',
+              'Yêu cầu thanh toán đã được gửi. Khi admin/nhân viên xác nhận, trạng thái sẽ chuyển sang đã thanh toán.',
+              [{ text: 'OK', onPress: onPaymentComplete }]
+            );
           },
         },
       ]
@@ -326,6 +329,11 @@ export default function PaymentScreen({
       {/* Fixed Payment Button */}
       {allItems.length > 0 && (
         <View style={styles.bottomAction}>
+          {hasPendingPaymentConfirmation() && (
+            <Text style={{ textAlign: 'center', color: '#AD2C00', fontWeight: '700', marginBottom: 10 }}>
+              Đang chờ nhân viên xác nhận thanh toán
+            </Text>
+          )}
           <TouchableOpacity
             style={styles.paymentButton}
             onPress={handlePayment}
@@ -337,7 +345,9 @@ export default function PaymentScreen({
               end={{ x: 1, y: 0 }}
               style={styles.paymentButtonGradient}
             >
-              <Text style={styles.paymentButtonText}>Xác nhận thanh toán</Text>
+              <Text style={styles.paymentButtonText}>
+                {hasPendingPaymentConfirmation() ? 'Đã gửi yêu cầu thanh toán' : 'Gửi yêu cầu thanh toán'}
+              </Text>
               <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
             </LinearGradient>
           </TouchableOpacity>

@@ -17,14 +17,17 @@ const createOrderValidation = [
   body('items').isArray({ min: 1 }).withMessage('Đơn hàng phải có ít nhất 1 món'),
 ];
 
-// All routes require authentication
-router.use(authMiddleware);
-
-// Routes
-router.get('/', orderController.getAll);
-router.get('/:id', orderController.getById);
+// Public routes (khách)
 router.post('/', validate(createOrderValidation), orderController.create);
-router.patch('/:id/status', orderController.updateStatus);
-router.delete('/:id', requireRole('admin', 'manager'), orderController.delete);
+router.patch('/:id/request-payment', orderController.requestPayment);
+router.patch('/:id/cancel', orderController.cancel);
+router.get('/public', orderController.getPublicByTableSession);
+
+// Protected routes
+router.get('/', authMiddleware, requireRole('admin', 'manager', 'staff'), orderController.getAll);
+router.get('/:id', authMiddleware, requireRole('admin', 'manager', 'staff'), orderController.getById);
+router.patch('/:id/status', authMiddleware, requireRole('admin', 'manager', 'staff'), orderController.updateStatus);
+router.patch('/:id/confirm-payment', authMiddleware, requireRole('admin', 'manager', 'cashier'), orderController.confirmPayment);
+router.delete('/:id', authMiddleware, requireRole('admin', 'manager'), orderController.delete);
 
 export default router;

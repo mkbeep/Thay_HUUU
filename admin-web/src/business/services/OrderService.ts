@@ -1,5 +1,9 @@
-import { Order, OrderStatus, CreateOrderDto, UpdateOrderDto } from '../../domain/models/Order';
-import { OrderRepository } from '../../data/repositories/OrderRepository';
+/**
+ * Order Service - Admin Web
+ * Business logic layer
+ */
+
+import { OrderRepository, Order, OrderFilters } from '../../data/repositories/OrderRepository';
 
 export class OrderService {
   private orderRepository: OrderRepository;
@@ -8,79 +12,93 @@ export class OrderService {
     this.orderRepository = new OrderRepository();
   }
 
-  async getOrders(): Promise<Order[]> {
-    return await this.orderRepository.getAllOrders();
+  /**
+   * Lấy danh sách đơn hàng theo trạng thái
+   */
+  async getOrdersByStatus(status?: Order['status']): Promise<Order[]> {
+    const filters: OrderFilters = status ? { status } : {};
+    return await this.orderRepository.getAll(filters);
   }
 
-  async getOrderById(id: string): Promise<Order | undefined> {
-    return await this.orderRepository.getOrderById(id);
+  /**
+   * Lấy đơn hàng đang chờ (incoming)
+   */
+  async getIncomingOrders(): Promise<Order[]> {
+    return await this.orderRepository.getAll({ status: 'pending' });
   }
 
-  async getOrdersByStatus(status: OrderStatus): Promise<Order[]> {
-    return await this.orderRepository.getOrdersByStatus(status);
+  /**
+   * Lấy đơn hàng đang nấu (preparing)
+   */
+  async getPreparingOrders(): Promise<Order[]> {
+    return await this.orderRepository.getAll({ status: 'preparing' });
   }
 
-  async getOrdersByTable(tableNumber: number): Promise<Order[]> {
-    return await this.orderRepository.getOrdersByTable(tableNumber);
+  /**
+   * Lấy đơn hàng sẵn sàng (ready)
+   */
+  async getReadyOrders(): Promise<Order[]> {
+    return await this.orderRepository.getAll({ status: 'ready' });
   }
 
-  async createOrder(dto: CreateOrderDto): Promise<Order> {
-    // Validate input
-    if (!dto.items || dto.items.length === 0) {
-      throw new Error('Đơn hàng phải có ít nhất 1 món');
-    }
-    if (dto.tableNumber <= 0) {
-      throw new Error('Số bàn không hợp lệ');
-    }
-
-    return await this.orderRepository.createOrder(dto);
+  /**
+   * ✅ Bếp nhận đơn: pending → confirmed
+   */
+  async confirmOrder(orderId: string): Promise<Order> {
+    return await this.orderRepository.updateStatus(orderId, 'confirmed');
   }
 
-  async updateOrderStatus(id: string, status: OrderStatus): Promise<Order | undefined> {
-    return await this.orderRepository.updateOrder(id, { status });
+  /**
+   * ✅ Bếp bắt đầu nấu: confirmed → preparing
+   */
+  async startPreparing(orderId: string): Promise<Order> {
+    return await this.orderRepository.updateStatus(orderId, 'preparing');
   }
 
-  async updateOrder(id: string, dto: UpdateOrderDto): Promise<Order | undefined> {
-    return await this.orderRepository.updateOrder(id, dto);
+  /**
+   * ✅ Bếp hoàn thành: preparing → ready
+   */
+  async markAsReady(orderId: string): Promise<Order> {
+    return await this.orderRepository.updateStatus(orderId, 'ready');
   }
 
-  async cancelOrder(id: string): Promise<Order | undefined> {
-    return await this.orderRepository.updateOrder(id, { status: OrderStatus.CANCELLED });
+  /**
+   * ✅ Phục vụ giao bàn: ready → served
+   */
+  async markAsServed(orderId: string): Promise<Order> {
+    return await this.orderRepository.updateStatus(orderId, 'served');
   }
 
-  async completeOrder(id: string): Promise<Order | undefined> {
-    return await this.orderRepository.updateOrder(id, { status: OrderStatus.COMPLETED });
+  /**
+   * ✅ Thu ngân xác nhận thanh toán: served → completed (paid)
+   */
+  async confirmPayment(orderId: string, paymentMethod: string = 'cash'): Promise<Order> {
+    return await this.orderRepository.confirmPayment(orderId, paymentMethod);
   }
 
-  async deleteOrder(id: string): Promise<boolean> {
-    return await this.orderRepository.deleteOrder(id);
+  /**
+   * Xóa đơn hàng
+   */
+  async deleteOrder(orderId: string): Promise<void> {
+    return await this.orderRepository.delete(orderId);
   }
 
-  async getActiveOrders(): Promise<Order[]> {
-    const allOrders = await this.orderRepository.getAllOrders();
-    return allOrders.filter(order => 
-      order.status !== OrderStatus.COMPLETED && 
-      order.status !== OrderStatus.CANCELLED
-    );
+  /**
+   * Tính thời gian đã trôi qua (phút)
+   */
+  calculateTimeElapsed(createdAt: string): number {
+    const now = new Date();
+    const created = new Date(createdAt);
+    const diffMs = now.getTime() - created.getTime();
+    return Math.floor(diffMs / 60000); // Convert to minutes
   }
 
-  async getPendingOrders(): Promise<Order[]> {
-    return await this.orderRepository.getOrdersByStatus(OrderStatus.PENDING);
-  }
-
-  async getCompletedOrders(): Promise<Order[]> {
-    return await this.orderRepository.getOrdersByStatus(OrderStatus.COMPLETED);
-  }
-
-  async getTotalRevenue(): Promise<number> {
-    const completedOrders = await this.getCompletedOrders();
-    return completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-  }
-
-  async getAverageOrderValue(): Promise<number> {
-    const completedOrders = await this.getCompletedOrders();
-    if (completedOrders.length === 0) return 0;
-    const total = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-    return total / completedOrders.length;
+  /**
+   * Tính progress cho đơn đang nấu (0-100%)
+   */
+  calculateProgress(createdAt: string, estimatedMinutes: number = 20): number {
+    const elapsed = this.calculateTimeElapsed(createdAt);
+    const progress = Math.min((elapsed / estimatedMinutes) * 100, 100);
+    return Math.round(progress);
   }
 }

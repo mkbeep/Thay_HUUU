@@ -1,393 +1,330 @@
-import { useState } from 'react'
-import { 
-  Clock, 
-  CheckCircle, 
-  AlertCircle, 
-  X,
-  Timer,
-  Wifi,
-  Bell,
-  ChefHat
-} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
+import { CheckCircle, ChefHat, Clock } from 'lucide-react'
 
-// Types
-interface OrderItem {
-  name: string
-  quantity: number
-  note?: string
-  cookLevel?: string
-}
+type KitchenStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served'
+type PaymentStatus = 'unpaid' | 'payment_pending_confirmation' | 'paid'
 
-interface Order {
+interface ApiOrderItem {
   id: string
-  tableNumber: number
-  items: OrderItem[]
-  status: 'incoming' | 'preparing' | 'ready'
-  timeElapsed: number // in minutes
-  progress?: number // 0-100 for preparing orders
+  quantity: number
+  food?: { name?: string } | null
 }
 
-// Mock data
-const mockOrders: Order[] = [
-  {
-    id: 'GT-9042',
-    tableNumber: 12,
-    items: [
-      { name: 'Wagyu Truffle Burger', quantity: 2, note: 'Không hành, thêm sốt truffle riêng' },
-      { name: 'Súp Tôm Hùm', quantity: 1 }
-    ],
-    status: 'incoming',
-    timeElapsed: 12
-  },
-  {
-    id: 'GT-9045',
-    tableNumber: 4,
-    items: [
-      { name: 'Sò Điệp Áp Chảo', quantity: 1 },
-      { name: 'Risotto Milanese', quantity: 1 }
-    ],
-    status: 'incoming',
-    timeElapsed: 4
-  },
-  {
-    id: 'GT-9043',
-    tableNumber: 7,
-    items: [
-      { name: 'Mì Ý Hải Sản', quantity: 2 },
-      { name: 'Salad Caesar', quantity: 1 }
-    ],
-    status: 'incoming',
-    timeElapsed: 8
-  },
-  {
-    id: 'GT-9041',
-    tableNumber: 15,
-    items: [
-      { name: 'Pizza Margherita', quantity: 1 },
-      { name: 'Nước Ép Cam', quantity: 2 }
-    ],
-    status: 'incoming',
-    timeElapsed: 6
-  },
-  {
-    id: 'GT-9038',
-    tableNumber: 8,
-    items: [
-      { name: 'Bít Tết Ribeye 400g', quantity: 1, cookLevel: 'TÁI VỪA' },
-      { name: 'Măng Tây Sốt Hollandaise', quantity: 1 }
-    ],
-    status: 'preparing',
-    timeElapsed: 22,
-    progress: 65
-  },
-  {
-    id: 'GT-9040',
-    tableNumber: 3,
-    items: [
-      { name: 'Cá Hồi Nướng', quantity: 1 },
-      { name: 'Khoai Tây Nghiền', quantity: 1 }
-    ],
-    status: 'preparing',
-    timeElapsed: 15,
-    progress: 45
-  },
-  {
-    id: 'GT-9035',
-    tableNumber: 21,
-    items: [
-      { name: 'Bít Tết Súp Lơ Nướng', quantity: 1 },
-      { name: 'Vịt Confit Sốt Cherry', quantity: 1 }
-    ],
-    status: 'ready',
-    timeElapsed: 28
+interface ApiOrder {
+  id: string
+  order_number: string
+  table_session_id?: string
+  status: KitchenStatus
+  payment_status?: PaymentStatus
+  created_at: string
+  items?: ApiOrderItem[]
+}
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
+const client = axios.create({ baseURL: API_URL })
+
+client.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token') // ✅ Fix: đổi từ 'access_token' thành 'token'
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  if (config.method?.toLowerCase() === 'get') {
+    config.params = { ...(config.params || {}), _t: Date.now() }
+    config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    config.headers.Pragma = 'no-cache'
+    config.headers.Expires = '0'
   }
-]
+  return config
+})
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState<Order[]>(mockOrders)
-  const [showAlert, setShowAlert] = useState(true)
+  const [orders, setOrders] = useState<ApiOrder[]>([])
+  const [loading, setLoading] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
 
-  const getOrdersByStatus = (status: Order['status']) => {
-    return orders.filter(order => order.status === status)
+  const loadOrders = useCallback(async (showLoading = false) => {
+    try {
+      if (showLoading) setLoading(true)
+      const statuses: KitchenStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'served']
+      const results = await Promise.all(statuses.map((status) => client.get('/orders', { params: { status } })))
+      const merged = results.flatMap((res) => res.data?.data || [])
+      const uniqueById = Array.from(new Map(merged.map((o: ApiOrder) => [o.id, o])).values())
+      setOrders(uniqueById)
+      if (isInitialLoad) setIsInitialLoad(false)
+    } catch (error) {
+      console.error('Error loading orders:', error)
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('access_token')
+        window.location.href = '/login'
+      }
+    } finally {
+      if (showLoading) setLoading(false)
+    }
+  }, [isInitialLoad])
+
+  useEffect(() => {
+    void loadOrders(true)
+    
+    // Chỉ poll khi tab đang active
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void loadOrders(false)
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    // Tăng interval lên 8 giây để giảm lag
+    const timer = setInterval(() => {
+      if (!document.hidden) {
+        void loadOrders(false)
+      }
+    }, 8000)
+    
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [loadOrders])
+
+  const updateStatus = async (id: string, status: KitchenStatus) => {
+    try {
+      console.log('Updating order status:', { id, status })
+      const response = await client.patch(`/orders/${id}/status`, { status })
+      console.log('Update response:', response.data)
+      await loadOrders(false) // Không hiện loading khi update
+    } catch (error) {
+      console.error('Error updating status:', error)
+      if (axios.isAxiosError(error)) {
+        const message = error.response?.data?.message || error.message
+        alert(`Không thể cập nhật trạng thái: ${message}`)
+      } else {
+        alert('Không thể cập nhật trạng thái. Vui lòng thử lại.')
+      }
+    }
   }
 
-  const moveToStatus = (orderId: string, newStatus: Order['status']) => {
-    setOrders(orders.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
-    ))
+  const confirmPayment = async (id: string) => {
+    try {
+      await client.patch(`/orders/${id}/confirm-payment`)
+      await loadOrders(false) // Không hiện loading khi update
+    } catch (error) {
+      console.error('Error confirming payment:', error)
+      alert('Không thể xác nhận thanh toán. Vui lòng thử lại.')
+    }
   }
 
-  const removeOrder = (orderId: string) => {
-    setOrders(orders.filter(order => order.id !== orderId))
+  // Helper function để lấy màu badge trạng thái
+  const getStatusBadge = (status: KitchenStatus) => {
+    const badges = {
+      pending: { text: 'Đơn mới', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+      confirmed: { text: 'Đã nhận', color: 'bg-gray-100 text-gray-700 border-gray-200' },
+      preparing: { text: 'Đang nấu', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+      ready: { text: 'Sẵn sàng', color: 'bg-green-100 text-green-700 border-green-200' },
+      served: { text: 'Đã phục vụ', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+    }
+    return badges[status] || { text: status, color: 'bg-gray-100 text-gray-700 border-gray-200' }
   }
 
-  const incomingOrders = getOrdersByStatus('incoming')
-  const preparingOrders = getOrdersByStatus('preparing')
-  const readyOrders = getOrdersByStatus('ready')
+  // Helper function để lấy màu badge thanh toán
+  const getPaymentBadge = (paymentStatus?: PaymentStatus) => {
+    const badges = {
+      unpaid: { text: 'Chưa thanh toán', color: 'bg-red-100 text-red-700 border-red-200' },
+      payment_pending_confirmation: { text: 'Chờ xác nhận', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+      paid: { text: 'Đã thanh toán', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    }
+    return badges[paymentStatus || 'unpaid'] || { text: 'Chưa thanh toán', color: 'bg-gray-100 text-gray-700 border-gray-200' }
+  }
+
+  const group = useMemo(() => {
+    const by = (status: KitchenStatus) => orders.filter((o) => o.status === status)
+    return {
+      pending: by('pending'),
+      confirmed: by('confirmed'),
+      preparing: by('preparing'),
+      ready: by('ready'),
+      served: by('served'),
+    }
+  }, [orders])
+
+  const renderCard = (order: ApiOrder, actions: JSX.Element) => {
+    const statusBadge = getStatusBadge(order.status)
+    const paymentBadge = getPaymentBadge(order.payment_status)
+    
+    return (
+      <div key={order.id} className="bg-white rounded-lg p-4 shadow-sm border hover:shadow-md transition-shadow">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex-1">
+            <div className="text-xs font-bold text-[#AD2C00] mb-1">{order.order_number || order.id}</div>
+            {/* Số bàn với badge nổi bật */}
+            <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-full">
+              <span className="text-xs font-medium text-indigo-600">🪑 Bàn</span>
+              <span className="text-sm font-bold text-indigo-700">{order.table_session_id || 'N/A'}</span>
+            </div>
+          </div>
+          <div className="text-xs text-gray-500">{new Date(order.created_at).toLocaleTimeString('vi-VN')}</div>
+        </div>
+
+        {/* Badges trạng thái */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          <span className={`text-xs font-medium px-2 py-1 rounded border ${statusBadge.color}`}>
+            {statusBadge.text}
+          </span>
+          <span className={`text-xs font-medium px-2 py-1 rounded border ${paymentBadge.color}`}>
+            {paymentBadge.text}
+          </span>
+        </div>
+
+        {/* Danh sách món */}
+        <div className="space-y-1 mb-3">
+          {(order.items || []).slice(0, 3).map((item) => (
+            <div key={item.id} className="text-sm text-gray-700">
+              <span className="font-semibold text-[#AD2C00]">{item.quantity}x</span> {item.food?.name || 'Món ăn'}
+            </div>
+          ))}
+          {(order.items || []).length > 3 && (
+            <div className="text-xs text-gray-500 italic">
+              +{(order.items || []).length - 3} món khác...
+            </div>
+          )}
+        </div>
+
+        <div>{actions}</div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-6">
-          <h1 className="text-2xl font-bold tracking-tight text-orange-700">
-            Bếp Trực Tiếp
-          </h1>
-          <div className="hidden lg:flex items-center gap-3 bg-[#E5E2E1] px-4 py-2 rounded-full border border-stone-200">
-            <Timer className="w-5 h-5 text-[#AD2C00]" />
-            <span className="font-bold text-[#1C1B1B] text-sm">
-              TB Chuẩn Bị: 14 phút
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-orange-700">Vận hành đơn hàng (real-time)</h1>
+          {!isInitialLoad && !loading && (
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+              Tự động cập nhật mỗi 8s
             </span>
-          </div>
+          )}
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 bg-[#006A35]/10 text-[#006A35] rounded-full">
-            <span className="w-2 h-2 bg-[#006A35] rounded-full animate-pulse"></span>
-            <span className="font-bold text-sm">Hệ Thống Online</span>
-          </div>
-          <button className="p-2 text-stone-500 hover:text-orange-700 transition-colors">
-            <Bell className="w-5 h-5" />
-          </button>
-        </div>
+        <button 
+          onClick={() => void loadOrders(true)} 
+          disabled={loading}
+          className="px-4 py-2 rounded bg-[#AD2C00] text-white text-sm hover:bg-[#8B2300] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Đang tải...' : 'Làm mới'}
+        </button>
       </div>
 
-      {/* Kanban Board */}
-      <div className="flex-1 overflow-x-auto -mx-8 px-8">
-        <div className="flex gap-6 h-full min-w-[1000px] pb-6">
-          {/* Column: Incoming */}
-          <section className="flex-1 flex flex-col min-w-[320px]">
-            <div className="flex items-center justify-between mb-6 px-2">
-              <div className="flex items-center gap-3">
-                <span className="w-2 h-8 bg-[#AD2C00] rounded-full"></span>
-                <h3 className="text-xl font-extrabold text-[#1C1B1B] tracking-tight uppercase">
-                  Đơn Mới
-                </h3>
-              </div>
-              <span className="bg-[#E5E2E1] text-[#1C1B1B] px-3 py-1 rounded-full font-bold text-xs">
-                {incomingOrders.length}
-              </span>
-            </div>
-            <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
-              {incomingOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-white rounded-lg p-5 shadow-sm border-l-4 border-[#AD2C00] transition-all hover:-translate-y-1"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <span className="text-xs font-bold text-[#AD2C00] tracking-widest uppercase">
-                        #{order.id}
-                      </span>
-                      <h4 className="text-xl font-bold text-[#1C1B1B]">
-                        Bàn {order.tableNumber}
-                      </h4>
-                    </div>
-                    <div className={`px-3 py-1 rounded-full flex items-center gap-1 ${
-                      order.timeElapsed > 10 
-                        ? 'bg-[#FFDAD6] text-[#BA1A1A]' 
-                        : 'bg-[#E5E2E1] text-[#1C1B1B]'
-                    }`}>
-                      <Clock className="w-4 h-4" />
-                      <span className="text-xs font-bold">{order.timeElapsed}p</span>
-                    </div>
-                  </div>
-                  <ul className="space-y-3 mb-6">
-                    {order.items.map((item, idx) => (
-                      <li key={idx}>
-                        <div className="flex justify-between">
-                          <span className="text-[#1C1B1B] font-semibold">
-                            {item.quantity}x {item.name}
-                          </span>
-                          {item.cookLevel && (
-                            <span className="bg-[#F0EDED] px-2 py-0.5 rounded text-[10px] font-bold text-[#5F5E5E]">
-                              {item.cookLevel}
-                            </span>
-                          )}
-                        </div>
-                        {item.note && (
-                          <div className="bg-[#F0EDED] py-2 px-3 rounded-md mt-2">
-                            <p className="text-xs text-[#5F5E5E] font-medium italic">
-                              Ghi chú: {item.note}
-                            </p>
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => moveToStatus(order.id, 'preparing')}
-                    className="w-full py-3 bg-gradient-to-r from-[#AD2C00] to-[#D83900] text-white rounded-full font-bold text-sm shadow-md hover:brightness-110 active:scale-95 transition-all"
-                  >
-                    Bắt Đầu Nấu
+      {isInitialLoad && loading && <div className="text-sm text-gray-500 mb-4">Đang tải dữ liệu...</div>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <section>
+          <h3 className="font-bold mb-3 flex items-center gap-2">
+            Đơn mới 
+            <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2 py-1 rounded-full">
+              {group.pending.length}
+            </span>
+          </h3>
+          <div className="space-y-3">
+            {group.pending.map((o) =>
+              renderCard(
+                o,
+                <button onClick={() => void updateStatus(o.id, 'confirmed')} className="w-full py-2 rounded bg-[#AD2C00] text-white text-sm hover:bg-[#8B2300] transition-colors">
+                  <Clock className="inline w-4 h-4 mr-1" />
+                  Bếp nhận đơn
+                </button>
+              )
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="font-bold mb-3 flex items-center gap-2">
+            Đã nhận
+            <span className="bg-gray-100 text-gray-700 text-xs font-bold px-2 py-1 rounded-full">
+              {group.confirmed.length}
+            </span>
+          </h3>
+          <div className="space-y-3">
+            {group.confirmed.map((o) =>
+              renderCard(
+                o,
+                <button onClick={() => void updateStatus(o.id, 'preparing')} className="w-full py-2 rounded bg-[#5F5E5E] text-white text-sm hover:bg-[#4A4949] transition-colors">
+                  <ChefHat className="inline w-4 h-4 mr-1" />
+                  Bắt đầu nấu
+                </button>
+              )
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="font-bold mb-3 flex items-center gap-2">
+            Đang nấu
+            <span className="bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-1 rounded-full">
+              {group.preparing.length}
+            </span>
+          </h3>
+          <div className="space-y-3">
+            {group.preparing.map((o) =>
+              renderCard(
+                o,
+                <button onClick={() => void updateStatus(o.id, 'ready')} className="w-full py-2 rounded bg-[#006A35] text-white text-sm hover:bg-[#005028] transition-colors">
+                  Đánh dấu sẵn sàng
+                </button>
+              )
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="font-bold mb-3 flex items-center gap-2">
+            Sẵn sàng
+            <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full">
+              {group.ready.length}
+            </span>
+          </h3>
+          <div className="space-y-3">
+            {group.ready.map((o) =>
+              renderCard(
+                o,
+                <button onClick={() => void updateStatus(o.id, 'served')} className="w-full py-2 rounded bg-[#1D4ED8] text-white text-sm hover:bg-[#1E40AF] transition-colors">
+                  Đã phục vụ
+                </button>
+              )
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="font-bold mb-3 flex items-center gap-2">
+            Đã phục vụ
+            <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">
+              {group.served.length}
+            </span>
+          </h3>
+          <div className="space-y-3">
+            {group.served.map((o) =>
+              renderCard(
+                o,
+                o.payment_status === 'payment_pending_confirmation' ? (
+                  <button onClick={() => void confirmPayment(o.id)} className="w-full py-2 rounded bg-[#006A35] text-white text-sm hover:bg-[#005028] transition-colors">
+                    <CheckCircle className="inline w-4 h-4 mr-1" />
+                    Xác nhận đã thanh toán
                   </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Column: Preparing */}
-          <section className="flex-1 flex flex-col min-w-[320px]">
-            <div className="flex items-center justify-between mb-6 px-2">
-              <div className="flex items-center gap-3">
-                <span className="w-2 h-8 bg-[#5F5E5E] rounded-full"></span>
-                <h3 className="text-xl font-extrabold text-[#1C1B1B] tracking-tight uppercase">
-                  Đang Nấu
-                </h3>
-              </div>
-              <span className="bg-[#E5E2E1] text-[#1C1B1B] px-3 py-1 rounded-full font-bold text-xs">
-                {preparingOrders.length}
-              </span>
-            </div>
-            <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
-              {preparingOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-white rounded-lg shadow-sm border-l-4 border-[#5F5E5E] overflow-hidden"
-                >
-                  <div className="p-5">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <span className="text-xs font-bold text-[#5F5E5E] tracking-widest uppercase">
-                          #{order.id}
-                        </span>
-                        <h4 className="text-xl font-bold text-[#1C1B1B]">
-                          Bàn {order.tableNumber}
-                        </h4>
-                      </div>
-                      <div className="bg-[#AD2C00]/10 text-[#AD2C00] px-3 py-1 rounded-full flex items-center gap-1">
-                        <ChefHat className="w-4 h-4" />
-                        <span className="text-xs font-bold">{order.timeElapsed}p</span>
-                      </div>
-                    </div>
-                    <ul className="space-y-3 mb-6">
-                      {order.items.map((item, idx) => (
-                        <li key={idx} className="flex justify-between items-center">
-                          <span className="text-[#1C1B1B] font-semibold">
-                            {item.quantity}x {item.name}
-                          </span>
-                          {item.cookLevel && (
-                            <span className="bg-[#F0EDED] px-2 py-0.5 rounded text-[10px] font-bold text-[#5F5E5E]">
-                              {item.cookLevel}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    <button
-                      onClick={() => moveToStatus(order.id, 'ready')}
-                      className="w-full py-3 bg-[#5F5E5E] text-white rounded-full font-bold text-sm shadow-md hover:bg-[#474746] active:scale-95 transition-all flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Đánh Dấu Hoàn Thành
-                    </button>
+                ) : o.payment_status === 'paid' ? (
+                  <div className="text-xs text-center py-2 px-3 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 font-medium">
+                    ✅ Hoàn tất
                   </div>
-                  {/* Progress Bar */}
-                  <div className="h-1 bg-[#F0EDED]">
-                    <div
-                      className="h-full bg-[#AD2C00] transition-all duration-1000"
-                      style={{ width: `${order.progress}%` }}
-                    />
+                ) : (
+                  <div className="text-xs text-center py-2 text-gray-400 italic">
+                    Chưa yêu cầu thanh toán
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Column: Ready */}
-          <section className="flex-1 flex flex-col min-w-[320px]">
-            <div className="flex items-center justify-between mb-6 px-2">
-              <div className="flex items-center gap-3">
-                <span className="w-2 h-8 bg-[#006A35] rounded-full"></span>
-                <h3 className="text-xl font-extrabold text-[#1C1B1B] tracking-tight uppercase">
-                  Sẵn Sàng Phục Vụ
-                </h3>
-              </div>
-              <span className="bg-[#006A35] text-white px-3 py-1 rounded-full font-bold text-xs">
-                {readyOrders.length}
-              </span>
-            </div>
-            <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
-              {readyOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-[#006A35]/5 rounded-lg p-5 shadow-sm border border-[#006A35]/20"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <span className="text-xs font-bold text-[#006A35] tracking-widest uppercase">
-                        #{order.id}
-                      </span>
-                      <h4 className="text-xl font-bold text-[#1C1B1B]">
-                        Bàn {order.tableNumber}
-                      </h4>
-                    </div>
-                    <div className="bg-[#006A35] text-white px-3 py-1 rounded-full flex items-center gap-1">
-                      <CheckCircle className="w-4 h-4" />
-                      <span className="text-xs font-bold">XONG</span>
-                    </div>
-                  </div>
-                  <ul className="space-y-2 mb-6 text-[#5F5E5E]">
-                    {order.items.map((item, idx) => (
-                      <li key={idx} className="line-through opacity-50 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4" />
-                        {item.quantity}x {item.name}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => moveToStatus(order.id, 'preparing')}
-                      className="flex-1 py-3 bg-[#E5E2E1] text-[#1C1B1B] rounded-full font-bold text-sm hover:bg-[#DCD9D9] transition-colors"
-                    >
-                      Quay Lại
-                    </button>
-                    <button
-                      onClick={() => removeOrder(order.id)}
-                      className="flex-1 py-3 bg-[#006A35] text-white rounded-full font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#005228] transition-colors"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Đã Phục Vụ
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-      </div>
-
-      {/* Real-time Alert */}
-      {showAlert && (
-        <div className="fixed bottom-10 right-10 z-50 max-w-sm w-full animate-in fade-in slide-in-from-bottom-5">
-          <div className="bg-white/90 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-[#AD2C00]/20 flex items-center gap-4">
-            <div className="w-12 h-12 bg-[#AD2C00] rounded-full flex items-center justify-center text-white shrink-0">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div className="flex-1">
-              <h5 className="font-bold text-[#1C1B1B]">Khẩn: Bàn 8</h5>
-              <p className="text-xs text-[#5F5E5E]">
-                Đơn #GT-9038 đã vượt thời gian chuẩn bị 5 phút.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowAlert(false)}
-              className="p-1 hover:bg-[#F0EDED] rounded-full text-stone-400"
-            >
-              <X className="w-5 h-5" />
-            </button>
+                )
+              )
+            )}
           </div>
-        </div>
-      )}
-
-      <style>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
+        </section>
+      </div>
     </div>
   )
 }

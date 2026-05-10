@@ -473,7 +473,7 @@ export default function DashboardPage() {
           <p className="text-[#5F5E5E] text-sm font-medium uppercase tracking-widest">
             Tổng Doanh Thu
           </p>
-          <h3 className="text-3xl font-black mt-1">{formatCurrency(currentData.kpi.totalRevenue)}</h3>
+          <h3 className="text-3xl font-black mt-1 text-[#1C1B1B] tabular-nums">{formatCurrency(currentData.kpi.totalRevenue)}</h3>
           <p className="text-stone-400 text-xs mt-4">
             so với {formatCurrency(currentData.kpi.previousRevenue)} {timeFilter === 'daily' ? 'hôm qua' : timeFilter === 'weekly' ? 'tuần trước' : 'tháng trước'}
           </p>
@@ -490,7 +490,7 @@ export default function DashboardPage() {
           <p className="text-[#5F5E5E] text-sm font-medium uppercase tracking-widest">
             Đơn Hoàn Thành
           </p>
-          <h3 className="text-3xl font-black mt-1">{currentData.kpi.completedOrders.toLocaleString('vi-VN')}</h3>
+          <h3 className="text-3xl font-black mt-1 text-[#1C1B1B] tabular-nums">{currentData.kpi.completedOrders.toLocaleString('vi-VN')}</h3>
           <p className="text-stone-400 text-xs mt-4">
             Trung bình {currentData.kpi.avgOrdersPerHour.toLocaleString('vi-VN')} đơn / {timeFilter === 'daily' ? 'giờ' : timeFilter === 'weekly' ? 'ngày' : 'tuần'}
           </p>
@@ -507,7 +507,7 @@ export default function DashboardPage() {
           <p className="text-[#5F5E5E] text-sm font-medium uppercase tracking-widest">
             Giá Trị Đơn TB
           </p>
-          <h3 className="text-3xl font-black mt-1">{formatCurrency(currentData.kpi.avgOrderValue)}</h3>
+          <h3 className="text-3xl font-black mt-1 text-[#1C1B1B] tabular-nums">{formatCurrency(currentData.kpi.avgOrderValue)}</h3>
           <p className="text-stone-400 text-xs mt-4">
             so với {formatCurrency(currentData.kpi.previousAvgValue)} kỳ trước
           </p>
@@ -573,12 +573,12 @@ export default function DashboardPage() {
                     onMouseLeave={() => setHoveredBar(null)}
                   >
                     <div
-                      className={`w-full rounded-t-sm transition-all duration-300 ${
+                      className={`w-full rounded-t-sm transition-all duration-300 min-h-[8px] ${
                         isHighlighted
                           ? 'bg-[#AD2C00] shadow-[0_-10px_20px_rgba(173,44,0,0.2)]'
                           : 'bg-[#F0EDED] group-hover/bar:bg-[#AD2C00]/20'
                       }`}
-                      style={{ height: `${data.height}%` }}
+                      style={{ height: `${Math.max(data.height, 6)}%` }}
                     />
                     {(hoveredBar === index || isHighlighted) && (
                       <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-[#1C1B1B] text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">

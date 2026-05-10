@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrder, OrderStatus } from '../context/OrderContext';
 
 interface OrderHistoryScreenProps {
@@ -18,12 +20,16 @@ interface OrderHistoryScreenProps {
   tableNumber?: number;
 }
 
-const STATUS_CONFIG = {
-  paid: { label: 'Đã thanh toán', icon: 'checkmark-circle', color: '#AD2C00' },
+const STATUS_CONFIG: Record<
+  OrderStatus,
+  { label: string; icon: string; color: string }
+> = {
+  pending: { label: 'Đã gửi bếp', icon: 'receipt', color: '#AD2C00' },
   confirmed: { label: 'Xác nhận', icon: 'person-circle', color: '#AD2C00' },
   cooking: { label: 'Đang nấu', icon: 'flame', color: '#AD2C00' },
   ready: { label: 'Sẵn sàng', icon: 'restaurant', color: '#78716C' },
   served: { label: 'Phục vụ', icon: 'checkmark-done', color: '#78716C' },
+  cancelled: { label: 'Đã hủy', icon: 'close-circle', color: '#B91C1C' },
 };
 
 export default function OrderHistoryScreen({
@@ -32,11 +38,13 @@ export default function OrderHistoryScreen({
   onSupport,
   tableNumber = 12,
 }: OrderHistoryScreenProps) {
-  const { orders, currentOrder } = useOrder();
+  const { orders, currentOrder, cancelCustomerOrder } = useOrder();
   const [showNotification, setShowNotification] = useState(true);
+  const insets = useSafeAreaInsets();
 
   const getStatusProgress = (status: OrderStatus): number => {
-    const statusOrder: OrderStatus[] = ['paid', 'confirmed', 'cooking', 'ready', 'served'];
+    if (status === 'cancelled') return -1;
+    const statusOrder: OrderStatus[] = ['pending', 'confirmed', 'cooking', 'ready', 'served'];
     return statusOrder.indexOf(status);
   };
 
@@ -47,9 +55,19 @@ export default function OrderHistoryScreen({
   };
 
   const renderProgressStepper = (status: OrderStatus) => {
+    if (status === 'cancelled') {
+      return (
+        <View style={styles.cancelledNotice}>
+          <Ionicons name="information-circle" size={22} color="#B91C1C" />
+          <Text style={styles.cancelledNoticeText}>
+            Đơn đã hủy. Chỉ có thể hủy khi nhà hàng chưa bắt đầu nấu (trạng thái gửi bếp hoặc xác nhận).
+          </Text>
+        </View>
+      );
+    }
     const currentStep = getStatusProgress(status);
     const steps: { status: OrderStatus; label: string; icon: string }[] = [
-      { status: 'paid', label: 'Đã thanh toán', icon: 'checkmark-circle' },
+      { status: 'pending', label: 'Đã gửi', icon: 'receipt' },
       { status: 'confirmed', label: 'Xác nhận', icon: 'person-circle' },
       { status: 'cooking', label: 'Đang nấu', icon: 'flame' },
       { status: 'ready', label: 'Sẵn sàng', icon: 'restaurant' },
@@ -64,7 +82,9 @@ export default function OrderHistoryScreen({
         <View
           style={[
             styles.progressLineActive,
-            { width: `${(currentStep / (steps.length - 1)) * 100}%` },
+            {
+              width: `${Math.max(0, currentStep) / (steps.length - 1) * 100}%`,
+            },
           ]}
         />
 
@@ -105,6 +125,7 @@ export default function OrderHistoryScreen({
 
   const renderOrderCard = (order: any, isLatest: boolean = false) => {
     const isCompleted = order.status === 'served';
+    const isCancelled = order.status === 'cancelled';
 
     return (
       <View
@@ -112,6 +133,7 @@ export default function OrderHistoryScreen({
         style={[
           styles.orderCard,
           isCompleted && styles.orderCardCompleted,
+          isCancelled && styles.orderCardCancelled,
         ]}
       >
         <View style={styles.orderCardContent}>
@@ -162,9 +184,11 @@ export default function OrderHistoryScreen({
                 <View style={styles.statusBadge}>
                   <View style={styles.statusDot} />
                   <Text style={styles.statusText}>
-                    {STATUS_CONFIG[order.status as OrderStatus].label}...
+                    {STATUS_CONFIG[order.status as OrderStatus]?.label ?? '—'}...
                   </Text>
                 </View>
+              ) : isCancelled ? (
+                <Text style={styles.cancelledListText}>Đã hủy</Text>
               ) : (
                 <Text style={styles.completedText}>Đã phục vụ</Text>
               )}
@@ -180,7 +204,7 @@ export default function OrderHistoryScreen({
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top + 12, 48) }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#AD2C00" />
@@ -198,7 +222,10 @@ export default function OrderHistoryScreen({
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + 32 },
+        ]}
       >
         {/* Notification Banner */}
         {showNotification && currentOrder && currentOrder.status === 'cooking' && (
@@ -220,21 +247,50 @@ export default function OrderHistoryScreen({
         {/* Current Order Status */}
         {currentOrder && (
           <View style={styles.currentOrderSection}>
-            <View style={styles.currentOrderHeader}>
-              <View>
-                <Text style={styles.currentOrderLabel}>Đơn hàng hiện tại</Text>
-                <Text style={styles.currentOrderNumber}>
-                  #{currentOrder.orderNumber}
-                </Text>
-              </View>
+            <Text style={styles.currentOrderLabel}>Đơn hàng hiện tại</Text>
+            <View style={styles.currentOrderTitleRow}>
+              <Text style={styles.currentOrderNumber} numberOfLines={1}>
+                #{currentOrder.orderNumber}
+              </Text>
               <View style={styles.statusChip}>
-                <Text style={styles.statusChipText}>
-                  {STATUS_CONFIG[currentOrder.status].label}
+                <Text style={styles.statusChipText} numberOfLines={1}>
+                  {STATUS_CONFIG[currentOrder.status]?.label ?? '—'}
                 </Text>
               </View>
             </View>
 
             {renderProgressStepper(currentOrder.status)}
+
+            {(currentOrder.status === 'pending' || currentOrder.status === 'confirmed') && (
+              <TouchableOpacity
+                style={styles.cancelOrderButton}
+                onPress={() =>
+                  Alert.alert(
+                    'Hủy đơn hàng?',
+                    'Chỉ hủy được trước khi bếp bắt đầu nấu. Sau khi hủy, nhà hàng sẽ không chuẩn bị món này.',
+                    [
+                      { text: 'Không', style: 'cancel' },
+                      {
+                        text: 'Hủy đơn',
+                        style: 'destructive',
+                        onPress: async () => {
+                          const ok = await cancelCustomerOrder(currentOrder.id);
+                          Alert.alert(
+                            ok ? 'Đã hủy đơn' : 'Không thể hủy',
+                            ok
+                              ? 'Đơn của bạn đã được hủy.'
+                              : 'Đơn có thể đã vào bếp hoặc có lỗi kết nối. Vui lòng gọi nhân viên.'
+                          );
+                        },
+                      },
+                    ]
+                  )
+                }
+              >
+                <Ionicons name="close-circle-outline" size={20} color="#B91C1C" />
+                <Text style={styles.cancelOrderButtonText}>Hủy đơn (trước khi nấu)</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -295,7 +351,7 @@ export default function OrderHistoryScreen({
           </TouchableOpacity>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 8 }} />
       </ScrollView>
     </View>
   );
@@ -311,7 +367,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 60,
     paddingBottom: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
@@ -384,11 +439,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  currentOrderHeader: {
+  currentOrderTitleRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 32,
+    gap: 12,
+    marginBottom: 20,
+    flexWrap: 'nowrap',
   },
   currentOrderLabel: {
     fontSize: 12,
@@ -399,15 +456,19 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   currentOrderNumber: {
-    fontSize: 24,
+    flex: 1,
+    minWidth: 0,
+    fontSize: 22,
     fontWeight: '900',
     color: '#1C1B1B',
-    marginTop: 4,
+    marginTop: 6,
     letterSpacing: -0.5,
   },
   statusChip: {
+    flexShrink: 0,
+    maxWidth: '46%',
     backgroundColor: 'rgba(173, 44, 0, 0.1)',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
   },
@@ -505,6 +566,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F6F3F2',
     opacity: 0.8,
   },
+  orderCardCancelled: {
+    opacity: 0.75,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
   orderCardContent: {
     flexDirection: 'row',
     height: 128,
@@ -573,6 +639,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#006A35',
+  },
+  cancelledListText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#B91C1C',
+  },
+  cancelledNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  cancelledNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#7F1D1D',
+    lineHeight: 18,
+  },
+  cancelOrderButton: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  cancelOrderButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#B91C1C',
   },
   emptyState: {
     alignItems: 'center',

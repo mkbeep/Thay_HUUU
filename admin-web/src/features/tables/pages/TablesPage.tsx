@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import axios from 'axios';
+import { Plus } from 'lucide-react';
 
 type TableStatus = 'available' | 'occupied' | 'billing';
 type ZoneType = 'main' | 'terrace' | 'private';
 
 interface Table {
-  id: number;
+  id: string;
   number: string;
   name: string;
   zone: ZoneType;
@@ -14,12 +16,82 @@ interface Table {
   qrCode: string;
 }
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+
+const api = axios.create({ baseURL: API_URL })
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+interface ApiDiningTable {
+  id: string;
+  table_number: string;
+  capacity: number;
+  status: string;
+  qr_code?: string;
+  location?: string;
+}
+
+function inferZone(location?: string): ZoneType {
+  const l = (location || '').toLowerCase();
+  if (l.includes('vip') || l.includes('phòng') || l.includes('tầng 2')) return 'private';
+  if (l.includes('sân vườn') || l.includes('ngoài trời') || l.includes('thượng')) return 'terrace';
+  return 'main';
+}
+
+function mapApiStatus(s: string): TableStatus {
+  const u = (s || '').toLowerCase();
+  if (u === 'occupied') return 'occupied';
+  if (u === 'reserved' || u === 'cleaning') return 'billing';
+  return 'available';
+}
+
+function resolveQrCodeUrl(t: ApiDiningTable): string {
+  const raw = t.qr_code?.trim();
+  if (raw) {
+    if (raw.startsWith('data:image')) return raw;
+    if (/^https?:\/\//i.test(raw)) return raw;
+  }
+  const payload = JSON.stringify({
+    type: 'table',
+    tableId: t.id,
+    tableNumber: t.table_number,
+    restaurantId: 'default',
+  });
+  return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(payload)}`;
+}
+
+function mapApiTableToUi(t: ApiDiningTable): Table {
+  const cap = typeof t.capacity === 'number' ? t.capacity : Number(t.capacity) || 0;
+  return {
+    id: t.id,
+    number: t.table_number,
+    name: `Bàn ${t.table_number}`,
+    zone: inferZone(t.location),
+    capacity: cap > 0 ? `${cap} khách` : '—',
+    location: t.location || '—',
+    status: mapApiStatus(t.status),
+    qrCode: resolveQrCodeUrl(t),
+  };
+}
+
+function formatVnd(n: number): string {
+  if (!n || Number.isNaN(n)) return '0đ';
+  return `${Math.round(n).toLocaleString('vi-VN')}đ`;
+}
+
 export default function TablesPage() {
   const [selectedZone, setSelectedZone] = useState<ZoneType>('main');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [tables, setTables] = useState<Table[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
   const [newTable, setNewTable] = useState({
     number: '',
     name: '',
@@ -28,68 +100,58 @@ export default function TablesPage() {
     location: ''
   });
 
-  const [tables, setTables] = useState<Table[]>([
-    {
-      id: 1,
-      number: '01',
-      name: 'Bàn Cửa Sổ',
-      zone: 'main',
-      capacity: '2-4 Khách',
-      location: 'Trong nhà',
-      status: 'available',
-      qrCode: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=table-01'
-    },
-    {
-      id: 2,
-      number: '02',
-      name: 'Bàn Trung Tâm',
-      zone: 'main',
-      capacity: '4-6 Khách',
-      location: 'Trong nhà',
-      status: 'occupied',
-      qrCode: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=table-02'
-    },
-    {
-      id: 3,
-      number: '03',
-      name: 'Bàn Góc',
-      zone: 'main',
-      capacity: '2 Khách',
-      location: 'Trong nhà',
-      status: 'billing',
-      qrCode: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=table-03'
-    },
-    {
-      id: 4,
-      number: '04',
-      name: 'Bàn Vườn',
-      zone: 'main',
-      capacity: '2-4 Khách',
-      location: 'Trong nhà',
-      status: 'available',
-      qrCode: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=table-04'
-    },
-    {
-      id: 5,
-      number: '05',
-      name: 'Bàn Sân Thượng 1',
-      zone: 'terrace',
-      capacity: '4 Khách',
-      location: 'Ngoài trời',
-      status: 'available',
-      qrCode: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=table-05'
-    },
-    {
-      id: 6,
-      number: '06',
-      name: 'Phòng VIP',
-      zone: 'private',
-      capacity: '8-10 Khách',
-      location: 'Phòng riêng',
-      status: 'available',
-      qrCode: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=table-06'
+  const loadTablesFromApi = useCallback(async () => {
+    setListError(null);
+    setListLoading(true);
+    try {
+      const res = await api.get<{ data: ApiDiningTable[] }>('/tables');
+      const rows = res.data?.data || [];
+      if (rows.length === 0) {
+        setTables([]);
+        return;
+      }
+      setTables(rows.map(mapApiTableToUi));
+    } catch (e) {
+      console.error('Load tables failed', e);
+      setListError('Không tải được danh sách bàn từ máy chủ. Kiểm tra backend / CORS.')
+      setTables([]);
+    } finally {
+      setListLoading(false);
     }
-  ]);
+  }, []);
+
+  useEffect(() => {
+    void loadTablesFromApi();
+  }, [loadTablesFromApi]);
+
+  useEffect(() => {
+    const targets = tables.filter((t) => t.status === 'occupied' || t.status === 'billing');
+    if (targets.length === 0) {
+      setOrderTotals({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        targets.map(async (t) => {
+          try {
+            const res = await api.get('/orders', {
+              params: { table_session_id: t.number },
+            });
+            const list = res.data?.data || [];
+            const sum = list.reduce((s: number, o: { total_amount?: number }) => s + (Number(o.total_amount) || 0), 0);
+            return [t.id, sum] as const;
+          } catch {
+            return [t.id, 0] as const;
+          }
+        })
+      );
+      if (!cancelled) setOrderTotals(Object.fromEntries(entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tables]);
 
   const getStatusColor = (status: TableStatus) => {
     switch (status) {
@@ -131,31 +193,28 @@ export default function TablesPage() {
     }
   };
 
-  const getZoneText = (zone: ZoneType) => {
-    switch (zone) {
-      case 'main':
-        return 'Khu Chính';
-      case 'terrace':
-        return 'Sân Thượng';
-      case 'private':
-        return 'Phòng Riêng';
-    }
-  };
-
   const filteredTables = tables.filter(table => table.zone === selectedZone);
 
   const handleAddTable = () => {
     if (!newTable.number || !newTable.name) return;
 
+    const localId = `local-${Date.now()}`;
+    const capNum = parseInt(newTable.capacity, 10) || 2;
     const table: Table = {
-      id: tables.length + 1,
+      id: localId,
       number: newTable.number,
       name: newTable.name,
       zone: newTable.zone,
-      capacity: newTable.capacity,
+      capacity: newTable.capacity || `${capNum} khách`,
       location: newTable.location,
       status: 'available',
-      qrCode: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=table-${newTable.number}`
+      qrCode: resolveQrCodeUrl({
+        id: localId,
+        table_number: newTable.number,
+        capacity: capNum,
+        status: 'available',
+        location: newTable.location,
+      }),
     };
 
     setTables([...tables, table]);
@@ -184,7 +243,7 @@ export default function TablesPage() {
     setSelectedTable(null);
   };
 
-  const handleDeleteTable = (id: number) => {
+  const handleDeleteTable = (id: string) => {
     if (confirm('Bạn có chắc muốn xóa bàn này?')) {
       setTables(tables.filter(t => t.id !== id));
       setShowEditPanel(false);
@@ -227,10 +286,11 @@ export default function TablesPage() {
         </div>
         
         <button 
+          type="button"
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-2 py-3 px-6 bg-gradient-to-br from-[#AD2C00] to-[#D83900] text-white rounded-xl font-bold hover:shadow-lg transition-all active:scale-95"
         >
-          <span className="material-symbols-outlined text-lg"></span>
+          <Plus className="w-5 h-5" strokeWidth={2.5} />
           Thêm Bàn Mới
         </button>
       </div>
@@ -285,9 +345,25 @@ export default function TablesPage() {
         </div>
       </div>
 
+      {listLoading && (
+        <p className="text-sm text-gray-500">Đang tải sơ đồ bàn…</p>
+      )}
+      {listError && (
+        <p className="text-sm text-red-600">{listError}</p>
+      )}
+      {!listLoading && tables.length === 0 && !listError && (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          Chưa có dữ liệu bàn từ máy chủ. Kiểm tra Firestore collection <code className="text-xs">dining_table</code> hoặc chạy seed bàn.
+        </p>
+      )}
+      {!listLoading && tables.length > 0 && filteredTables.length === 0 && (
+        <p className="text-sm text-gray-500">Không có bàn trong khu vực đang chọn.</p>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
         {filteredTables.map((table) => {
           const colors = getStatusColor(table.status);
+          const total = orderTotals[table.id];
           return (
             <div
               key={table.id}
@@ -298,19 +374,30 @@ export default function TablesPage() {
                   {getStatusText(table.status)}
                 </div>
                 <button 
+                  type="button"
+                  title="Xem mã QR"
                   onClick={() => handleViewQR(table)}
-                  className="text-gray-300 hover:text-[#AD2C00] transition-colors"
+                  className="shrink-0 rounded-lg border border-gray-100 bg-gray-50 p-1.5 hover:border-[#AD2C00]/40 hover:bg-orange-50/50 transition-colors"
                 >
-                  <span className="material-symbols-outlined">qr_code_2</span>
+                  <img
+                    src={table.qrCode}
+                    alt=""
+                    className="h-9 w-9 object-cover rounded"
+                  />
                 </button>
               </div>
 
               <div className="text-center py-4">
                 <div className={`w-20 h-20 mx-auto rounded-full ${colors.bg} border-4 border-white shadow-inner flex items-center justify-center mb-3`}>
-                  <span className={`text-2xl font-bold ${colors.text}`}>{table.number}</span>
+                  <span className={`text-xl font-bold ${colors.text} px-1`}>{table.number}</span>
                 </div>
                 <h3 className="font-bold text-gray-900">{table.name}</h3>
                 <p className="text-xs text-gray-500">{table.capacity} • {table.location}</p>
+                {(table.status === 'occupied' || table.status === 'billing') && total != null && total > 0 && (
+                  <p className="text-xs font-semibold text-blue-700 mt-2">
+                    Tạm tính đơn: {formatVnd(total)}
+                  </p>
+                )}
               </div>
 
               <div className="absolute inset-0 bg-white/95 rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-3 transition-opacity p-6 backdrop-blur-sm">

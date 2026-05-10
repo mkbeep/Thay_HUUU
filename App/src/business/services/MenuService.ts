@@ -34,4 +34,12 @@ export class MenuService {
       item.description.toLowerCase().includes(lowerQuery)
     );
   }
+
+  async refreshMenuItems(): Promise<MenuItem[]> {
+    return await this.menuRepository.refreshMenuItems();
+  }
+
+  async clearCache(): Promise<void> {
+    await this.menuRepository.clearCache();
+  }
 }

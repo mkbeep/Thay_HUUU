@@ -1,0 +1,61 @@
+{
+  "appetizers": {
+    "banh-xeo.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324525/menu/appetizers/banh-xeo.png",
+    "bo-nuong-la-lot.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324526/menu/appetizers/bo-nuong-la-lot.png",
+    "cha-gio.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324532/menu/appetizers/cha-gio.png",
+    "chao-tom.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324534/menu/appetizers/chao-tom.png",
+    "goi-cuon.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324536/menu/appetizers/goi-cuon.png",
+    "goi-ngo-sen.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324537/menu/appetizers/goi-ngo-sen.png",
+    "muc-chien-gion.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324538/menu/appetizers/muc-chien-gion.png",
+    "nem-ran.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324539/menu/appetizers/nem-ran.png",
+    "salad-ca-hoi.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324539/menu/appetizers/salad-ca-hoi.png",
+    "sup-hai-san.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324540/menu/appetizers/sup-hai-san.png"
+  },
+  "beverages": {
+    "ca-phe-sua-da.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324542/menu/beverages/ca-phe-sua-da.png",
+    "nuoc-chanh-day.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324544/menu/beverages/nuoc-chanh-day.png",
+    "nuoc-dua-tuoi.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324545/menu/beverages/nuoc-dua-tuoi.png",
+    "nuoc-ep-cam.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324546/menu/beverages/nuoc-ep-cam.png",
+    "nuoc-mia.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324550/menu/beverages/nuoc-mia.png",
+    "sinh-to-bo.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324551/menu/beverages/sinh-to-bo.png",
+    "soda-chanh-muoi.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324552/menu/beverages/soda-chanh-muoi.png",
+    "tra-dao-cam-sa.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324554/menu/beverages/tra-dao-cam-sa.png",
+    "tra-sua-tran-chau.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324555/menu/beverages/tra-sua-tran-chau.png",
+    "tra-xanh-matcha.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324558/menu/beverages/tra-xanh-matcha.png"
+  },
+  "desserts": {
+    "banh-chuoi-nuong.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324559/menu/desserts/banh-chuoi-nuong.png",
+    "banh-flan.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324561/menu/desserts/banh-flan.png",
+    "banh-su-kem.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324562/menu/desserts/banh-su-kem.png",
+    "che-ba-mau.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324564/menu/desserts/che-ba-mau.png",
+    "che-thai.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324565/menu/desserts/che-thai.png",
+    "kem-tuoi.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324571/menu/desserts/kem-tuoi.png",
+    "pudding-xoai.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324574/menu/desserts/pudding-xoai.png",
+    "suong-sa-hot-luu.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324579/menu/desserts/suong-sa-hot-luu.png",
+    "trai-cay-tuoi.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324595/menu/desserts/trai-cay-tuoi.png",
+    "yaourt-da-trai.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324598/menu/desserts/yaourt-da-trai.png"
+  },
+  "main-courses": {
+    "bo-luc-lac.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324610/menu/main-courses/bo-luc-lac.png",
+    "ca-hoi-nuong-teriyaki.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324614/menu/main-courses/ca-hoi-nuong-teriyaki.png",
+    "ca-kho-to.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324617/menu/main-courses/ca-kho-to.png",
+    "ga-nuong-mat-ong.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324620/menu/main-courses/ga-nuong-mat-ong.png",
+    "lau-bo-nhat-ban.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324623/menu/main-courses/lau-bo-nhat-ban.png",
+    "lau-thai.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324623/menu/main-courses/lau-thai.png",
+    "muc-nhoi-thit.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324625/menu/main-courses/muc-nhoi-thit.png",
+    "suon-nuong-bbq.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324626/menu/main-courses/suon-nuong-bbq.png",
+    "tom-hum-nuong-pho-mai.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324628/menu/main-courses/tom-hum-nuong-pho-mai.png",
+    "vit-quay-bac-kinh.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324630/menu/main-courses/vit-quay-bac-kinh.png"
+  },
+  "specials": {
+    "ba-wagyu.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324631/menu/specials/ba-wagyu.png",
+    "combo-bbq.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324632/menu/specials/combo-bbq.png",
+    "hai-san-nuong.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324633/menu/specials/hai-san-nuong.png",
+    "lau-duong-duong.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324635/menu/specials/lau-duong-duong.png",
+    "set-dimsum.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324636/menu/specials/set-dimsum.png",
+    "set-mon-nhat.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324637/menu/specials/set-mon-nhat.png",
+    "set-sushi.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324639/menu/specials/set-sushi.png",
+    "set-tiec-gia-dinh.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324640/menu/specials/set-tiec-gia-dinh.png",
+    "tom-alaska.jpg": "https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324643/menu/specials/tom-alaska.png"
+  }
+}

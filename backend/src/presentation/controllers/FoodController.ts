@@ -7,6 +7,32 @@ import { Request, Response, NextFunction } from 'express';
 import { FoodRepository } from '../../infrastructure/database/repositories/FoodRepository';
 import { NotFoundError } from '../../application/errors/AppError';
 
+const normalizeCategory = (category?: string): string => {
+  const value = (category || '').toString().trim().toLowerCase();
+  const map: Record<string, string> = {
+    appetizer: 'appetizer',
+    'khai vị': 'appetizer',
+    'khai vi': 'appetizer',
+    main_course: 'main_course',
+    main: 'main_course',
+    'món chính': 'main_course',
+    'mon chinh': 'main_course',
+    dessert: 'dessert',
+    'tráng miệng': 'dessert',
+    'trang mieng': 'dessert',
+    beverage: 'beverage',
+    drink: 'beverage',
+    drinks: 'beverage',
+    'đồ uống': 'beverage',
+    'do uong': 'beverage',
+    special: 'special',
+    specials: 'special',
+    'đặc biệt': 'special',
+    'dac biet': 'special',
+  };
+  return map[value] || value;
+};
+
 export class FoodController {
   private foodRepository: FoodRepository;
 
@@ -21,17 +47,20 @@ export class FoodController {
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { category, is_available } = req.query;
-      // Note: is_vegetarian and search filters are not yet implemented in repository
 
+      const normalizedCategory = normalizeCategory(category as string);
       const foods = await this.foodRepository.findAllWithImages({
-        category: category as any,
+        // Không filter category ở Firestore để tránh miss dữ liệu cũ dùng category tiếng Việt
         is_available: is_available === 'true' ? true : is_available === 'false' ? false : undefined,
       });
+      const filteredFoods = normalizedCategory
+        ? foods.filter((food) => normalizeCategory(food.category as unknown as string) === normalizedCategory)
+        : foods;
 
       res.status(200).json({
         success: true,
-        data: foods,
-        total: foods.length,
+        data: filteredFoods,
+        total: filteredFoods.length,
       });
     } catch (error) {
       next(error);

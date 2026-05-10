@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import axios from 'axios'
 import { 
   Plus, 
   Edit, 
@@ -7,6 +8,8 @@ import {
   Upload,
   PlusCircle
 } from 'lucide-react'
+import { MenuService } from '../../../business/services/MenuService'
+import { MenuItem as MenuItemModel } from '../../../domain/models/MenuItem'
 
 // Types
 interface Topping {
@@ -22,7 +25,7 @@ interface MenuItem {
   category: string
   price: number
   description: string
-  image: string
+  imageUrl: string
   inStock: boolean
   toppings: Topping[]
 }
@@ -35,7 +38,7 @@ const mockMenuItems: MenuItem[] = [
     category: 'Khai Vị',
     price: 18.00,
     description: 'Cà chua hữu cơ với burrata, bọt húng quế và giấm balsamic lâu năm.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC5il62G_hSHiuQWq9Eys-E0N8H1w5yd56TsUrfe--xQ5rziwWfroW36WP0QsE5LzCxwa110jsd1hXgknE-zB7hZmZu_ZpPiuvtQe7QD4sBm3LgbRFlAu2zXbXT_QfnQfBmNOdKy4tSdmW0JJGV8VUcsKU_mg2ZVDHMst78ZyGt_iHi1GRMkjOb3WmcakcpzHXIWOTDIV69EN0H1IRmVixnR33HZa7FORFJv0uPAnSkoRdvd5KofwZbDTH8j0YEZ2lDcuu72A1wFA',
+    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC5il62G_hSHiuQWq9Eys-E0N8H1w5yd56TsUrfe--xQ5rziwWfroW36WP0QsE5LzCxwa110jsd1hXgknE-zB7hZmZu_ZpPiuvtQe7QD4sBm3LgbRFlAu2zXbXT_QfnQfBmNOdKy4tSdmW0JJGV8VUcsKU_mg2ZVDHMst78ZyGt_iHi1GRMkjOb3WmcakcpzHXIWOTDIV69EN0H1IRmVixnR33HZa7FORFJv0uPAnSkoRdvd5KofwZbDTH8j0YEZ2lDcuu72A1wFA',
     inStock: true,
     toppings: [
       { id: 't1', name: 'Thêm Burrata', price: 4.00, mandatory: false },
@@ -48,7 +51,7 @@ const mockMenuItems: MenuItem[] = [
     category: 'Khai Vị',
     price: 14.00,
     description: 'Viên risotto giòn thơm truffle nhồi phô mai fontina và nấm porcini.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDEwTs7KpN5sMwIJCa_aAowedNhP6RZQoO99XFzpN-ma8_T0n9uNgaUrU_SSdiik6bG2lAXfhUkYLOm5N0nBN2rVvXhXbxgxb4WOz_mtpg5tjcMQoIcr8a_TuvH_CDSrDtIYaY01KhP4XDnoi6GvGs6Tnb4XcI_JCsBP9P2rjo8gpCxRoMx4VS7svODLAA538JwUA-ulfCOSBZXGt7GLymJwVdzyrhmuKSUcBI0Svy_ad0NcMNGvcn-n0zfz_l2GwQ88jEyyvbAeg',
+    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDEwTs7KpN5sMwIJCa_aAowedNhP6RZQoO99XFzpN-ma8_T0n9uNgaUrU_SSdiik6bG2lAXfhUkYLOm5N0nBN2rVvXhXbxgxb4WOz_mtpg5tjcMQoIcr8a_TuvH_CDSrDtIYaY01KhP4XDnoi6GvGs6Tnb4XcI_JCsBP9P2rjo8gpCxRoMx4VS7svODLAA538JwUA-ulfCOSBZXGt7GLymJwVdzyrhmuKSUcBI0Svy_ad0NcMNGvcn-n0zfz_l2GwQ88jEyyvbAeg',
     inStock: true,
     toppings: []
   },
@@ -58,7 +61,7 @@ const mockMenuItems: MenuItem[] = [
     category: 'Khai Vị',
     price: 22.00,
     description: 'Tagliatelle thủ công, bơ lên men, nấm truffle Perigord bào mỏng.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBo809s-fIkDBWzsCNVu0uWnnPdINvZd3dplOfngzyEBDIJXP-iW-WZq6vtjRQZ_KTimgTkiZvbWiyUwFQAhiaqQ8INnVI0y1vReSkbXH1aH0qQoj15mpB0EwsQnTsYLtURcyTzD72T8E4PCKjl8pHF90-lxKGHqaGwlXP5aN99YH9I4N11IZIPiJgGnUbjeoVZvZPZi5VNCn9w5RZV8-bSYUOG7ZJVOy7EJtV8BLFqKcdS_mb_LRA49GYzrrD9r9WnA1NTZig9ig',
+    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBo809s-fIkDBWzsCNVu0uWnnPdINvZd3dplOfngzyEBDIJXP-iW-WZq6vtjRQZ_KTimgTkiZvbWiyUwFQAhiaqQ8INnVI0y1vReSkbXH1aH0qQoj15mpB0EwsQnTsYLtURcyTzD72T8E4PCKjl8pHF90-lxKGHqaGwlXP5aN99YH9I4N11IZIPiJgGnUbjeoVZvZPZi5VNCn9w5RZV8-bSYUOG7ZJVOy7EJtV8BLFqKcdS_mb_LRA49GYzrrD9r9WnA1NTZig9ig',
     inStock: false,
     toppings: []
   },
@@ -68,27 +71,70 @@ const mockMenuItems: MenuItem[] = [
     category: 'Khai Vị',
     price: 16.00,
     description: 'Súp kem tôm hùm truyền thống với cognac và kem tươi.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBmepLMxgB1Es1xxN0QONxayXLhHrjU4qHwpa_gmzhxXuCg6-J4hQilBcZ5EjDvOrqvXr_8K5mrzuGbeLFRwwLg6vNvZV6MSo0pkWAoiFkERw-ckJkkQP6a7kFrofNof8sb4FfGf2IpPeY7gGf4dRdLs3kjDdsIAXnG4i7rKPxesz63A4PUmroXoanTiZ-Tsv9uxvTlviMb31DWE5_4bw_7uhx3jMmuWQ3dVot2bKVh2-uEx3WdaeNm84cJAZ5a20ErFKYP0YbO7A',
+    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBmepLMxgB1Es1xxN0QONxayXLhHrjU4qHwpa_gmzhxXuCg6-J4hQilBcZ5EjDvOrqvXr_8K5mrzuGbeLFRwwLg6vNvZV6MSo0pkWAoiFkERw-ckJkkQP6a7kFrofNof8sb4FfGf2IpPeY7gGf4dRdLs3kjDdsIAXnG4i7rKPxesz63A4PUmroXoanTiZ-Tsv9uxvTlviMb31DWE5_4bw_7uhx3jMmuWQ3dVot2bKVh2-uEx3WdaeNm84cJAZ5a20ErFKYP0YbO7A',
     inStock: true,
     toppings: []
   }
 ]
 
-const categories = ['Khai Vị', 'Món Chính', 'Tráng Miệng', 'Đồ Uống']
+const categories = ['Khai vị', 'Món chính', 'Tráng miệng', 'Đồ uống', 'Đặc biệt']
 
 export default function MenuPage() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(mockMenuItems)
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [showDrawer, setShowDrawer] = useState(false)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [formData, setFormData] = useState<Partial<MenuItem>>({
     name: '',
-    category: 'Khai Vị',
+    category: 'Khai vị',
     price: 0,
     description: '',
-    image: '',
+    imageUrl: '',
     inStock: true,
     toppings: []
   })
+
+  const menuService = new MenuService()
+
+  // Load menu items from API
+  useEffect(() => {
+    loadMenuItems()
+  }, [])
+
+  const loadMenuItems = async () => {
+    try {
+      setLoading(true)
+      console.log('Loading menu items...')
+      const items = await menuService.getMenuItems()
+      console.log('Menu items loaded:', items)
+      
+      // Map from domain model to local interface
+      const mappedItems: MenuItem[] = items.map(item => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        price: item.price,
+        description: item.description,
+        imageUrl: item.imageUrl || '',
+        inStock: item.available,
+        toppings: [] // Topping sẽ được xử lý sau
+      }))
+      
+      console.log('Mapped items:', mappedItems)
+      setMenuItems(mappedItems)
+    } catch (error) {
+      console.error('Error loading menu items:', error)
+      if (axios.isAxiosError(error)) {
+        console.error('API Error:', error.response?.data)
+        console.error('Status:', error.response?.status)
+      }
+      // Fallback to mock data if API fails
+      console.log('Using mock data as fallback')
+      setMenuItems(mockMenuItems)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleEdit = (item: MenuItem) => {
     setEditingItem(item)
@@ -100,10 +146,10 @@ export default function MenuPage() {
     setEditingItem(null)
     setFormData({
       name: '',
-      category: 'Khai Vị',
+      category: 'Khai vị',
       price: 0,
       description: '',
-      image: '',
+      imageUrl: '',
       inStock: true,
       toppings: []
     })
@@ -116,10 +162,17 @@ export default function MenuPage() {
     }
   }
 
-  const handleToggleStock = (id: string) => {
-    setMenuItems(menuItems.map(item => 
-      item.id === id ? { ...item, inStock: !item.inStock } : item
-    ))
+  const handleToggleStock = async (id: string) => {
+    try {
+      await menuService.toggleItemAvailability(id)
+      // Update local state
+      setMenuItems(menuItems.map(item => 
+        item.id === id ? { ...item, inStock: !item.inStock } : item
+      ))
+    } catch (error) {
+      console.error('Error toggling stock:', error)
+      alert('Không thể cập nhật trạng thái món ăn')
+    }
   }
 
   const handleSave = () => {
@@ -196,8 +249,20 @@ export default function MenuPage() {
       </div>
 
       {/* Menu Sections */}
-      <div className="space-y-16">
-        {Object.entries(groupedItems).map(([category, items]) => (
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#AD2C00]"></div>
+            <p className="mt-4 text-gray-600 font-medium">Đang tải menu...</p>
+          </div>
+        </div>
+      ) : menuItems.length === 0 ? (
+        <div className="text-center py-20">
+          <p className="text-gray-600 font-medium">Chưa có món ăn nào</p>
+        </div>
+      ) : (
+        <div className="space-y-16">
+          {Object.entries(groupedItems).map(([category, items]) => (
           <section key={category}>
             <div className="flex items-center gap-4 mb-8">
               <h2 className="text-2xl font-bold text-gray-900">{category}</h2>
@@ -220,7 +285,7 @@ export default function MenuPage() {
                     <img
                       alt={item.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      src={item.image}
+                      src={item.imageUrl}
                     />
                     <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 backdrop-blur text-[#AD2C00] font-bold rounded-full text-sm">
                       {item.price.toLocaleString('vi-VN')}₫
@@ -276,6 +341,7 @@ export default function MenuPage() {
           </section>
         ))}
       </div>
+      )}
 
       {/* Slide-over Drawer */}
       {showDrawer && (

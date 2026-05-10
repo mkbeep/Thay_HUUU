@@ -35,14 +35,17 @@ interface MenuItemDetailScreenProps {
   onAddToCart: () => void;
 }
 
-// Danh sách topping mẫu
-const AVAILABLE_TOPPINGS: Topping[] = [
+const FOOD_TOPPINGS: Topping[] = [
   { id: 'cheese', name: 'Phô mai thêm', price: 15, priceDisplay: '15k' },
-  { id: 'bacon', name: 'Thịt xông khói', price: 20, priceDisplay: '20k' },
   { id: 'egg', name: 'Trứng ốp la', price: 10, priceDisplay: '10k' },
   { id: 'mushroom', name: 'Nấm tươi', price: 12, priceDisplay: '12k' },
-  { id: 'avocado', name: 'Bơ', price: 18, priceDisplay: '18k' },
-  { id: 'chili', name: 'Ớt cay', price: 5, priceDisplay: '5k' },
+  { id: 'extra-sauce', name: 'Sốt đặc biệt', price: 8, priceDisplay: '8k' },
+];
+
+const DESSERT_TOPPINGS: Topping[] = [
+  { id: 'extra-cream', name: 'Kem tươi thêm', price: 10, priceDisplay: '10k' },
+  { id: 'extra-fruit', name: 'Trái cây thêm', price: 12, priceDisplay: '12k' },
+  { id: 'extra-syrup', name: 'Syrup thêm', price: 6, priceDisplay: '6k' },
 ];
 
 // Các lựa chọn mức độ
@@ -59,6 +62,12 @@ export default function MenuItemDetailScreen({
   onAddToCart,
 }: MenuItemDetailScreenProps) {
   const { addItem } = useCart();
+  const normalizedCategory = (item.category || '').toString().toLowerCase();
+  const isDrink = ['drinks', 'đồ uống', 'do uong', 'beverage'].includes(normalizedCategory);
+  const isDessert = ['desserts', 'tráng miệng', 'trang mieng', 'dessert'].includes(normalizedCategory);
+  const availableToppings = isDrink ? [] : isDessert ? DESSERT_TOPPINGS : FOOD_TOPPINGS;
+  const allowSpice = !isDrink && !isDessert;
+
   const [quantity, setQuantity] = useState(1);
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
   const [spiceLevel, setSpiceLevel] = useState<string>('none');
@@ -69,7 +78,7 @@ export default function MenuItemDetailScreen({
     let total = item.price * quantity;
     
     selectedToppings.forEach((toppingId) => {
-      const topping = AVAILABLE_TOPPINGS.find((t) => t.id === toppingId);
+      const topping = availableToppings.find((t) => t.id === toppingId);
       if (topping) {
         total += topping.price * quantity;
       }
@@ -106,12 +115,12 @@ export default function MenuItemDetailScreen({
     
     if (selectedToppings.length > 0) {
       const toppingNames = selectedToppings
-        .map((id) => AVAILABLE_TOPPINGS.find((t) => t.id === id)?.name)
+        .map((id) => availableToppings.find((t) => t.id === id)?.name)
         .filter(Boolean);
       options.push(`Topping: ${toppingNames.join(', ')}`);
     }
     
-    if (spiceLevel !== 'none') {
+    if (allowSpice && spiceLevel !== 'none') {
       const spice = SPICE_LEVELS.find((s) => s.id === spiceLevel);
       if (spice) {
         options.push(`Độ cay: ${spice.name}`);
@@ -127,7 +136,7 @@ export default function MenuItemDetailScreen({
         priceDisplay: `${(calculateTotal() / quantity).toFixed(1)}k`,
         image: item.image,
         category: item.category,
-        options: options.length > 0 ? options.join(' • ') : undefined,
+        options: options.length > 0 ? options.join(' • ') : isDrink ? 'Tuỳ chỉnh đồ uống' : undefined,
         note: specialRequest || undefined,
       });
     }
@@ -184,15 +193,16 @@ export default function MenuItemDetailScreen({
         )}
 
         {/* Chọn topping */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="add-circle" size={20} color="#AD2C00" />
-            <Text style={styles.sectionTitle}>Thêm topping</Text>
-          </View>
-          <Text style={styles.sectionSubtitle}>Chọn các topping bạn muốn thêm</Text>
-          
-          <View style={styles.toppingList}>
-            {AVAILABLE_TOPPINGS.map((topping) => {
+        {availableToppings.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="add-circle" size={20} color="#AD2C00" />
+              <Text style={styles.sectionTitle}>Thêm topping</Text>
+            </View>
+            <Text style={styles.sectionSubtitle}>Chọn các topping phù hợp với món</Text>
+            
+            <View style={styles.toppingList}>
+              {availableToppings.map((topping) => {
               const isSelected = selectedToppings.includes(topping.id);
               
               return (
@@ -228,20 +238,22 @@ export default function MenuItemDetailScreen({
                   </Text>
                 </TouchableOpacity>
               );
-            })}
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Chọn độ cay */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionIcon}>🌶️</Text>
-            <Text style={styles.sectionTitle}>Độ cay</Text>
-          </View>
-          <Text style={styles.sectionSubtitle}>Chọn mức độ cay phù hợp với bạn</Text>
-          
-          <View style={styles.spiceList}>
-            {SPICE_LEVELS.map((level) => {
+        {allowSpice && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionIcon}>🌶️</Text>
+              <Text style={styles.sectionTitle}>Độ cay</Text>
+            </View>
+            <Text style={styles.sectionSubtitle}>Chọn mức độ cay phù hợp với bạn</Text>
+            
+            <View style={styles.spiceList}>
+              {SPICE_LEVELS.map((level) => {
               const isSelected = spiceLevel === level.id;
               
               return (
@@ -262,9 +274,10 @@ export default function MenuItemDetailScreen({
                   </Text>
                 </TouchableOpacity>
               );
-            })}
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Yêu cầu đặc biệt */}
         <View style={styles.section}>

@@ -10,12 +10,14 @@ import {
   FlatList,
   StatusBar,
   ImageSourcePropType,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { IMAGES } from '../../domain/constants/images';
 import { MenuService } from '../../business/services/MenuService';
 import { useCart } from '../context/CartContext';
 import { MenuItem as DomainMenuItem } from '../../domain/models/MenuItem';
+import { MenuGridSkeleton } from '../components/MenuSkeleton';
 
 interface MenuItem {
   id: string;
@@ -55,6 +57,7 @@ export default function HomeMenuScreen({
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Sử dụng CartContext
   const { addItem, getItemCount, getGrandTotal } = useCart();
@@ -93,16 +96,53 @@ export default function HomeMenuScreen({
     }
   };
 
+  const onRefresh = async () => {
+    try {
+      setRefreshing(true);
+      const items: DomainMenuItem[] = await menuService.refreshMenuItems();
+      const displayItems: MenuItem[] = items.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: `${(item.price / 1000).toFixed(0)}k`,
+        image: item.image,
+        badge: item.badge,
+        badgeColor: item.badgeColor,
+        available: item.available,
+        category: mapCategoryToId(item.category),
+        description: item.description,
+      }));
+      setMenuItems(displayItems);
+    } catch (error) {
+      console.error('Error refreshing menu:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // Helper để map MenuCategory enum sang category id
   const mapCategoryToId = (category: any): string => {
     const categoryMap: { [key: string]: string } = {
-      'Khai vị': 'starters',
-      'Món chính': 'main',
-      'Tráng miệng': 'desserts',
-      'Đồ uống': 'drinks',
-      'Đặc biệt': 'specials',
+      'appetizer': 'starters',
+      'khai vị': 'starters',
+      'khai vi': 'starters',
+      'main_course': 'main',
+      'main': 'main',
+      'món chính': 'main',
+      'mon chinh': 'main',
+      'dessert': 'desserts',
+      'tráng miệng': 'desserts',
+      'trang mieng': 'desserts',
+      'beverage': 'drinks',
+      'drink': 'drinks',
+      'drinks': 'drinks',
+      'đồ uống': 'drinks',
+      'do uong': 'drinks',
+      'special': 'specials',
+      'specials': 'specials',
+      'đặc biệt': 'specials',
+      'dac biet': 'specials',
     };
-    return categoryMap[category] || 'main';
+    return categoryMap[(category || '').toString().trim().toLowerCase()] || 'main';
   };
 
   // Filter menu items theo category và search
@@ -274,6 +314,16 @@ export default function HomeMenuScreen({
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#AD2C00']}
+            tintColor="#AD2C00"
+            title="Đang tải menu..."
+            titleColor="#AD2C00"
+          />
+        }
       >
         {/* Hero Banner */}
         <View style={styles.heroBanner}>
@@ -297,7 +347,9 @@ export default function HomeMenuScreen({
 
         {/* Menu Grid */}
         <View style={styles.menuGrid}>
-          {filteredMenuItems.length > 0 ? (
+          {loading ? (
+            <MenuGridSkeleton />
+          ) : filteredMenuItems.length > 0 ? (
             filteredMenuItems.map((item) => (
               <View key={item.id} style={styles.menuGridItem}>
                 {renderMenuItem({ item })}

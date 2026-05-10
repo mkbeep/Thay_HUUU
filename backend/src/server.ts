@@ -4,14 +4,17 @@
  */
 
 import express, { Application } from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 import { config, validateEnv } from './infrastructure/config/env.config';
 import routes from './presentation/routes';
 import { errorMiddleware } from './presentation/middlewares/errorMiddleware';
+import { SocketManager } from './infrastructure/websocket/SocketManager';
 
 // Validate environment variables
 try {
@@ -23,9 +26,20 @@ try {
 
 // Create Express app
 const app: Application = express();
+// Create HTTP server
+const httpServer = createServer(app);
 
-// Security middleware
-app.use(helmet());
+// Initialize WebSocket
+SocketManager.initialize(httpServer);
+
+// Dynamic API data should not use ETag/304 in admin polling screens
+app.set('etag', false);
+
+// Security middleware - Cấu hình để cho phép load ảnh
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false,
+}));
 
 // CORS configuration
 app.use(cors({
@@ -48,12 +62,33 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Compression
 app.use(compression());
 
+// Disable cache for API responses to avoid stale 304 on real-time screens
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 // Logging
 if (config.server.env === 'development') {
   app.use(morgan('dev'));
 } else {
   app.use(morgan('combined'));
 }
+
+// ========================================
+// SERVE STATIC FILES - Menu Images
+// ========================================
+const menuImagesPath = path.join(__dirname, '../../App/assets/images/menu');
+app.use('/images/menu', express.static(menuImagesPath, {
+  maxAge: '1d', // Cache 1 ngày
+  etag: true,
+  lastModified: true,
+}));
+
+console.log(`📸 Serving menu images from: ${menuImagesPath}`);
+console.log(`🔗 Image URL format: http://localhost:${config.server.port}/images/menu/{category}/{filename}`);
 
 // API routes
 app.use(`/api/${config.server.apiVersion}`, routes);
@@ -82,15 +117,17 @@ app.use(errorMiddleware);
 // Start server
 const PORT = config.server.port;
 
-app.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('='.repeat(50));
   console.log('🚀 Restaurant Management System API');
   console.log('='.repeat(50));
   console.log(`📡 Server running on port: ${PORT}`);
   console.log(`🌍 Environment: ${config.server.env}`);
   console.log(`📝 API Version: ${config.server.apiVersion}`);
-  console.log(`🔗 URL: http://localhost:${PORT}`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/api/${config.server.apiVersion}/health`);
+  console.log(`🔗 Local: http://localhost:${PORT}`);
+  console.log(`🔗 Network: http://192.168.1.3:${PORT}`);
+  console.log(`🏥 Health check: http://192.168.1.3:${PORT}/api/${config.server.apiVersion}/health`);
+  console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   console.log('='.repeat(50));
 });
 

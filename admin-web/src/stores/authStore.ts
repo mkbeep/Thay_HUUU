@@ -32,50 +32,68 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       login: async (email: string, password: string) => {
-        // Check registered users first
-        const registeredUsers = JSON.parse(localStorage.getItem('registered-users') || '[]')
-        const foundUser = registeredUsers.find((u: any) => u.email === email && u.password === password)
-        
-        if (foundUser) {
-          const user: User = {
-            id: Math.random().toString(36).substr(2, 9),
-            email: foundUser.email,
-            name: foundUser.name,
-            role: 'manager',
-            phone: foundUser.phone,
-            position: 'Quản lý',
-            joinedDate: new Date().toISOString().split('T')[0]
+        try {
+          // ✅ Gọi API login thật từ backend
+          const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
+          
+          console.log('🔐 Attempting login to:', `${API_URL}/auth/login`)
+          console.log('📧 Email:', email)
+          
+          const response = await fetch(`${API_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+          })
+
+          console.log('📡 Response status:', response.status)
+
+          if (!response.ok) {
+            const error = await response.json()
+            console.error('❌ Login error:', error)
+            throw new Error(error.message || 'Login failed')
           }
-          const token = 'mock-jwt-token-' + user.id
-          set({ user, token, isAuthenticated: true })
-          return
-        }
-        
-        // Check default admin account
-        if (email === 'admin@gourmet.com' && password === 'admin123') {
+
+          const data = await response.json()
+          console.log('✅ Login response:', data)
+          
+          // Map backend response to User type
           const user: User = {
-            id: '1',
-            email: 'admin@gourmet.com',
-            name: 'Admin User',
-            role: 'admin',
-            avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCznXIT2M2jGQTSPmUDv6ehnbXsyBDkJKZXBkXu0nGV0gNOdFs04N22RveuUGsej1T1kgffMRLS-PcV31O3qNEXzK8rToKxV5t5gU0vEDt1oNiEJKnlcFvcEomQBKN9KzYDBgEEj0HcP8ai8juyIEujPg_kAVSdC1U9uazsGlD3i0HeDNVdQALfPlebOgXJWwLy0kfoRLMDHrWZu0UWSeyaf4be0dLwmEoB7BHv0_96ocKYLGfF4CWIK569lWLKgBrytOAng44FYQ',
-            phone: '0901234567',
-            position: 'Quản trị viên hệ thống',
-            joinedDate: '2024-01-15'
+            id: data.data.user.id,
+            email: data.data.user.email,
+            name: data.data.user.full_name || data.data.user.email,
+            role: data.data.user.roles?.[0] || 'staff', // ✅ Lấy role đầu tiên từ array
+            phone: data.data.user.phone_number,
+            avatar: data.data.user.avatar_url,
           }
-          const token = 'mock-jwt-token'
+
+          const token = data.data.access_token // ✅ Đổi từ token thành access_token
+
+          console.log('👤 User:', user)
+          console.log('🔑 Token:', token ? 'exists' : 'missing')
+
+          // Lưu token cho toàn bộ repository/interceptor (legacy + new)
+          localStorage.setItem('token', token)
+          localStorage.setItem('access_token', token)
+          
           set({ user, token, isAuthenticated: true })
-          return
+        } catch (error: any) {
+          console.error('❌ Login error:', error)
+          throw new Error(error.message || 'Invalid credentials')
         }
-        
-        throw new Error('Invalid credentials')
       },
 
       logout: () => {
+        // Xóa token khỏi localStorage
+        localStorage.removeItem('token')
+        localStorage.removeItem('access_token')
         set({ user: null, token: null, isAuthenticated: false })
       },
 
       setUser: (user: User, token: string) => {
+        localStorage.setItem('token', token)
+        localStorage.setItem('access_token', token)
         set({ user, token, isAuthenticated: true })
       },
 

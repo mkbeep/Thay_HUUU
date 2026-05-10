@@ -34,9 +34,10 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
     setProcessing(true);
 
     try {
-      console.log('QR Code scanned:', data);
+      // Only log once at the start
+      console.log('🔍 QR Code scanned, processing...');
       
-      let tableNumber: string;
+      let tableNumber: string = '';
       let tableId: string | undefined;
       let isValidQR = false;
       
@@ -48,7 +49,7 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
           tableNumber = qrData.tableNumber; // G01, T01, V01, etc.
           tableId = qrData.tableId; // Firebase document ID
           isValidQR = true;
-          console.log('Parsed JSON QR:', { tableNumber, tableId });
+          console.log('✅ Valid table QR:', { tableNumber, tableId });
         } else {
           throw new Error('QR code không đúng định dạng');
         }
@@ -78,8 +79,8 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
           }
         }
         
-        if (isValidQR) {
-          console.log('Parsed simple format:', tableNumber);
+        if (isValidQR && tableNumber) {
+          console.log('✅ Valid simple format:', tableNumber);
         }
       }
 
@@ -132,7 +133,7 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
         return;
       }
 
-      console.log('Table found:', table);
+      console.log('🎯 Table found:', table.number, '- Navigating...');
 
       // Save table info to context
       await setTableInfo(table.number, table.id);
@@ -211,30 +212,31 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
         barcodeScannerSettings={{
           barcodeTypes: ['qr'],
         }}
-      >
-        <View style={styles.overlay}>
-          <TouchableOpacity style={styles.closeButton} onPress={onCancel}>
-            <Ionicons name="close" size={32} color="#fff" />
-          </TouchableOpacity>
+      />
+      
+      {/* Overlay rendered outside CameraView to avoid warning */}
+      <View style={styles.overlay}>
+        <TouchableOpacity style={styles.closeButton} onPress={onCancel}>
+          <Ionicons name="close" size={32} color="#fff" />
+        </TouchableOpacity>
 
-          <View style={styles.scanArea}>
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
-          </View>
-
-          <Text style={styles.instruction}>
-            Đưa mã QR vào khung để quét
-          </Text>
-
-          {scanned && (
-            <View style={styles.processingContainer}>
-              <Text style={styles.processingText}>Đang xử lý...</Text>
-            </View>
-          )}
+        <View style={styles.scanArea}>
+          <View style={[styles.corner, styles.topLeft]} />
+          <View style={[styles.corner, styles.topRight]} />
+          <View style={[styles.corner, styles.bottomLeft]} />
+          <View style={[styles.corner, styles.bottomRight]} />
         </View>
-      </CameraView>
+
+        <Text style={styles.instruction}>
+          Đưa mã QR vào khung để quét
+        </Text>
+
+        {scanned && (
+          <View style={styles.processingContainer}>
+            <Text style={styles.processingText}>Đang xử lý...</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -251,10 +253,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    pointerEvents: 'box-none', // Allow camera to receive touch events
   },
   closeButton: {
     position: 'absolute',

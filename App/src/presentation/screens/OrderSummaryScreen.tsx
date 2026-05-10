@@ -10,12 +10,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrder } from '../context/OrderContext';
 
 interface OrderSummaryScreenProps {
   onBack: () => void;
   onPayment: () => void;
-  tableNumber?: number;
+  tableNumber?: number | string;
 }
 
 export default function OrderSummaryScreen({
@@ -23,7 +24,8 @@ export default function OrderSummaryScreen({
   onPayment,
   tableNumber = 12,
 }: OrderSummaryScreenProps) {
-  const { orders } = useOrder();
+  const insets = useSafeAreaInsets();
+  const { orders, hasPendingPaymentConfirmation, isTableFullyPaid } = useOrder();
 
   // Lấy tất cả đơn đã phục vụ
   const servedOrders = orders.filter((order) => order.status === 'served');
@@ -54,7 +56,7 @@ export default function OrderSummaryScreen({
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top + 12, 48) }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#AD2C00" />
@@ -72,7 +74,10 @@ export default function OrderSummaryScreen({
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + 200 },
+        ]}
       >
         {/* Session Summary */}
         <View style={styles.summaryCard}>
@@ -92,7 +97,13 @@ export default function OrderSummaryScreen({
                   <Text style={styles.summaryTotal}>{formatCurrency(total)}</Text>
                 </View>
                 <View style={styles.statusBadge}>
-                  <Text style={styles.statusBadgeText}>Đang mở</Text>
+                  <Text style={styles.statusBadgeText}>
+                    {isTableFullyPaid()
+                      ? 'Đã thanh toán'
+                      : hasPendingPaymentConfirmation()
+                      ? 'Chờ xác nhận'
+                      : 'Chưa thanh toán'}
+                  </Text>
                 </View>
               </View>
 
@@ -213,12 +224,12 @@ export default function OrderSummaryScreen({
           )}
         </View>
 
-        <View style={{ height: 140 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
 
       {/* Bottom Payment Action */}
       {servedOrders.length > 0 && (
-        <View style={styles.bottomAction}>
+        <View style={[styles.bottomAction, { paddingBottom: Math.max(insets.bottom + 16, 28) }]}>
           <View style={styles.bottomContent}>
             <View style={styles.bottomSummary}>
               <Text style={styles.bottomLabel}>
@@ -258,7 +269,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 60,
     paddingBottom: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
@@ -328,10 +338,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   summaryTotal: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -1,
+    maxWidth: '72%',
   },
   statusBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -523,10 +534,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
+    paddingTop: 20,
     borderTopLeftRadius: 48,
     borderTopRightRadius: 48,
     shadowColor: '#000',

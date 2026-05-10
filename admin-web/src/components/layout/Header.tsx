@@ -1,7 +1,19 @@
 import { Bell, Settings, Search, User, LogOut, Camera, Shield, HelpCircle } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
+
+interface NotificationItem {
+  id: string
+  title: string
+  message: string
+  created_at: string
+  is_read: boolean
+  data?: { order_id?: string; [key: string]: unknown }
+}
 
 export default function Header() {
   const { user, updateAvatar, logout } = useAuthStore()
@@ -10,7 +22,79 @@ export default function Header() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const notificationPanelRef = useRef<HTMLDivElement>(null)
+
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token')
+    return {
+      Authorization: token ? `Bearer ${token}` : '',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+    }
+  }
+
+  const fetchNotifications = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/notifications?limit=10`, {
+        headers: getAuthHeaders(),
+      })
+      const list = response.data?.data || []
+      setNotifications(list)
+      setUnreadCount(response.data?.unread_count || list.filter((n: NotificationItem) => !n.is_read).length)
+    } catch (error) {
+      console.error('Error fetching notifications:', error)
+    }
+  }
+
+  const markAsRead = async (id: string) => {
+    try {
+      await axios.patch(`${API_URL}/notifications/${id}/read`, {}, { headers: getAuthHeaders() })
+      await fetchNotifications()
+    } catch (error) {
+      console.error('Error marking notification as read:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (!showNotifications) return
+    const handlePointerDown = (e: MouseEvent | PointerEvent) => {
+      const el = notificationPanelRef.current
+      if (el && !el.contains(e.target as Node)) {
+        setShowNotifications(false)
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [showNotifications])
+
+  useEffect(() => {
+    void fetchNotifications()
+    
+    // Chỉ poll khi tab đang active
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void fetchNotifications()
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    // Tăng interval lên 15 giây để giảm tải
+    const timer = setInterval(() => {
+      if (!document.hidden) {
+        void fetchNotifications()
+      }
+    }, 15000)
+    
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,29 +153,31 @@ export default function Header() {
     navigate('/account')
   }
 
-  const notifications = [
-    {
-      id: 1,
-      title: 'Đơn hàng mới',
-      message: 'Bàn 05 vừa đặt 3 món',
-      time: '2 phút trước',
-      unread: true
-    },
-    {
-      id: 2,
-      title: 'Yêu cầu hỗ trợ',
-      message: 'Bàn 12 cần hỗ trợ',
-      time: '15 phút trước',
-      unread: true
-    },
-    {
-      id: 3,
-      title: 'Thanh toán thành công',
-      message: 'Bàn 08 đã thanh toán 850.000₫',
-      time: '1 giờ trước',
-      unread: false
+  const handleNotificationItemActivate = async (notif: NotificationItem) => {
+    if (!notif.is_read) await markAsRead(notif.id)
+
+    const docId = notif.data?.order_id
+    setShowNotifications(false)
+    if (docId && typeof docId === 'string') {
+      navigate(`/orders?orderId=${encodeURIComponent(docId)}`)
+      return
     }
-  ]
+    const match = notif.message.match(/(ORD-\d{8}-\d+)/i)
+    if (match?.[1]) {
+      navigate(`/orders?orderNo=${encodeURIComponent(match[1])}`)
+      return
+    }
+    navigate('/orders')
+  }
+
+  const formatTime = (time: any) => {
+    const date =
+      time?._seconds
+        ? new Date((time._seconds * 1000) + Math.floor((time._nanoseconds || 0) / 1_000_000))
+        : new Date(time)
+    if (Number.isNaN(date.getTime())) return 'Vừa xong'
+    return date.toLocaleString('vi-VN')
+  }
 
   return (
     <header className="w-full sticky top-0 z-30 bg-white/80 backdrop-blur-md flex justify-between items-center px-8 py-4 shadow-sm">
@@ -119,13 +205,14 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-3">
-          <div className="relative">
+          <div className="relative" ref={notificationPanelRef}>
             <button 
+              type="button"
               onClick={handleNotificationClick}
               className="p-2 text-stone-500 hover:bg-stone-100 rounded-full transition-colors relative"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-[#AD2C00] rounded-full"></span>
+              {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-[#AD2C00] rounded-full"></span>}
             </button>
 
             {showNotifications && (
@@ -134,21 +221,33 @@ export default function Header() {
                   <h3 className="text-white font-bold text-sm">Thông báo</h3>
                 </div>
                 <div className="max-h-96 overflow-y-auto">
+                  {notifications.length === 0 && (
+                    <div className="px-4 py-4 text-sm text-gray-500">Chưa có thông báo mới</div>
+                  )}
                   {notifications.map((notif) => (
                     <div
                       key={notif.id}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          void handleNotificationItemActivate(notif)
+                        }
+                      }}
+                      onClick={() => void handleNotificationItemActivate(notif)}
                       className={`px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${
-                        notif.unread ? 'bg-blue-50/50' : ''
+                        !notif.is_read ? 'bg-blue-50/50' : ''
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        {notif.unread && (
+                        {!notif.is_read && (
                           <span className="w-2 h-2 bg-[#AD2C00] rounded-full mt-1.5 flex-shrink-0"></span>
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm text-gray-900">{notif.title}</p>
                           <p className="text-xs text-gray-600 mt-0.5">{notif.message}</p>
-                          <p className="text-xs text-gray-400 mt-1">{notif.time}</p>
+                          <p className="text-xs text-gray-400 mt-1">{formatTime(notif.created_at)}</p>
                         </div>
                       </div>
                     </div>
@@ -156,7 +255,7 @@ export default function Header() {
                 </div>
                 <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
                   <button className="text-sm font-semibold text-[#AD2C00] hover:underline w-full text-center">
-                    Xem tất cả thông báo
+                    {unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : 'Tất cả đã đọc'}
                   </button>
                 </div>
               </div>

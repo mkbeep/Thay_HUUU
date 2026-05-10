@@ -4,7 +4,7 @@
 
 import { db } from '../../config/firebase.config';
 import { IOrderRepository } from '../../../domain/repositories/IOrderRepository';
-import { Order, OrderWithItems, OrderStatus, OrderType, OrderItem } from '../../../domain/entities/Order';
+import { Order, OrderWithItems, OrderStatus, OrderType, OrderItem, PaymentStatus } from '../../../domain/entities/Order';
 
 export class OrderRepository implements IOrderRepository {
   private readonly collection = db.collection('orders');
@@ -75,7 +75,8 @@ export class OrderRepository implements IOrderRepository {
   }): Promise<Order[]> {
     let query: FirebaseFirestore.Query = this.collection;
 
-    if (filters?.status) {
+    const shouldFilterPendingInMemory = filters?.status === OrderStatus.PENDING;
+    if (filters?.status && !shouldFilterPendingInMemory) {
       query = query.where('status', '==', filters.status);
     }
 
@@ -91,27 +92,37 @@ export class OrderRepository implements IOrderRepository {
       query = query.where('customer_id', '==', filters.customer_id);
     }
 
-    if (filters?.from_date) {
-      query = query.where('created_at', '>=', filters.from_date);
-    }
-
-    if (filters?.to_date) {
-      query = query.where('created_at', '<=', filters.to_date);
-    }
-
-    query = query.orderBy('created_at', 'desc');
-
     const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({
+    let orders = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as Order));
+
+    // Backward compatibility: các đơn cũ thiếu status được xem là pending
+    if (shouldFilterPendingInMemory) {
+      orders = orders.filter((order) => !order.status || order.status === OrderStatus.PENDING);
+    }
+
+    // Filter dates in memory to avoid Firestore composite index requirements
+    if (filters?.from_date) {
+      orders = orders.filter((order) => new Date(order.created_at) >= filters.from_date!);
+    }
+
+    if (filters?.to_date) {
+      orders = orders.filter((order) => new Date(order.created_at) <= filters.to_date!);
+    }
+
+    // Sort in memory instead of orderBy on query
+    orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return orders;
   }
 
   async create(orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'>): Promise<Order> {
     const now = new Date();
     const data = {
       ...orderData,
+      status: (orderData as any).status || OrderStatus.PENDING,
+      payment_status: (orderData as any).payment_status || PaymentStatus.UNPAID,
       created_at: now,
       updated_at: now,
     };
@@ -145,6 +156,57 @@ export class OrderRepository implements IOrderRepository {
     await this.collection.doc(id).update(updateData);
     const updated = await this.findById(id);
     if (!updated) throw new Error('Order not found after update');
+    return updated;
+  }
+
+  /**
+   * Khách chỉ được hủy khi bếp chưa bắt đầu (pending / confirmed).
+   */
+  async cancelIfAllowed(id: string, tableSessionId?: string): Promise<Order> {
+    const order = await this.findById(id);
+    if (!order) {
+      throw new Error('Order not found');
+    }
+    if (tableSessionId !== undefined && tableSessionId !== '' && order.table_session_id !== tableSessionId) {
+      throw new Error('TABLE_MISMATCH');
+    }
+    if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.CONFIRMED) {
+      throw new Error('CANCEL_NOT_ALLOWED');
+    }
+    await this.collection.doc(id).update({
+      status: OrderStatus.CANCELLED,
+      updated_at: new Date(),
+    });
+    const updated = await this.findById(id);
+    if (!updated) throw new Error('Order not found after cancel');
+    return updated;
+  }
+
+  async requestPayment(
+    id: string,
+    paymentMethod: 'qr' | 'cash' | 'card' | 'e_wallet'
+  ): Promise<Order> {
+    await this.collection.doc(id).update({
+      payment_status: PaymentStatus.PENDING_CONFIRMATION,
+      payment_method: paymentMethod,
+      payment_requested_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    const updated = await this.findById(id);
+    if (!updated) throw new Error('Order not found after payment request');
+    return updated;
+  }
+
+  async confirmPayment(id: string): Promise<Order> {
+    await this.collection.doc(id).update({
+      payment_status: PaymentStatus.PAID,
+      paid_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    const updated = await this.findById(id);
+    if (!updated) throw new Error('Order not found after payment confirm');
     return updated;
   }
 

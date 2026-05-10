@@ -27,7 +27,7 @@ export default function MyTableScreen({
   onPayment,
   onQRScan,
 }: MyTableScreenProps) {
-  const { orders } = useOrder();
+  const { orders, hasPendingPaymentConfirmation, isTableFullyPaid } = useOrder();
 
   // Tính tổng tiền từ các đơn hàng đã served
   const servedOrders = orders.filter((order) => order.status === 'served');
@@ -251,7 +251,13 @@ export default function MyTableScreen({
           >
             <Ionicons name="card" size={24} color="#FFFFFF" />
             <View style={styles.paymentTextContainer}>
-              <Text style={styles.paymentLabel}>THANH TOÁN NGAY</Text>
+              <Text style={styles.paymentLabel}>
+                {isTableFullyPaid()
+                  ? 'ĐÃ THANH TOÁN'
+                  : hasPendingPaymentConfirmation()
+                  ? 'ĐANG CHỜ XÁC NHẬN'
+                  : 'THANH TOÁN NGAY'}
+              </Text>
               <Text style={styles.paymentAmount}>{totalAmount.toFixed(1)}k</Text>
             </View>
             <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
@@ -262,7 +268,7 @@ export default function MyTableScreen({
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={20} color="#5F5E5E" />
           <Text style={styles.infoText}>
-            Giá đã bao gồm VAT. Bạn có thể thanh toán bất cứ lúc nào.
+            Giá đã bao gồm VAT. Trạng thái "đã thanh toán" chỉ hiển thị sau khi admin/nhân viên xác nhận.
           </Text>
         </View>
 

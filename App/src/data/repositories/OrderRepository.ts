@@ -1,7 +1,8 @@
 import { Order, OrderStatus } from '../../domain/models/Order';
 import axios from 'axios';
+import { API_URL } from '@env';
 
-const API_BASE_URL = process.env.API_URL || 'http://192.168.1.100:3000/api/v1';
+const API_BASE_URL = API_URL || 'http://192.168.1.3:3000/api/v1';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

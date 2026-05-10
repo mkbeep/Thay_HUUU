@@ -7,7 +7,8 @@ export enum FoodCategory {
   MAIN_COURSE = 'main_course',
   DESSERT = 'dessert',
   BEVERAGE = 'beverage',
-  SIDE_DISH = 'side_dish'
+  SIDE_DISH = 'side_dish',
+  SPECIAL = 'special'
 }
 
 export interface Food {

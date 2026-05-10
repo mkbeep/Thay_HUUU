@@ -306,7 +306,7 @@ export default function App() {
         return (
           <QRScannerScreen
             onSuccess={(tableNum) => {
-              console.log('QR scanned, table:', tableNum);
+              console.log('✅ QR scan successful - Navigating to table view');
               setCurrentScreen('table');
             }}
             onCancel={() => setCurrentScreen('table')}

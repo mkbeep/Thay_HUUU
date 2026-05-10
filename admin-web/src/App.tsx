@@ -5,7 +5,7 @@ import LoginPage from './features/auth/pages/LoginPage'
 import RegisterPage from './features/auth/pages/RegisterPage'
 import DashboardPage from './features/dashboard/pages/DashboardPage'
 import MenuPage from './features/menu/pages/MenuPage'
-import OrdersPage from './features/orders/pages/OrdersPage'
+import OrdersPageWebSocket from './features/orders/pages/OrdersPageWebSocket'
 import TablesPage from './features/tables/pages/TablesPage'
 import InventoryPage from './features/inventory/pages/InventoryPage'
 import PromotionsPage from './features/promotions/pages/PromotionsPage'
@@ -14,9 +14,23 @@ import StaffPage from './features/staff/pages/StaffPage'
 import SettingsPage from './features/settings/pages/SettingsPage'
 import ProfilePage from './features/settings/pages/ProfilePage'
 import AccountPage from './features/settings/pages/AccountPage'
+import { useEffect } from 'react'
+import { socketService } from './services/socketService'
 
 function App() {
   const { isAuthenticated } = useAuthStore()
+
+  // Initialize WebSocket connection when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const token = localStorage.getItem('token')
+      socketService.connect(token || undefined)
+      
+      return () => {
+        // Don't disconnect on unmount, keep connection alive
+      }
+    }
+  }, [isAuthenticated])
 
   if (!isAuthenticated) {
     return (
@@ -33,7 +47,7 @@ function App() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/menu" element={<MenuPage />} />
-        <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders" element={<OrdersPageWebSocket />} />
         <Route path="/tables" element={<TablesPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/promotions" element={<PromotionsPage />} />

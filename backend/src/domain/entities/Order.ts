@@ -8,8 +8,14 @@ export enum OrderStatus {
   PREPARING = 'preparing',
   READY = 'ready',
   SERVED = 'served',
-  COMPLETED = 'completed',
+  COMPLETED = 'completed', // ✅ Đã thanh toán (paid)
   CANCELLED = 'cancelled'
+}
+
+export enum PaymentStatus {
+  UNPAID = 'unpaid',
+  PENDING_CONFIRMATION = 'payment_pending_confirmation',
+  PAID = 'paid',
 }
 
 export enum OrderType {
@@ -30,6 +36,10 @@ export interface Order {
   tax_amount: number;
   discount_amount: number;
   total_amount: number;
+  payment_status?: PaymentStatus;
+  payment_method?: 'qr' | 'cash' | 'card' | 'e_wallet';
+  payment_requested_at?: Date;
+  paid_at?: Date;
   notes?: string;
   created_at: Date;
   updated_at: Date;

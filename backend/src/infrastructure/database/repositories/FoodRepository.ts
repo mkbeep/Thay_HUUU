@@ -16,6 +16,20 @@ export class FoodRepository implements IFoodRepository {
     return { id: doc.id, ...doc.data() } as Food;
   }
 
+  private mapToMenuItem(data: any): FoodImage {
+    // Image URL đã là full URL từ backend, không cần xử lý thêm
+    const imageUrl = data.image_url || '';
+    
+    return {
+      id: data.id,
+      food_id: data.food_id,
+      image_url: imageUrl,
+      is_primary: data.is_primary,
+      display_order: data.display_order,
+      uploaded_at: data.uploaded_at,
+    };
+  }
+
   async findByIdWithImages(id: string): Promise<FoodWithImages | null> {
     const food = await this.findById(id);
     if (!food) return null;
@@ -25,9 +39,9 @@ export class FoodRepository implements IFoodRepository {
       .where('food_id', '==', id)
       .get();
 
-    // Sort in memory instead
+    // Sort in memory instead and map to full URLs
     const images: FoodImage[] = imagesSnapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() } as FoodImage))
+      .map(doc => this.mapToMenuItem({ id: doc.id, ...doc.data() }))
       .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
 
     return { ...food, images };
@@ -84,9 +98,9 @@ export class FoodRepository implements IFoodRepository {
           .where('food_id', '==', food.id)
           .get();
 
-        // Sort in memory instead
+        // Sort in memory instead and map to full URLs
         const images: FoodImage[] = imagesSnapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as FoodImage))
+          .map(doc => this.mapToMenuItem({ id: doc.id, ...doc.data() }))
           .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
 
         return { ...food, images };

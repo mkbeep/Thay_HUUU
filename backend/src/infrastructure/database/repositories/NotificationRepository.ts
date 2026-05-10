@@ -8,6 +8,16 @@ import { Notification, NotificationType } from '../../../domain/entities/Notific
 
 export class NotificationRepository implements INotificationRepository {
   private readonly collection = db.collection('notification');
+  private toMillis(value: any): number {
+    if (!value) return 0;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value.toDate === 'function') return value.toDate().getTime();
+    if (typeof value._seconds === 'number') {
+      return (value._seconds * 1000) + Math.floor((value._nanoseconds || 0) / 1_000_000);
+    }
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
 
   async findById(id: string): Promise<Notification | null> {
     const doc = await this.collection.doc(id).get();
@@ -29,21 +39,26 @@ export class NotificationRepository implements INotificationRepository {
       query = query.where('is_read', '==', filters.is_read);
     }
 
-    if (filters?.type) {
-      query = query.where('type', '==', filters.type);
-    }
-
-    query = query.orderBy('created_at', 'desc');
-
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
+    // Không dùng orderBy trên Firestore query để tránh yêu cầu composite index
+    // Sẽ sort/limit ở memory.
 
     const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({
+    let notifications = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as Notification));
+
+    if (filters?.type) {
+      notifications = notifications.filter((n) => n.type === filters.type);
+    }
+
+    notifications.sort((a, b) => this.toMillis(b.created_at) - this.toMillis(a.created_at));
+
+    if (filters?.limit && filters.limit > 0) {
+      notifications = notifications.slice(0, filters.limit);
+    }
+
+    return notifications;
   }
 
   async create(notificationData: Omit<Notification, 'id' | 'created_at'>): Promise<Notification> {

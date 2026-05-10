@@ -7,12 +7,15 @@ import {
   TouchableOpacity,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SupportRequestRepository } from '../../data/repositories/SupportRequestRepository';
+import { useTable } from '../context/TableContext';
 
 interface SupportRequestScreenProps {
-  tableNumber?: number;
+  tableNumber?: number | string;
   onBack: () => void;
   onNavigate?: (screen: string) => void;
   onRequestSent?: (requestType: string) => void;
@@ -25,6 +28,7 @@ interface SupportOption {
   color: string;
   bgColor: string;
   description: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
 }
 
 const SUPPORT_OPTIONS: SupportOption[] = [
@@ -35,6 +39,7 @@ const SUPPORT_OPTIONS: SupportOption[] = [
     color: '#AD2C00',
     bgColor: '#FFF3E0',
     description: 'Nhân viên sẽ đến bàn ngay',
+    priority: 'high',
   },
   {
     id: 'add-water',
@@ -43,6 +48,7 @@ const SUPPORT_OPTIONS: SupportOption[] = [
     color: '#006A35',
     bgColor: '#E8F5E9',
     description: 'Yêu cầu thêm nước uống',
+    priority: 'normal',
   },
   {
     id: 'add-tissue',
@@ -51,6 +57,7 @@ const SUPPORT_OPTIONS: SupportOption[] = [
     color: '#1976D2',
     bgColor: '#E3F2FD',
     description: 'Yêu cầu thêm khăn giấy',
+    priority: 'normal',
   },
   {
     id: 'add-utensils',
@@ -59,6 +66,7 @@ const SUPPORT_OPTIONS: SupportOption[] = [
     color: '#7B1FA2',
     bgColor: '#F3E5F5',
     description: 'Xà lách, rau sống, bún...',
+    priority: 'normal',
   },
   {
     id: 'change-gas',
@@ -67,6 +75,7 @@ const SUPPORT_OPTIONS: SupportOption[] = [
     color: '#D84315',
     bgColor: '#FBE9E7',
     description: 'Bình gas hết hoặc lửa yếu',
+    priority: 'high',
   },
   {
     id: 'clean-table',
@@ -75,6 +84,7 @@ const SUPPORT_OPTIONS: SupportOption[] = [
     color: '#F57C00',
     bgColor: '#FFF3E0',
     description: 'Dọn dẹp đĩa, bát đã dùng',
+    priority: 'normal',
   },
   {
     id: 'ask-question',
@@ -83,6 +93,7 @@ const SUPPORT_OPTIONS: SupportOption[] = [
     color: '#00796B',
     bgColor: '#E0F2F1',
     description: 'Tư vấn về món ăn',
+    priority: 'normal',
   },
   {
     id: 'report-issue',
@@ -91,8 +102,11 @@ const SUPPORT_OPTIONS: SupportOption[] = [
     color: '#C2185B',
     bgColor: '#FCE4EC',
     description: 'Báo sự cố, vấn đề khác',
+    priority: 'high',
   },
 ];
+
+const VALID_SUPPORT_TYPES = new Set(SUPPORT_OPTIONS.map((option) => option.id));
 
 export default function SupportRequestScreen({
   tableNumber = 12,
@@ -101,14 +115,70 @@ export default function SupportRequestScreen({
   onRequestSent,
 }: SupportRequestScreenProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { tableNumber: ctxTableNumber, tableId: ctxTableId } = useTable();
+  const supportRequestRepository = new SupportRequestRepository();
 
-  const handleSupportRequest = (option: SupportOption) => {
+  const displayTableLabel = String(ctxTableNumber ?? tableNumber ?? '—');
+
+  const submitSupportRequest = async (option: SupportOption) => {
+    if (loading) return;
+
     setSelectedOption(option.id);
-    
-    // Gọi callback để chuyển sang màn hình StaffComingScreen
-    if (onRequestSent) {
-      onRequestSent(option.title);
+    setLoading(true);
+
+    try {
+      if (!VALID_SUPPORT_TYPES.has(option.id)) {
+        throw new Error(`Unsupported request type: ${option.id}`);
+      }
+
+      const resolvedTableNumber = String(ctxTableNumber ?? tableNumber ?? '');
+      if (!resolvedTableNumber) {
+        throw new Error('MISSING_TABLE');
+      }
+      const resolvedTableId = ctxTableId || `table-${resolvedTableNumber}`;
+
+      // Gọi API tạo support request
+      await supportRequestRepository.createSupportRequest({
+        table_id: resolvedTableId,
+        table_number: resolvedTableNumber,
+        type: option.id,
+        priority: option.priority || 'normal',
+      });
+
+      console.log('✅ Support request sent:', option.title);
+
+      // Hiển thị thông báo thành công
+      Alert.alert(
+        '✅ Đã gửi yêu cầu',
+        `Yêu cầu "${option.title}" đã được gửi đến nhân viên.\n\nNhân viên sẽ đến bàn của bạn trong vài phút.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Gọi callback để chuyển sang màn hình StaffComingScreen
+              if (onRequestSent) {
+                onRequestSent(option.title);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('❌ Error sending support request:', error);
+      const msg =
+        error?.message === 'MISSING_TABLE'
+          ? 'Chưa xác định được bàn. Vui lòng quét mã QR tại bàn rồi thử lại.'
+          : 'Không thể gửi yêu cầu. Vui lòng thử lại hoặc gọi nhân viên trực tiếp.';
+      Alert.alert('❌ Lỗi', msg, [{ text: 'OK' }]);
+    } finally {
+      setLoading(false);
+      setSelectedOption(null);
     }
+  };
+
+  const handleSupportRequest = async (option: SupportOption) => {
+    await submitSupportRequest(option);
   };
 
   return (
@@ -124,7 +194,7 @@ export default function SupportRequestScreen({
           </View>
           <View style={styles.tableInfo}>
             <Text style={styles.tableLabel}>BÀN</Text>
-            <Text style={styles.tableNumber}>{tableNumber}</Text>
+            <Text style={styles.tableNumber}>{displayTableLabel}</Text>
           </View>
         </View>
       </View>
@@ -161,15 +231,20 @@ export default function SupportRequestScreen({
                 ]}
                 onPress={() => handleSupportRequest(option)}
                 activeOpacity={0.7}
+                disabled={loading}
               >
-                <View
-                  style={[
-                    styles.optionIconContainer,
-                    { backgroundColor: option.bgColor },
-                  ]}
-                >
-                  <Ionicons name={option.icon} size={28} color={option.color} />
-                </View>
+                {loading && selectedOption === option.id ? (
+                  <ActivityIndicator size="large" color={option.color} style={{ marginBottom: 12 }} />
+                ) : (
+                  <View
+                    style={[
+                      styles.optionIconContainer,
+                      { backgroundColor: option.bgColor },
+                    ]}
+                  >
+                    <Ionicons name={option.icon} size={28} color={option.color} />
+                  </View>
+                )}
                 <Text style={styles.optionTitle}>{option.title}</Text>
                 <Text style={styles.optionDescription} numberOfLines={2}>
                   {option.description}
@@ -183,11 +258,23 @@ export default function SupportRequestScreen({
         <TouchableOpacity
           style={styles.emergencyButton}
           onPress={() => {
-            Alert.alert(
-              'Gọi nhân viên khẩn cấp',
-              'Nhân viên sẽ đến bàn của bạn ngay lập tức!',
-              [{ text: 'OK' }]
-            );
+            Alert.alert('Gọi nhân viên khẩn cấp', 'Gửi yêu cầu tới nhà hàng ngay?', [
+              { text: 'Hủy', style: 'cancel' },
+              {
+                text: 'Gửi ngay',
+                style: 'destructive',
+                onPress: () =>
+                  void submitSupportRequest({
+                    id: 'call-staff',
+                    title: 'Gọi nhân viên',
+                    icon: 'hand-right',
+                    color: '#AD2C00',
+                    bgColor: '#FFF3E0',
+                    description: 'Khẩn cấp',
+                    priority: 'urgent',
+                  }),
+              },
+            ]);
           }}
           activeOpacity={0.9}
         >
