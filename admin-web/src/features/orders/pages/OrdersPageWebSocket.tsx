@@ -112,7 +112,15 @@ export default function OrdersPageWebSocket() {
       const results = await Promise.all(statuses.map((status) => client.get('/orders', { params: { status } })))
       const merged = results.flatMap((res) => res.data?.data || [])
       const uniqueById = Array.from(new Map(merged.map((o: ApiOrder) => [o.id, o])).values())
-      setOrders(uniqueById)
+      
+      // ✅ TỰ ĐỘNG XÓA CÁC ĐƠN ĐÃ THANH TOÁN
+      const unpaidOrders = uniqueById.filter((o: ApiOrder) => o.payment_status !== 'paid')
+      
+      if (unpaidOrders.length < uniqueById.length) {
+        console.log(`🧹 Admin: Auto-removed ${uniqueById.length - unpaidOrders.length} paid order(s)`)
+      }
+      
+      setOrders(unpaidOrders)
       setIsInitialLoad(false)
     } catch (error) {
       console.error('Error loading orders:', error)
@@ -166,15 +174,18 @@ export default function OrdersPageWebSocket() {
   }
 
   const confirmPayment = async (id: string) => {
-    const previousOrders = [...orders]
-    updateOrderOptimistic(id, { payment_status: 'paid' })
+    // ✅ XÓA NGAY KHỎI UI TRƯỚC (Optimistic UI)
+    setOrders((prev) => prev.filter((o) => o.id !== id))
+    console.log(`🧹 Admin: Removed paid order ${id} from UI (optimistic)`)
 
     try {
       await client.patch(`/orders/${id}/confirm-payment`)
+      console.log(`✅ Payment confirmed on server: ${id}`)
     } catch (error) {
       console.error('Error confirming payment:', error)
-      setOrders(previousOrders)
       alert('Không thể xác nhận thanh toán. Vui lòng thử lại.')
+      // Reload để restore nếu có lỗi
+      await loadOrders(false)
     }
   }
 
@@ -200,6 +211,14 @@ export default function OrdersPageWebSocket() {
     const handleOrderUpdated = (order: ApiOrder) => {
       if (!mounted) return
       console.log('🔄 Order updated:', order)
+      
+      // ✅ Nếu order đã thanh toán → Xóa ngay khỏi UI
+      if (order.payment_status === 'paid') {
+        console.log(`🧹 Auto-removed paid order ${order.id} via WebSocket`)
+        setOrders((prev) => prev.filter((o) => o.id !== order.id))
+        return
+      }
+      
       if (order.status === 'cancelled') {
         setOrders((prev) => prev.filter((o) => o.id !== order.id))
         return
@@ -214,6 +233,14 @@ export default function OrdersPageWebSocket() {
     const handleOrderStatusChanged = ({ order }: { orderId: string; status: string; order: ApiOrder }) => {
       if (!mounted) return
       console.log('✅ Order status changed:', order)
+      
+      // ✅ Nếu order đã thanh toán → Xóa ngay khỏi UI
+      if (order.payment_status === 'paid') {
+        console.log(`🧹 Auto-removed paid order ${order.id} via WebSocket`)
+        setOrders((prev) => prev.filter((o) => o.id !== order.id))
+        return
+      }
+      
       if (order.status === 'cancelled') {
         setOrders((prev) => prev.filter((o) => o.id !== order.id))
         return

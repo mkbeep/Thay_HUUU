@@ -78,15 +78,21 @@ export class TableRepository implements ITableRepository {
 
   async findAllWithSessions(): Promise<TableWithSession[]> {
     const tables = await this.findAll();
-    
-    const tablesWithSessions = await Promise.all(
-      tables.map(async (table) => {
-        const session = await this.findActiveSessionByTableId(table.id);
-        return { ...table, current_session: session || undefined };
-      })
-    );
 
-    return tablesWithSessions;
+    const sessionsSnapshot = await this.sessionsCollection
+      .where('is_active', '==', true)
+      .get();
+
+    const sessionByTableId = new Map<string, TableSession>();
+    for (const doc of sessionsSnapshot.docs) {
+      const s = { id: doc.id, ...doc.data() } as TableSession;
+      sessionByTableId.set(s.table_id, s);
+    }
+
+    return tables.map((table) => ({
+      ...table,
+      current_session: sessionByTableId.get(table.id),
+    }));
   }
 
   async create(tableData: Omit<DiningTable, 'id' | 'created_at' | 'updated_at'>): Promise<DiningTable> {

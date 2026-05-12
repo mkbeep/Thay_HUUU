@@ -12,7 +12,7 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { config, validateEnv } from './infrastructure/config/env.config';
-import routes from './presentation/routes';
+import createRoutes from './presentation/routes';
 import { errorMiddleware } from './presentation/middlewares/errorMiddleware';
 import { SocketManager } from './infrastructure/websocket/SocketManager';
 
@@ -30,7 +30,7 @@ const app: Application = express();
 const httpServer = createServer(app);
 
 // Initialize WebSocket
-SocketManager.initialize(httpServer);
+const socketManager = SocketManager.initialize(httpServer);
 
 // Dynamic API data should not use ETag/304 in admin polling screens
 app.set('etag', false);
@@ -41,11 +41,37 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 
-// CORS configuration
-app.use(cors({
-  origin: config.cors.origin,
-  credentials: true,
-}));
+// CORS — cho phép LAN (192.168.x / 10.x) khi dev để điện thoại mở http://IP:8081 vẫn gọi được API
+const corsStaticOrigins = Array.isArray(config.cors.origin)
+  ? config.cors.origin
+  : [config.cors.origin].filter(Boolean) as string[];
+
+function isLanHttpOrigin(origin: string): boolean {
+  return /^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(
+    origin
+  );
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (corsStaticOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      if (config.server.env !== 'production' && isLanHttpOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
+    credentials: true,
+  })
+);
 
 // Rate limiting
 const limiter = rateLimit({
@@ -90,8 +116,8 @@ app.use('/images/menu', express.static(menuImagesPath, {
 console.log(`📸 Serving menu images from: ${menuImagesPath}`);
 console.log(`🔗 Image URL format: http://localhost:${config.server.port}/images/menu/{category}/{filename}`);
 
-// API routes
-app.use(`/api/${config.server.apiVersion}`, routes);
+// API routes - Truyền socketManager vào routes
+app.use(`/api/${config.server.apiVersion}`, createRoutes(socketManager));
 
 // Root endpoint
 app.get('/', (_req, res) => {
@@ -125,8 +151,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🌍 Environment: ${config.server.env}`);
   console.log(`📝 API Version: ${config.server.apiVersion}`);
   console.log(`🔗 Local: http://localhost:${PORT}`);
-  console.log(`🔗 Network: http://192.168.1.3:${PORT}`);
-  console.log(`🏥 Health check: http://192.168.1.3:${PORT}/api/${config.server.apiVersion}/health`);
+  console.log(`🔗 Network: http://192.168.1.7:${PORT}`);
+  console.log(`🏥 Health check: http://192.168.1.7:${PORT}/api/${config.server.apiVersion}/health`);
   console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   console.log('='.repeat(50));
 });

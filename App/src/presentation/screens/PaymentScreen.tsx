@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,7 +15,7 @@ import { useOrder } from '../context/OrderContext';
 interface PaymentScreenProps {
   onBack: () => void;
   onPaymentComplete: () => void;
-  tableNumber?: number;
+  tableNumber?: number | string;
 }
 
 type SplitMethod = 'equal' | 'byItem';
@@ -39,9 +38,18 @@ export default function PaymentScreen({
   const [splitMethod, setSplitMethod] = useState<SplitMethod>('equal');
   const [numberOfPeople, setNumberOfPeople] = useState(2);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('momo');
+  const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Thêm loading state
 
-  // Lấy tất cả đơn hàng đã phục vụ (served) để tính tổng bill
-  const servedOrders = orders.filter((order) => order.status === 'served');
+  // Lấy tất cả đơn hàng đã phục vụ (served) VÀ CHƯA THANH TOÁN để tính tổng bill
+  const servedOrders = orders.filter(
+    (order) => order.status === 'served' && order.paymentStatus !== 'paid'
+  );
+  
+  console.log('💰 Payment calculation:', {
+    totalOrders: orders.length,
+    servedOrders: servedOrders.length,
+    paidOrders: orders.filter(o => o.paymentStatus === 'paid').length,
+  });
   
   // Tính tổng từ order.total (đã bao gồm thuế khi tạo order)
   const total = servedOrders.reduce((sum, order) => sum + order.total, 0);
@@ -58,6 +66,25 @@ export default function PaymentScreen({
   // Lấy tất cả items từ các đơn đã phục vụ
   const allItems = servedOrders.flatMap((order) => order.items);
 
+  // Tự động quay về màn hình chính khi tất cả đơn đã thanh toán
+  useEffect(() => {
+    // Chỉ kiểm tra các đơn served và chưa paid
+    const unpaidServedOrders = orders.filter(
+      (order) => order.status === 'served' && order.paymentStatus !== 'paid'
+    );
+    
+    const allServedOrdersPaid = servedOrders.length > 0 && unpaidServedOrders.length === 0;
+    
+    if (allServedOrdersPaid) {
+      console.log('✅ All orders paid, navigating back...');
+      // Delay một chút để user thấy thông báo
+      const timer = setTimeout(() => {
+        onPaymentComplete();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [orders, servedOrders.length, onPaymentComplete]);
+
   const handleIncreasePeople = () => {
     if (numberOfPeople < 10) {
       setNumberOfPeople((prev) => prev + 1);
@@ -70,32 +97,45 @@ export default function PaymentScreen({
     }
   };
 
-  const handlePayment = () => {
-    Alert.alert(
-      'Gửi yêu cầu thanh toán',
-      `Tổng tiền: ${total.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ\nPhương thức: ${
-        PAYMENT_METHODS.find((m) => m.id === selectedPayment)?.name
-      }\n\nYêu cầu sẽ được gửi cho nhân viên/admin xác nhận.`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Gửi yêu cầu',
-          onPress: () => {
-            const requested = requestPaymentForServedOrders();
-            if (!requested) {
-              Alert.alert('Không có đơn cần thanh toán', 'Vui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
-              return;
-            }
+  const handlePayment = async () => {
+    // ✅ Ngăn double-click
+    if (isSubmitting || hasPendingPaymentConfirmation()) {
+      console.log('⚠️ Already submitting or pending confirmation, ignoring click');
+      return;
+    }
 
-            Alert.alert(
-              'Đã gửi yêu cầu xác nhận',
-              'Yêu cầu thanh toán đã được gửi. Khi admin/nhân viên xác nhận, trạng thái sẽ chuyển sang đã thanh toán.',
-              [{ text: 'OK', onPress: onPaymentComplete }]
-            );
-          },
-        },
-      ]
-    );
+    console.log('💳 handlePayment called');
+    
+    // Kiểm tra có đơn nào cần thanh toán không
+    const hasServedOrders = servedOrders.length > 0;
+    if (!hasServedOrders) {
+      window.alert('Không có đơn cần thanh toán\n\nVui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true); // ✅ Bắt đầu loading
+      
+      // Gửi yêu cầu thanh toán
+      console.log('📤 Sending payment request...');
+      const requested = requestPaymentForServedOrders();
+      
+      if (!requested) {
+        window.alert('Không có đơn cần thanh toán\n\nVui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
+        return;
+      }
+
+      console.log('✅ Payment request sent successfully');
+      
+      // Đợi một chút để UI cập nhật
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+    } catch (error) {
+      console.error('❌ Error sending payment request:', error);
+      window.alert('Có lỗi xảy ra khi gửi yêu cầu thanh toán. Vui lòng thử lại.');
+    } finally {
+      setIsSubmitting(false); // ✅ Kết thúc loading
+    }
   };
 
   const formatCurrency = (amount: number): string => {
@@ -330,25 +370,48 @@ export default function PaymentScreen({
       {allItems.length > 0 && (
         <View style={styles.bottomAction}>
           {hasPendingPaymentConfirmation() && (
-            <Text style={{ textAlign: 'center', color: '#AD2C00', fontWeight: '700', marginBottom: 10 }}>
-              Đang chờ nhân viên xác nhận thanh toán
-            </Text>
+            <View style={styles.pendingNotice}>
+              <Ionicons name="time-outline" size={20} color="#AD2C00" />
+              <Text style={styles.pendingText}>
+                Đang chờ nhân viên xác nhận thanh toán
+              </Text>
+            </View>
           )}
           <TouchableOpacity
-            style={styles.paymentButton}
+            style={[
+              styles.paymentButton,
+              (isSubmitting || hasPendingPaymentConfirmation()) && styles.paymentButtonDisabled
+            ]}
             onPress={handlePayment}
             activeOpacity={0.9}
+            disabled={isSubmitting || hasPendingPaymentConfirmation()} // ✅ Disable khi đang submit hoặc pending
           >
             <LinearGradient
-              colors={['#AD2C00', '#D83900']}
+              colors={
+                isSubmitting || hasPendingPaymentConfirmation()
+                  ? ['#A8A29E', '#78716C']
+                  : ['#AD2C00', '#D83900']
+              }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.paymentButtonGradient}
             >
-              <Text style={styles.paymentButtonText}>
-                {hasPendingPaymentConfirmation() ? 'Đã gửi yêu cầu thanh toán' : 'Gửi yêu cầu thanh toán'}
-              </Text>
-              <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
+              {isSubmitting ? (
+                <>
+                  <Ionicons name="hourglass-outline" size={24} color="#FFFFFF" />
+                  <Text style={styles.paymentButtonText}>Đang gửi...</Text>
+                </>
+              ) : hasPendingPaymentConfirmation() ? (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={24} color="#FFFFFF" />
+                  <Text style={styles.paymentButtonText}>Đã gửi yêu cầu</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.paymentButtonText}>Gửi yêu cầu thanh toán</Text>
+                  <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
+                </>
+              )}
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -724,8 +787,24 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop: 16,
     paddingBottom: 40,
+  },
+  pendingNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(173, 44, 0, 0.1)',
+    borderRadius: 8,
+  },
+  pendingText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#AD2C00',
   },
   paymentButton: {
     borderRadius: 12,
@@ -735,6 +814,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
+  },
+  paymentButtonDisabled: {
+    shadowOpacity: 0.1,
+    elevation: 2,
   },
   paymentButtonGradient: {
     flexDirection: 'row',

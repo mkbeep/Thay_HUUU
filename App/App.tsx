@@ -1,4 +1,9 @@
-import React, { useState } from 'react';
+// Polyfills for socket.io-client
+import 'react-native-get-random-values';
+import 'react-native-url-polyfill/auto';
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Linking, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -7,13 +12,15 @@ import { CartProvider } from './src/presentation/context/CartContext';
 import { OrderProvider } from './src/presentation/context/OrderContext';
 import { TableProvider, useTable } from './src/presentation/context/TableContext';
 import WelcomeScreen from './src/presentation/screens/WelcomeScreen';
+import { buildCustomerTableWebUrl, getCustomerWebRootUrl } from './src/utils/customerWebUrl';
+import { resolveWebTableBootstrapHref, urlSignalsCustomerTable } from './src/utils/parseCustomerTableUrl';
 
 // Wrapper components to use hooks
 function WelcomeScreenWrapper({ onExploreMenu, onViewDrinks, onQRScan }: any) {
   const { tableNumber } = useTable();
   return (
     <WelcomeScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       onExploreMenu={onExploreMenu}
       onViewDrinks={onViewDrinks}
       onQRScan={onQRScan}
@@ -22,10 +29,9 @@ function WelcomeScreenWrapper({ onExploreMenu, onViewDrinks, onQRScan }: any) {
 }
 
 function HomeMenuScreenWrapper({ onCartPress, onNavigate, onMenuItemPress }: any) {
-  const { tableNumber } = useTable();
+  // HomeMenuScreen đã tự lấy tableNumber từ useTable() context
   return (
     <HomeMenuScreen
-      tableNumber={tableNumber || undefined}
       onCartPress={onCartPress}
       onNavigate={onNavigate}
       onMenuItemPress={onMenuItemPress}
@@ -37,7 +43,7 @@ function CartScreenWrapper({ onBack, onSubmitOrder }: any) {
   const { tableNumber } = useTable();
   return (
     <CartScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       onBack={onBack}
       onSubmitOrder={onSubmitOrder}
     />
@@ -48,7 +54,7 @@ function OrderHistoryScreenWrapper({ onBack, onPayment, onSupport }: any) {
   const { tableNumber } = useTable();
   return (
     <OrderHistoryScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       onBack={onBack}
       onPayment={onPayment}
       onSupport={onSupport}
@@ -60,7 +66,7 @@ function OrderSummaryScreenWrapper({ onBack, onPayment }: any) {
   const { tableNumber } = useTable();
   return (
     <OrderSummaryScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       onBack={onBack}
       onPayment={onPayment}
     />
@@ -71,7 +77,7 @@ function PaymentScreenWrapper({ onBack, onPaymentComplete }: any) {
   const { tableNumber } = useTable();
   return (
     <PaymentScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       onBack={onBack}
       onPaymentComplete={onPaymentComplete}
     />
@@ -82,7 +88,7 @@ function SupportScreenWrapper({ onBack }: any) {
   const { tableNumber } = useTable();
   return (
     <SupportScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       onBack={onBack}
     />
   );
@@ -92,7 +98,7 @@ function SupportRequestScreenWrapper({ onBack, onNavigate, onRequestSent }: any)
   const { tableNumber } = useTable();
   return (
     <SupportRequestScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       onBack={onBack}
       onNavigate={onNavigate}
       onRequestSent={onRequestSent}
@@ -104,7 +110,7 @@ function StaffComingScreenWrapper({ requestType, onBack, onNavigate }: any) {
   const { tableNumber } = useTable();
   return (
     <StaffComingScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       requestType={requestType}
       onBack={onBack}
       onNavigate={onNavigate}
@@ -116,7 +122,7 @@ function MyTableScreenWrapper({ onBack, onNavigate, onPayment, onQRScan }: any) 
   const { tableNumber } = useTable();
   return (
     <MyTableScreen
-      tableNumber={tableNumber || undefined}
+      tableNumber={tableNumber ?? undefined}
       onBack={onBack}
       onNavigate={onNavigate}
       onPayment={onPayment}
@@ -149,18 +155,108 @@ interface SelectedMenuItem {
 }
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <TableProvider>
+        <OrderProvider>
+          <CartProvider>
+            <NavigationContainer>
+              <AppScreens />
+              <StatusBar style="dark" />
+            </NavigationContainer>
+          </CartProvider>
+        </OrderProvider>
+      </TableProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function AppScreens() {
+  const { tableNumber, tableId, isLoading } = useTable();
   const [currentScreen, setCurrentScreen] = useState<Screen>('welcome');
+  const [qrReturnScreen, setQrReturnScreen] = useState<Screen>('welcome');
   const [selectedItem, setSelectedItem] = useState<SelectedMenuItem | null>(null);
   const [requestType, setRequestType] = useState<string>('Yêu cầu hỗ trợ');
+  const didWebTableDeepLink = useRef(false);
+
+  // ✅ Lắng nghe event thanh toán hoàn tất
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    
+    const handlePaymentCompleted = () => {
+      console.log('🏠 Payment completed event received - navigating to home');
+      openCustomerWeb();
+    };
+    
+    window.addEventListener('payment:completed', handlePaymentCompleted);
+    
+    return () => {
+      window.removeEventListener('payment:completed', handlePaymentCompleted);
+    };
+  }, [tableNumber, tableId]);
+
+  /** Web: cùng codebase Expo Web (không mở tab ngoài). Native: mở trình duyệt tới URL bản web đã deploy. */
+  const openCustomerWeb = () => {
+    console.log('🔍 openCustomerWeb called', { 
+      platform: Platform.OS, 
+      tableNumber, 
+      tableId,
+      currentScreen 
+    });
+    
+    if (Platform.OS === 'web') {
+      if (tableNumber != null && tableId) {
+        console.log('✅ Setting screen to home (web with table)');
+        setCurrentScreen('home');
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        const deep = resolveWebTableBootstrapHref();
+        // Đang ở link bàn (từ QR in) nhưng context chưa có bàn — không được gán về / (sẽ mất tid). Tải lại để bootstrap API chạy lại.
+        if (urlSignalsCustomerTable(deep)) {
+          console.log('🔄 Reloading page for table bootstrap');
+          window.location.reload();
+          return;
+        }
+        console.log('🔄 Redirecting to customer web root');
+        window.location.assign(getCustomerWebRootUrl());
+      }
+      return;
+    }
+    const url =
+      tableNumber != null && tableId
+        ? buildCustomerTableWebUrl(tableNumber, tableId)
+        : getCustomerWebRootUrl();
+    console.log('📱 Opening URL (native):', url);
+    void Linking.openURL(url);
+    setCurrentScreen('welcome');
+  };
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (isLoading || didWebTableDeepLink.current) return;
+    if (tableNumber == null || !tableId) return;
+    const tableHref = resolveWebTableBootstrapHref();
+    if (!urlSignalsCustomerTable(tableHref)) return;
+    didWebTableDeepLink.current = true;
+    setCurrentScreen('home');
+  }, [isLoading, tableNumber, tableId]);
 
   const renderScreen = () => {
     switch (currentScreen) {
       case 'welcome':
         return (
           <WelcomeScreenWrapper
-            onExploreMenu={() => setCurrentScreen('home')}
-            onViewDrinks={() => setCurrentScreen('home')}
-            onQRScan={() => setCurrentScreen('qrScanner')}
+            onExploreMenu={openCustomerWeb}
+            onViewDrinks={openCustomerWeb}
+            onQRScan={
+              Platform.OS === 'web'
+                ? undefined
+                : () => {
+                    setQrReturnScreen('welcome');
+                    setCurrentScreen('qrScanner');
+                  }
+            }
           />
         );
       
@@ -168,7 +264,7 @@ export default function App() {
         return (
           <HomeMenuScreenWrapper
             onCartPress={() => setCurrentScreen('cart')}
-            onNavigate={(screen) => {
+            onNavigate={(screen: string) => {
               if (screen === 'orders') {
                 setCurrentScreen('orders');
               } else if (screen === 'support') {
@@ -177,7 +273,7 @@ export default function App() {
                 setCurrentScreen('table');
               }
             }}
-            onMenuItemPress={(item) => {
+            onMenuItemPress={(item: any) => {
               const priceNumber = parseFloat(item.price.replace('k', ''));
               setSelectedItem({
                 id: item.id,
@@ -196,9 +292,10 @@ export default function App() {
       case 'cart':
         return (
           <CartScreenWrapper
-            onBack={() => setCurrentScreen('home')}
+            onBack={openCustomerWeb}
             onSubmitOrder={() => {
-              console.log('Order submitted!');
+              console.log('✅ Order submitted successfully! Navigating to order history...');
+              // Chuyển đến màn hình OrderHistory để khách xem trạng thái và có thể hủy món
               setCurrentScreen('orders');
             }}
           />
@@ -207,7 +304,7 @@ export default function App() {
       case 'orders':
         return (
           <OrderHistoryScreenWrapper
-            onBack={() => setCurrentScreen('home')}
+            onBack={openCustomerWeb}
             onPayment={() => setCurrentScreen('summary')}
             onSupport={() => setCurrentScreen('support')}
           />
@@ -232,9 +329,7 @@ export default function App() {
         return (
           <PaymentScreenWrapper
             onBack={() => setCurrentScreen('summary')}
-            onPaymentComplete={() => {
-              setCurrentScreen('home');
-            }}
+            onPaymentComplete={openCustomerWeb}
           />
         );
       
@@ -242,7 +337,7 @@ export default function App() {
         return selectedItem ? (
           <MenuItemDetailScreen
             item={selectedItem}
-            onBack={() => setCurrentScreen('home')}
+            onBack={openCustomerWeb}
             onAddToCart={() => setCurrentScreen('cart')}
           />
         ) : null;
@@ -250,17 +345,17 @@ export default function App() {
       case 'supportRequest':
         return (
           <SupportRequestScreenWrapper
-            onBack={() => setCurrentScreen('home')}
-            onNavigate={(screen) => {
+            onBack={openCustomerWeb}
+            onNavigate={(screen: string) => {
               if (screen === 'explore') {
-                setCurrentScreen('home');
+                openCustomerWeb();
               } else if (screen === 'orders') {
                 setCurrentScreen('orders');
               } else if (screen === 'table') {
                 setCurrentScreen('table');
               }
             }}
-            onRequestSent={(type) => {
+            onRequestSent={(type: string) => {
               setRequestType(type);
               setCurrentScreen('staffComing');
             }}
@@ -272,9 +367,9 @@ export default function App() {
           <StaffComingScreenWrapper
             requestType={requestType}
             onBack={() => setCurrentScreen('supportRequest')}
-            onNavigate={(screen) => {
+            onNavigate={(screen: string) => {
               if (screen === 'explore') {
-                setCurrentScreen('home');
+                openCustomerWeb();
               } else if (screen === 'orders') {
                 setCurrentScreen('orders');
               } else if (screen === 'table') {
@@ -287,10 +382,10 @@ export default function App() {
       case 'table':
         return (
           <MyTableScreenWrapper
-            onBack={() => setCurrentScreen('home')}
-            onNavigate={(screen) => {
+            onBack={openCustomerWeb}
+            onNavigate={(screen: string) => {
               if (screen === 'explore') {
-                setCurrentScreen('home');
+                openCustomerWeb();
               } else if (screen === 'orders') {
                 setCurrentScreen('orders');
               } else if (screen === 'support') {
@@ -298,18 +393,21 @@ export default function App() {
               }
             }}
             onPayment={() => setCurrentScreen('summary')}
-            onQRScan={() => setCurrentScreen('qrScanner')}
+            onQRScan={
+              Platform.OS === 'web'
+                ? undefined
+                : () => {
+                    setQrReturnScreen('table');
+                    setCurrentScreen('qrScanner');
+                  }
+            }
           />
         );
       
       case 'qrScanner':
         return (
           <QRScannerScreen
-            onSuccess={(tableNum) => {
-              console.log('✅ QR scan successful - Navigating to table view');
-              setCurrentScreen('table');
-            }}
-            onCancel={() => setCurrentScreen('table')}
+            onCancel={() => setCurrentScreen(qrReturnScreen)}
           />
         );
       
@@ -318,18 +416,5 @@ export default function App() {
     }
   };
 
-  return (
-    <SafeAreaProvider>
-      <TableProvider>
-        <OrderProvider>
-          <CartProvider>
-            <NavigationContainer>
-              {renderScreen()}
-              <StatusBar style="dark" />
-            </NavigationContainer>
-          </CartProvider>
-        </OrderProvider>
-      </TableProvider>
-    </SafeAreaProvider>
-  );
+  return renderScreen();
 }

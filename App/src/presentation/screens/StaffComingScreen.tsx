@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface StaffComingScreenProps {
-  tableNumber?: number;
+  tableNumber?: number | string;
   requestType?: string;
   onBack: () => void;
   onNavigate?: (screen: string) => void;

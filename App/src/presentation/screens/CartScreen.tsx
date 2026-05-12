@@ -28,13 +28,13 @@ interface CartItem {
 interface CartScreenProps {
   onBack: () => void;
   onSubmitOrder: () => void;
-  tableNumber?: number;
+  tableNumber?: string | number;
 }
 
 export default function CartScreen({
   onBack,
   onSubmitOrder,
-  tableNumber = 12,
+  tableNumber,
 }: CartScreenProps) {
   const { items, removeItem, updateQuantity, getTotal, getTax, getServiceFee, getGrandTotal, clearCart } = useCart();
   const { createOrder } = useOrder();
@@ -44,6 +44,17 @@ export default function CartScreen({
   const tax = getTax();
   const serviceFee = getServiceFee();
   const total = getGrandTotal();
+
+  // Debug: Log render info
+  console.log('🎨 CartScreen render:', {
+    itemsCount: items.length,
+    tableNumber,
+    subtotal,
+    tax,
+    serviceFee,
+    total,
+    showBottomButton: items.length > 0
+  });
 
   const handleRemoveItem = (id: string, name: string) => {
     Alert.alert(
@@ -70,34 +81,42 @@ export default function CartScreen({
     }
   };
 
-  const handleSubmitOrder = () => {
+  const handleSubmitOrder = async () => {
+    console.log('🔍 handleSubmitOrder called');
+
     if (items.length === 0) {
       Alert.alert('Giỏ hàng trống', 'Vui lòng thêm món vào giỏ hàng trước khi gửi đơn.');
       return;
     }
 
-    Alert.alert(
-      'Xác nhận đơn hàng',
-      `Tổng cộng: ${total.toFixed(1)}k\nBạn có chắc muốn gửi đơn đến bếp?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        { 
-          text: 'Gửi đơn', 
-          onPress: () => {
-            // Tạo order trong OrderContext
-            createOrder(items, total, tableNumber);
-            
-            // Xóa giỏ hàng
-            clearCart();
-            
-            // Gọi callback
-            onSubmitOrder();
-            
-            Alert.alert('Thành công', 'Đơn hàng đã được gửi đến bếp!');
-          }
-        },
-      ]
-    );
+    if (tableNumber === undefined || tableNumber === null || tableNumber === '') {
+      Alert.alert(
+        'Chưa chọn bàn', 
+        'Vui lòng quét mã QR bàn để đặt món.'
+      );
+      return;
+    }
+
+    console.log('✅ Submitting order...');
+    
+    // OPTIMISTIC UI: Xóa giỏ hàng và chuyển màn hình NGAY LẬP TỨC
+    clearCart();
+    console.log('🗑️ Cart cleared');
+    
+    console.log('� Navigating to order history...');
+    onSubmitOrder();
+    
+    // Gửi API ở background (không đợi)
+    createOrder(items, total, tableNumber).then(result => {
+      if (!result.success) {
+        console.error('❌ Order submission failed:', result.error);
+        // Có thể thêm toast notification ở đây nếu cần
+      } else {
+        console.log('✅ Order submitted successfully!');
+      }
+    }).catch(error => {
+      console.error('❌ Unexpected error:', error);
+    });
   };
 
   const renderCartItem = (item: any) => (
@@ -171,7 +190,7 @@ export default function CartScreen({
         </View>
         <View style={styles.headerRight}>
           <View style={styles.tableBadge}>
-            <Text style={styles.tableBadgeText}>Bàn {tableNumber}</Text>
+            <Text style={styles.tableBadgeText}>Bàn {tableNumber ?? '—'}</Text>
           </View>
           <TouchableOpacity>
             <Ionicons name="bag-outline" size={24} color="#C2410C" />
@@ -258,18 +277,22 @@ export default function CartScreen({
         <View style={styles.bottomAction}>
           <TouchableOpacity 
             style={styles.submitButton}
-            onPress={handleSubmitOrder}
+            onPress={() => {
+              console.log('========================================');
+              console.log('🔘 SUBMIT BUTTON PRESSED!');
+              console.log('Timestamp:', new Date().toISOString());
+              console.log('Items count:', items.length);
+              console.log('Table number:', tableNumber);
+              console.log('========================================');
+              handleSubmitOrder();
+            }}
             activeOpacity={0.9}
+            disabled={false}
           >
-            <LinearGradient
-              colors={['#AD2C00', '#D83900']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.submitButtonGradient}
-            >
+            <View style={styles.submitButtonGradient}>
               <Ionicons name="restaurant" size={20} color="#FFFFFF" />
               <Text style={styles.submitButtonText}>Gửi đơn đến bếp</Text>
-            </LinearGradient>
+            </View>
           </TouchableOpacity>
         </View>
       )}
@@ -562,6 +585,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 24,
     elevation: 12,
+    zIndex: 1000,
   },
   submitButton: {
     borderRadius: 12,
@@ -578,6 +602,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 20,
     gap: 12,
+    backgroundColor: '#AD2C00',
   },
   submitButtonText: {
     fontSize: 18,

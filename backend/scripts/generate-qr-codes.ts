@@ -1,16 +1,23 @@
 /**
  * Generate QR Codes for Tables
  * Run: npx ts-node scripts/generate-qr-codes.ts
- * 
+ *
  * Install dependencies first:
  * npm install qrcode @types/qrcode
  */
 
+import 'dotenv/config';
 import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildTableQrPngFileName } from '../src/infrastructure/utils/qrGenerator';
 
 const OUTPUT_DIR = path.join(__dirname, '../qr-codes');
+
+const WEB_BASE = (process.env.CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').replace(
+  /\/+$/,
+  ''
+);
 
 interface TableQR {
   tableNumber: number;
@@ -22,10 +29,11 @@ const tables: TableQR[] = [];
 
 // Generate QR data for 20 tables
 for (let i = 1; i <= 20; i++) {
+  const num = encodeURIComponent(String(i));
   tables.push({
     tableNumber: i,
-    qrData: `restaurant://table/${i}`,
-    fileName: `table-${i}.png`,
+    qrData: `${WEB_BASE}/table/${num}`,
+    fileName: buildTableQrPngFileName(String(i), `offline-demo-${i}`),
   });
 }
 

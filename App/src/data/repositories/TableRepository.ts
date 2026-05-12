@@ -1,11 +1,9 @@
 import { Table, TableStatus } from '../../domain/models/Table';
 import axios from 'axios';
-import { API_URL } from '@env';
-
-const API_BASE_URL = API_URL || 'http://192.168.1.3:3000/api/v1';
+import { getApiBaseUrl } from '../../utils/apiBaseUrl';
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getApiBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
   timeout: 10000,
 });
@@ -33,7 +31,9 @@ export class TableRepository {
 
   async getTableByNumber(tableNumber: string | number): Promise<Table | undefined> {
     try {
-      const response = await apiClient.get(`/tables/by-number/${tableNumber}`);
+      const response = await apiClient.get(
+        `/tables/by-number/${encodeURIComponent(String(tableNumber))}`
+      );
       return this.mapToTable(response.data.data);
     } catch (error) {
       console.error('Error fetching table by number:', error);

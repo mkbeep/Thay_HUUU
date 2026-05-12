@@ -59,6 +59,62 @@ export class UserRepository implements IUserRepository {
     role?: string;
     search?: string;
   }): Promise<User[]> {
+    // Lọc theo role: phải join role + user_role (trước đây bỏ qua role → mọi user active đều nhận notify)
+    if (filters?.role) {
+      let roleSnap = await this.rolesCollection
+        .where('role_name', '==', filters.role)
+        .limit(1)
+        .get();
+      if (roleSnap.empty) {
+        roleSnap = await this.rolesCollection
+          .where('name', '==', filters.role)
+          .limit(1)
+          .get();
+      }
+      if (roleSnap.empty) {
+        return [];
+      }
+      const roleId = roleSnap.docs[0].id;
+      const userRolesSnap = await this.userRolesCollection
+        .where('role_id', '==', roleId)
+        .get();
+      const userIds = [
+        ...new Set(userRolesSnap.docs.map((d) => d.data().user_id as string).filter(Boolean)),
+      ];
+      if (userIds.length === 0) {
+        return [];
+      }
+
+      const chunkSize = 10;
+      const chunks: string[][] = [];
+      for (let i = 0; i < userIds.length; i += chunkSize) {
+        chunks.push(userIds.slice(i, i + chunkSize));
+      }
+
+      let users: User[] = [];
+      for (const chunk of chunks) {
+        const snap = await this.collection
+          .where(firebaseAdmin.firestore.FieldPath.documentId(), 'in', chunk)
+          .get();
+        users = users.concat(
+          snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as User))
+        );
+      }
+
+      if (filters.is_active !== undefined) {
+        users = users.filter((u) => u.is_active === filters.is_active);
+      }
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        users = users.filter(
+          (user) =>
+            user.full_name.toLowerCase().includes(searchLower) ||
+            user.email.toLowerCase().includes(searchLower)
+        );
+      }
+      return users;
+    }
+
     let query: FirebaseFirestore.Query = this.collection;
 
     if (filters?.is_active !== undefined) {
@@ -71,7 +127,6 @@ export class UserRepository implements IUserRepository {
       ...doc.data()
     } as User));
 
-    // Filter by search term
     if (filters?.search) {
       const searchLower = filters.search.toLowerCase();
       users = users.filter(user =>

@@ -32,6 +32,43 @@ interface ApiDiningTable {
   status: string;
   qr_code?: string;
   location?: string;
+  /** Do backend tính từ CUSTOMER_WEB_BASE_URL — luôn là link http(s) mở web khách */
+  customer_menu_url?: string;
+}
+
+function fallbackMenuUrl(t: Pick<ApiDiningTable, 'id' | 'table_number'>): string {
+  const webBase = (import.meta.env.VITE_CUSTOMER_WEB_URL || 'http://localhost:8081').replace(/\/+$/, '');
+  const num = encodeURIComponent(t.table_number);
+  const tid = encodeURIComponent(t.id);
+  return `${webBase}/table/${num}?tid=${tid}`;
+}
+
+/**
+ * Ảnh QR (qrserver) luôn encode **URL web** — camera điện thoại mở trình duyệt, không còn JSON.
+ */
+function resolveQrCodeUrl(t: ApiDiningTable): string {
+  const menuUrl = (t.customer_menu_url || '').trim() || fallbackMenuUrl(t);
+  return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(menuUrl)}`;
+}
+
+/** QR theo số bàn + id hiện tại (khi admin đổi số bàn trên form, xem trước khớp URL sau khi lưu). */
+function previewQrForTable(t: Pick<Table, 'id' | 'number'>): string {
+  return resolveQrCodeUrl({
+    id: t.id,
+    table_number: String(t.number),
+    capacity: 0,
+    status: 'available',
+  });
+}
+
+function formatRelativeVi(date: Date | null, _refreshKey?: number): string {
+  if (!date) return 'Chưa đồng bộ';
+  const sec = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (sec < 8) return 'Vừa xong';
+  if (sec < 60) return `${sec} giây trước`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} phút trước`;
+  return date.toLocaleString('vi-VN');
 }
 
 function inferZone(location?: string): ZoneType {
@@ -46,21 +83,6 @@ function mapApiStatus(s: string): TableStatus {
   if (u === 'occupied') return 'occupied';
   if (u === 'reserved' || u === 'cleaning') return 'billing';
   return 'available';
-}
-
-function resolveQrCodeUrl(t: ApiDiningTable): string {
-  const raw = t.qr_code?.trim();
-  if (raw) {
-    if (raw.startsWith('data:image')) return raw;
-    if (/^https?:\/\//i.test(raw)) return raw;
-  }
-  const payload = JSON.stringify({
-    type: 'table',
-    tableId: t.id,
-    tableNumber: t.table_number,
-    restaurantId: 'default',
-  });
-  return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(payload)}`;
 }
 
 function mapApiTableToUi(t: ApiDiningTable): Table {
@@ -91,6 +113,8 @@ export default function TablesPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [nowTick, setNowTick] = useState(0);
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
   const [newTable, setNewTable] = useState({
     number: '',
@@ -100,29 +124,82 @@ export default function TablesPage() {
     location: ''
   });
 
-  const loadTablesFromApi = useCallback(async () => {
-    setListError(null);
-    setListLoading(true);
+  const loadTablesFromApi = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      setListError(null);
+      setListLoading(true);
+    } else {
+      setListError(null);
+    }
     try {
       const res = await api.get<{ data: ApiDiningTable[] }>('/tables');
       const rows = res.data?.data || [];
       if (rows.length === 0) {
         setTables([]);
+        setLastSyncedAt(new Date());
         return;
       }
       setTables(rows.map(mapApiTableToUi));
+      setLastSyncedAt(new Date());
     } catch (e) {
       console.error('Load tables failed', e);
-      setListError('Không tải được danh sách bàn từ máy chủ. Kiểm tra backend / CORS.')
-      setTables([]);
+      if (!silent) {
+        setListError('Không tải được danh sách bàn từ máy chủ. Kiểm tra backend / CORS.')
+        setTables([]);
+      }
     } finally {
-      setListLoading(false);
+      if (!silent) setListLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void loadTablesFromApi();
   }, [loadTablesFromApi]);
+
+  // WebSocket listener for table status changes
+  useEffect(() => {
+    const socket = (window as any).socket;
+    if (!socket) {
+      console.warn('⚠️ WebSocket not available for TablesPage');
+      return;
+    }
+
+    const handleTableStatusChanged = (data: { tableId: string }) => {
+      console.log('📢 Table status changed via WebSocket:', data.tableId);
+      // Reload tables silently để cập nhật trạng thái
+      void loadTablesFromApi({ silent: true });
+    };
+
+    const handleTableUpdated = (data: { tableId: string }) => {
+      console.log('📢 Table updated via WebSocket:', data.tableId);
+      // Reload tables silently để cập nhật trạng thái
+      void loadTablesFromApi({ silent: true });
+    };
+
+    // Lắng nghe cả 2 events
+    socket.on('table:status_changed', handleTableStatusChanged);
+    socket.on('table:updated', handleTableUpdated);
+    
+    console.log('✅ TablesPage WebSocket listeners registered');
+
+    return () => {
+      socket.off('table:status_changed', handleTableStatusChanged);
+      socket.off('table:updated', handleTableUpdated);
+      console.log('🔌 TablesPage WebSocket listeners removed');
+    };
+  }, [loadTablesFromApi]);
+
+  useEffect(() => {
+    // Polling mỗi 5 giây để đồng bộ (giảm từ 90 giây)
+    const t = setInterval(() => void loadTablesFromApi({ silent: true }), 5_000);
+    return () => clearInterval(t);
+  }, [loadTablesFromApi]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNowTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const targets = tables.filter((t) => t.status === 'occupied' || t.status === 'billing');
@@ -195,37 +272,34 @@ export default function TablesPage() {
 
   const filteredTables = tables.filter(table => table.zone === selectedZone);
 
-  const handleAddTable = () => {
+  const handleAddTable = async () => {
     if (!newTable.number || !newTable.name) return;
 
-    const localId = `local-${Date.now()}`;
-    const capNum = parseInt(newTable.capacity, 10) || 2;
-    const table: Table = {
-      id: localId,
-      number: newTable.number,
-      name: newTable.name,
-      zone: newTable.zone,
-      capacity: newTable.capacity || `${capNum} khách`,
-      location: newTable.location,
-      status: 'available',
-      qrCode: resolveQrCodeUrl({
-        id: localId,
+    try {
+      // Tạo bàn mới trên server
+      const capNum = parseInt(newTable.capacity, 10) || 2;
+      await api.post('/tables', {
         table_number: newTable.number,
         capacity: capNum,
-        status: 'available',
-        location: newTable.location,
-      }),
-    };
+        location: newTable.location || 'Không xác định',
+        status: 'available'
+      });
 
-    setTables([...tables, table]);
-    setShowAddModal(false);
-    setNewTable({
-      number: '',
-      name: '',
-      zone: 'main',
-      capacity: '',
-      location: ''
-    });
+      // Reload danh sách bàn từ server để có ID và QR code chính xác
+      await loadTablesFromApi();
+
+      setShowAddModal(false);
+      setNewTable({
+        number: '',
+        name: '',
+        zone: 'main',
+        capacity: '',
+        location: ''
+      });
+    } catch (error) {
+      console.error('Error adding table:', error);
+      alert('Không thể thêm bàn. Vui lòng thử lại.');
+    }
   };
 
   const handleEditTable = (table: Table) => {
@@ -233,27 +307,59 @@ export default function TablesPage() {
     setShowEditPanel(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!selectedTable) return;
 
-    setTables(tables.map(t => 
-      t.id === selectedTable.id ? selectedTable : t
-    ));
-    setShowEditPanel(false);
-    setSelectedTable(null);
-  };
+    try {
+      // Cập nhật bàn trên server
+      const capNum = parseInt(selectedTable.capacity.replace(/[^\d]/g, ''), 10) || 2;
+      await api.put(`/tables/${selectedTable.id}`, {
+        table_number: selectedTable.number,
+        capacity: capNum,
+        location: selectedTable.location,
+        status: selectedTable.status
+      });
 
-  const handleDeleteTable = (id: string) => {
-    if (confirm('Bạn có chắc muốn xóa bàn này?')) {
-      setTables(tables.filter(t => t.id !== id));
+      // Reload danh sách bàn từ server để có QR code cập nhật
+      await loadTablesFromApi();
+
       setShowEditPanel(false);
       setSelectedTable(null);
+    } catch (error) {
+      console.error('Error updating table:', error);
+      alert('Không thể cập nhật bàn. Vui lòng thử lại.');
+    }
+  };
+
+  const handleDeleteTable = async (id: string) => {
+    if (!confirm('Bạn có chắc muốn xóa bàn này?')) return;
+
+    try {
+      await api.delete(`/tables/${id}`);
+      
+      // Reload danh sách bàn từ server
+      await loadTablesFromApi();
+
+      setShowEditPanel(false);
+      setSelectedTable(null);
+    } catch (error) {
+      console.error('Error deleting table:', error);
+      alert('Không thể xóa bàn. Vui lòng thử lại.');
     }
   };
 
   const handleViewQR = (table: Table) => {
     setSelectedTable(table);
     setShowQRModal(true);
+    void (async () => {
+      try {
+        const res = await api.get<{ data: ApiDiningTable }>(`/tables/${table.id}`);
+        const row = res.data?.data;
+        if (row) setSelectedTable(mapApiTableToUi(row));
+      } catch {
+        /* giữ QR từ danh sách */
+      }
+    })();
   };
 
   const handlePrintQR = () => {
@@ -281,7 +387,9 @@ export default function TablesPage() {
               <span className="text-gray-600">Trực tuyến</span>
             </span>
             <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-            <span className="text-gray-500">Cập nhật 10 giây trước</span>
+            <span className="text-gray-500">
+              Cập nhật {formatRelativeVi(lastSyncedAt, nowTick)}
+            </span>
           </div>
         </div>
         
@@ -556,7 +664,7 @@ export default function TablesPage() {
                 />
               </div>
               <p className="text-xs text-gray-500 text-center mt-4 italic">
-                Quét mã QR này để truy cập thực đơn điện tử cho Bàn {selectedTable.number}
+                Quét mã QR này để mở <strong>trang web</strong> thực đơn (bàn {selectedTable.number}) trong trình duyệt — không hiện JSON.
               </p>
             </div>
 
@@ -660,7 +768,7 @@ export default function TablesPage() {
                 <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 flex flex-col items-center border-2 border-gray-200">
                   <div className="bg-white p-4 rounded-lg shadow-md">
                     <img
-                      src={selectedTable.qrCode}
+                      src={previewQrForTable(selectedTable)}
                       alt={`QR Code Bàn ${selectedTable.number}`}
                       className="w-32 h-32"
                     />
@@ -671,7 +779,7 @@ export default function TablesPage() {
                   </p>
                 </div>
                 <p className="text-xs text-gray-700 text-center mt-3 font-medium">
-                  Quét mã QR này sẽ dẫn khách hàng đến thực đơn điện tử cho Bàn {selectedTable.number}
+                  Quét mã QR sẽ mở <strong>trang web</strong> đặt món cho Bàn {selectedTable.number} (URL, không phải văn bản JSON).
                 </p>
               </div>
             </div>

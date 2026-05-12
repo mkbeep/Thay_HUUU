@@ -48,7 +48,15 @@ export default function OrdersPage() {
       const results = await Promise.all(statuses.map((status) => client.get('/orders', { params: { status } })))
       const merged = results.flatMap((res) => res.data?.data || [])
       const uniqueById = Array.from(new Map(merged.map((o: ApiOrder) => [o.id, o])).values())
-      setOrders(uniqueById)
+      
+      // ✅ TỰ ĐỘNG XÓA CÁC ĐƠN ĐÃ THANH TOÁN
+      const unpaidOrders = uniqueById.filter((o: ApiOrder) => o.payment_status !== 'paid')
+      
+      if (unpaidOrders.length < uniqueById.length) {
+        console.log(`🧹 Admin: Auto-removed ${uniqueById.length - unpaidOrders.length} paid order(s)`)
+      }
+      
+      setOrders(unpaidOrders)
       if (isInitialLoad) setIsInitialLoad(false)
     } catch (error) {
       console.error('Error loading orders:', error)
@@ -65,6 +73,31 @@ export default function OrdersPage() {
   useEffect(() => {
     void loadOrders(true)
     
+    // ✅ Lắng nghe WebSocket events để cập nhật real-time
+    const socket = (window as any).socket
+    if (socket) {
+      const handleOrderUpdated = (data: any) => {
+        console.log('📢 Order updated via WebSocket:', data)
+        // Nếu order được thanh toán → Xóa ngay khỏi UI
+        if (data.payment_status === 'paid') {
+          setOrders((prev) => prev.filter((o) => o.id !== data.id))
+          console.log(`🧹 Auto-removed paid order ${data.id} via WebSocket`)
+        } else {
+          // Reload để cập nhật trạng thái
+          void loadOrders(false)
+        }
+      }
+      
+      socket.on('order:updated', handleOrderUpdated)
+      socket.on('order:status_changed', handleOrderUpdated)
+      
+      // Cleanup
+      return () => {
+        socket.off('order:updated', handleOrderUpdated)
+        socket.off('order:status_changed', handleOrderUpdated)
+      }
+    }
+    
     // Chỉ poll khi tab đang active
     const handleVisibilityChange = () => {
       if (!document.hidden) {
@@ -74,12 +107,12 @@ export default function OrdersPage() {
     
     document.addEventListener('visibilitychange', handleVisibilityChange)
     
-    // Tăng interval lên 8 giây để giảm lag
+    // Giảm interval xuống 3 giây để nhanh hơn
     const timer = setInterval(() => {
       if (!document.hidden) {
         void loadOrders(false)
       }
-    }, 8000)
+    }, 3000)
     
     return () => {
       clearInterval(timer)
@@ -106,11 +139,21 @@ export default function OrdersPage() {
 
   const confirmPayment = async (id: string) => {
     try {
+      // ✅ XÓA NGAY KHỎI UI TRƯỚC (Optimistic UI)
+      setOrders((prev) => prev.filter((o) => o.id !== id))
+      console.log(`🧹 Admin: Removed paid order ${id} from UI (optimistic)`)
+      
+      // Gọi API ở background
       await client.patch(`/orders/${id}/confirm-payment`)
-      await loadOrders(false) // Không hiện loading khi update
+      console.log(`✅ Payment confirmed on server: ${id}`)
+      
+      // Reload để đồng bộ (trong trường hợp có lỗi)
+      await loadOrders(false)
     } catch (error) {
       console.error('Error confirming payment:', error)
       alert('Không thể xác nhận thanh toán. Vui lòng thử lại.')
+      // Reload lại để restore nếu có lỗi
+      await loadOrders(false)
     }
   }
 
@@ -313,11 +356,11 @@ export default function OrdersPage() {
                   </button>
                 ) : o.payment_status === 'paid' ? (
                   <div className="text-xs text-center py-2 px-3 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 font-medium">
-                    ✅ Hoàn tất
+                    ✅ Hoàn tất (sẽ tự động ẩn)
                   </div>
                 ) : (
                   <div className="text-xs text-center py-2 text-gray-400 italic">
-                    Chưa yêu cầu thanh toán
+                    Chờ khách yêu cầu thanh toán
                   </div>
                 )
               )

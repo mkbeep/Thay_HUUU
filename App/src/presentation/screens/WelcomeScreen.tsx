@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { IMAGES } from '../../domain/constants/images';
 
 interface WelcomeScreenProps {
-  tableNumber?: number;
+  tableNumber?: string | number;
   onExploreMenu: () => void;
   onViewDrinks: () => void;
   onQRScan?: () => void;
@@ -65,14 +65,19 @@ export default function WelcomeScreen({
                 {/* Table Number or QR Scan */}
                 {tableNumber ? (
                   <Text style={styles.tableNumber}>Bàn {tableNumber}</Text>
-                ) : (
-                  <TouchableOpacity 
-                    style={styles.qrScanButton}
-                    onPress={onQRScan}
-                  >
+                ) : onQRScan ? (
+                  <TouchableOpacity style={styles.qrScanButton} onPress={onQRScan}>
                     <Ionicons name="qr-code" size={32} color="#AD2C00" />
                     <Text style={styles.qrScanText}>Quét mã QR bàn</Text>
                   </TouchableOpacity>
+                ) : (
+                  <View style={styles.qrWebHint}>
+                    <Ionicons name="qr-code-outline" size={28} color="#AD2C00" />
+                    <Text style={styles.qrWebHintText}>
+                      Quét mã QR in trên bàn bằng Camera điện thoại — trang sẽ mở đúng bàn, không cần
+                      quét thêm trong trình duyệt.
+                    </Text>
+                  </View>
                 )}
                 
                 {/* Welcome Text */}
@@ -241,6 +246,26 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#AD2C00',
+  },
+  qrWebHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(173, 44, 0, 0.35)',
+    marginBottom: 8,
+    maxWidth: '100%',
+  },
+  qrWebHintText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#44403C',
+    lineHeight: 20,
   },
   welcomeText: {
     fontFamily: 'System',

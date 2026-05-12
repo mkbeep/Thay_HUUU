@@ -31,9 +31,17 @@ export const config = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
 
-  // CORS
+  // CORS (admin-web 5173; Expo web khách App 8081; override với CORS_ORIGIN)
   cors: {
-    origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173'],
+    origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean) || [
+      'http://localhost:5173',
+      'http://localhost:8081',
+    ],
+  },
+
+  /** Base URL bản web khách (Expo Web export `App/web-app` — cùng giao diện app). Quét QR mở trình duyệt tới đây. */
+  customerWeb: {
+    baseUrl: (process.env.CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').replace(/\/+$/, ''),
   },
 
   // Rate Limiting

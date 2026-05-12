@@ -7,12 +7,16 @@ import { TableRepository } from '../../infrastructure/database/repositories/Tabl
 import { NotFoundError } from '../../application/errors/AppError';
 import { TableStatus } from '../../domain/entities/Table';
 import { v4 as uuidv4 } from 'uuid';
+import { attachCustomerMenuUrl } from '../../infrastructure/utils/tableResponse';
+import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 
 export class TableController {
   private tableRepository: TableRepository;
+  private socketManager: SocketManager;
 
-  constructor() {
+  constructor(socketManager: SocketManager) {
     this.tableRepository = new TableRepository();
+    this.socketManager = socketManager;
   }
 
   /**
@@ -25,7 +29,7 @@ export class TableController {
 
       res.status(200).json({
         success: true,
-        data: tables,
+        data: tables.map((t) => attachCustomerMenuUrl(t)),
         total: tables.length,
       });
     } catch (error) {
@@ -47,7 +51,7 @@ export class TableController {
 
       res.status(200).json({
         success: true,
-        data: table,
+        data: attachCustomerMenuUrl(table),
       });
     } catch (error) {
       next(error);
@@ -70,7 +74,7 @@ export class TableController {
 
       res.status(200).json({
         success: true,
-        data: table,
+        data: attachCustomerMenuUrl(table),
       });
     } catch (error) {
       next(error);
@@ -87,7 +91,7 @@ export class TableController {
       res.status(201).json({
         success: true,
         message: 'Tạo bàn thành công',
-        data: table,
+        data: attachCustomerMenuUrl(table),
       });
     } catch (error) {
       next(error);
@@ -105,7 +109,7 @@ export class TableController {
       res.status(200).json({
         success: true,
         message: 'Cập nhật bàn thành công',
-        data: table,
+        data: attachCustomerMenuUrl(table),
       });
     } catch (error) {
       next(error);
@@ -139,10 +143,13 @@ export class TableController {
 
       const table = await this.tableRepository.updateStatus(id, status);
 
+      // ✅ EMIT WEBSOCKET EVENT ĐỂ ADMIN THẤY NGAY
+      this.socketManager.notifyTableUpdated(id);
+
       res.status(200).json({
         success: true,
         message: 'Cập nhật trạng thái thành công',
-        data: table,
+        data: attachCustomerMenuUrl(table),
       });
     } catch (error) {
       next(error);
@@ -171,6 +178,9 @@ export class TableController {
       // Update table status to occupied
       await this.tableRepository.updateStatus(id, TableStatus.OCCUPIED);
 
+      // ✅ NOTIFY ADMIN VỀ TRẠNG THÁI BÀN MỚI
+      this.socketManager.notifyTableUpdated(id);
+
       res.status(201).json({
         success: true,
         message: 'Tạo phiên bàn thành công',
@@ -192,6 +202,9 @@ export class TableController {
 
       // Update table status to available
       await this.tableRepository.updateStatus(session.table_id, TableStatus.AVAILABLE);
+
+      // ✅ NOTIFY ADMIN VỀ TRẠNG THÁI BÀN MỚI
+      this.socketManager.notifyTableUpdated(session.table_id);
 
       res.status(200).json({
         success: true,

@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Codes - Bàn Nhà Hàng</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      min-height: 100vh;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    h1 {
+      text-align: center;
+      color: white;
+      margin-bottom: 30px;
+      font-size: 2.5rem;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .stat {
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(10px);
+      padding: 15px 30px;
+      border-radius: 15px;
+      color: white;
+      text-align: center;
+    }
+    .stat .number { font-size: 2rem; font-weight: bold; }
+    .stat .label { font-size: 0.9rem; opacity: 0.9; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 25px;
+      margin-bottom: 40px;
+    }
+    .qr-card {
+      background: white;
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      text-align: center;
+      transition: transform 0.3s ease;
+      position: relative;
+    }
+    .qr-card:hover { transform: translateY(-8px); }
+    .badge {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: bold;
+    }
+    .qr-card img {
+      width: 100%;
+      max-width: 280px;
+      border: 4px solid #f0f0f0;
+      border-radius: 15px;
+      margin: 20px 0;
+    }
+    .qr-card h3 { color: #333; font-size: 1.8rem; margin: 10px 0; }
+    .location { color: #666; margin: 5px 0; }
+    .capacity { color: #888; margin: 5px 0; }
+    .url {
+      font-size: 0.75rem;
+      color: #999;
+      margin: 15px 0;
+      word-break: break-all;
+      font-family: 'Courier New', monospace;
+      background: #f8f8f8;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      width: 100%;
+      transition: transform 0.3s ease;
+    }
+    button:hover { transform: scale(1.05); }
+    .actions {
+      text-align: center;
+      margin-top: 30px;
+    }
+    .actions button {
+      width: auto;
+      padding: 15px 40px;
+      margin: 0 10px;
+    }
+    @media print {
+      body { background: white; }
+      .actions, .stat { display: none; }
+      .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🍽️ QR Codes - Bàn Nhà Hàng</h1>
+    <div class="stats">
+      <div class="stat">
+        <div class="number">40</div>
+        <div class="label">Tổng số bàn</div>
+      </div>
+      <div class="stat">
+        <div class="number">12/5/2026</div>
+        <div class="label">Ngày tạo</div>
+      </div>
+    </div>
+    <div class="grid">
+    <div class="qr-card">
+      <div class="badge">1</div>
+      <img src="QR-ThucDon-Ban_1__ID_table1.png" alt="QR 1" />
+      <h3>1</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 2 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/1?tid=table1</p>
+      <button onclick="printQR('QR-ThucDon-Ban_1__ID_table1.png', '1', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">10</div>
+      <img src="QR-ThucDon-Ban_10__ID_table10.png" alt="QR 10" />
+      <h3>10</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/10?tid=table10</p>
+      <button onclick="printQR('QR-ThucDon-Ban_10__ID_table10.png', '10', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">11</div>
+      <img src="QR-ThucDon-Ban_11__ID_table11.png" alt="QR 11" />
+      <h3>11</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 8 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/11?tid=table11</p>
+      <button onclick="printQR('QR-ThucDon-Ban_11__ID_table11.png', '11', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">12</div>
+      <img src="QR-ThucDon-Ban_12__ID_table12.png" alt="QR 12" />
+      <h3>12</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 8 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/12?tid=table12</p>
+      <button onclick="printQR('QR-ThucDon-Ban_12__ID_table12.png', '12', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">13</div>
+      <img src="QR-ThucDon-Ban_13__ID_table13.png" alt="QR 13" />
+      <h3>13</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 10 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/13?tid=table13</p>
+      <button onclick="printQR('QR-ThucDon-Ban_13__ID_table13.png', '13', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">14</div>
+      <img src="QR-ThucDon-Ban_14__ID_table14.png" alt="QR 14" />
+      <h3>14</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 10 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/14?tid=table14</p>
+      <button onclick="printQR('QR-ThucDon-Ban_14__ID_table14.png', '14', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">15</div>
+      <img src="QR-ThucDon-Ban_15__ID_table15.png" alt="QR 15" />
+      <h3>15</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 12 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/15?tid=table15</p>
+      <button onclick="printQR('QR-ThucDon-Ban_15__ID_table15.png', '15', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">16</div>
+      <img src="QR-ThucDon-Ban_16__ID_table16.png" alt="QR 16" />
+      <h3>16</h3>
+      <p class="location">📍 Tầng 2 - Ngoài trời</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/16?tid=table16</p>
+      <button onclick="printQR('QR-ThucDon-Ban_16__ID_table16.png', '16', 'Tầng 2 - Ngoài trời')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">17</div>
+      <img src="QR-ThucDon-Ban_17__ID_table17.png" alt="QR 17" />
+      <h3>17</h3>
+      <p class="location">📍 Tầng 2 - Ngoài trời</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/17?tid=table17</p>
+      <button onclick="printQR('QR-ThucDon-Ban_17__ID_table17.png', '17', 'Tầng 2 - Ngoài trời')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">18</div>
+      <img src="QR-ThucDon-Ban_18__ID_table18.png" alt="QR 18" />
+      <h3>18</h3>
+      <p class="location">📍 Tầng 2 - Ngoài trời</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/18?tid=table18</p>
+      <button onclick="printQR('QR-ThucDon-Ban_18__ID_table18.png', '18', 'Tầng 2 - Ngoài trời')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">19</div>
+      <img src="QR-ThucDon-Ban_19__ID_table19.png" alt="QR 19" />
+      <h3>19</h3>
+      <p class="location">📍 Tầng 2 - Ngoài trời</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/19?tid=table19</p>
+      <button onclick="printQR('QR-ThucDon-Ban_19__ID_table19.png', '19', 'Tầng 2 - Ngoài trời')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">2</div>
+      <img src="QR-ThucDon-Ban_2__ID_table2.png" alt="QR 2" />
+      <h3>2</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 2 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/2?tid=table2</p>
+      <button onclick="printQR('QR-ThucDon-Ban_2__ID_table2.png', '2', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">20</div>
+      <img src="QR-ThucDon-Ban_20__ID_table20.png" alt="QR 20" />
+      <h3>20</h3>
+      <p class="location">📍 Tầng 2 - Ngoài trời</p>
+      <p class="capacity">👥 8 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/20?tid=table20</p>
+      <button onclick="printQR('QR-ThucDon-Ban_20__ID_table20.png', '20', 'Tầng 2 - Ngoài trời')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">3</div>
+      <img src="QR-ThucDon-Ban_3__ID_table3.png" alt="QR 3" />
+      <h3>3</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/3?tid=table3</p>
+      <button onclick="printQR('QR-ThucDon-Ban_3__ID_table3.png', '3', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">4</div>
+      <img src="QR-ThucDon-Ban_4__ID_table4.png" alt="QR 4" />
+      <h3>4</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/4?tid=table4</p>
+      <button onclick="printQR('QR-ThucDon-Ban_4__ID_table4.png', '4', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">5</div>
+      <img src="QR-ThucDon-Ban_5__ID_table5.png" alt="QR 5" />
+      <h3>5</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/5?tid=table5</p>
+      <button onclick="printQR('QR-ThucDon-Ban_5__ID_table5.png', '5', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">6</div>
+      <img src="QR-ThucDon-Ban_6__ID_table6.png" alt="QR 6" />
+      <h3>6</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/6?tid=table6</p>
+      <button onclick="printQR('QR-ThucDon-Ban_6__ID_table6.png', '6', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">7</div>
+      <img src="QR-ThucDon-Ban_7__ID_table7.png" alt="QR 7" />
+      <h3>7</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/7?tid=table7</p>
+      <button onclick="printQR('QR-ThucDon-Ban_7__ID_table7.png', '7', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">8</div>
+      <img src="QR-ThucDon-Ban_8__ID_table8.png" alt="QR 8" />
+      <h3>8</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/8?tid=table8</p>
+      <button onclick="printQR('QR-ThucDon-Ban_8__ID_table8.png', '8', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">9</div>
+      <img src="QR-ThucDon-Ban_9__ID_table9.png" alt="QR 9" />
+      <h3>9</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/9?tid=table9</p>
+      <button onclick="printQR('QR-ThucDon-Ban_9__ID_table9.png', '9', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">G01</div>
+      <img src="QR-ThucDon-Ban_G01__ID_1109qJpVtYbcbBUTHsLy.png" alt="QR G01" />
+      <h3>G01</h3>
+      <p class="location">📍 Sân vườn</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/G01?tid=1109qJpVtYbcbBUTHsLy</p>
+      <button onclick="printQR('QR-ThucDon-Ban_G01__ID_1109qJpVtYbcbBUTHsLy.png', 'G01', 'Sân vườn')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">G02</div>
+      <img src="QR-ThucDon-Ban_G02__ID_SQJxcDVl04GNPh2YoVKh.png" alt="QR G02" />
+      <h3>G02</h3>
+      <p class="location">📍 Sân vườn</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/G02?tid=SQJxcDVl04GNPh2YoVKh</p>
+      <button onclick="printQR('QR-ThucDon-Ban_G02__ID_SQJxcDVl04GNPh2YoVKh.png', 'G02', 'Sân vườn')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">G03</div>
+      <img src="QR-ThucDon-Ban_G03__ID_QMxg334hgFAF2AMKGJLo.png" alt="QR G03" />
+      <h3>G03</h3>
+      <p class="location">📍 Sân vườn</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/G03?tid=QMxg334hgFAF2AMKGJLo</p>
+      <button onclick="printQR('QR-ThucDon-Ban_G03__ID_QMxg334hgFAF2AMKGJLo.png', 'G03', 'Sân vườn')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">G04</div>
+      <img src="QR-ThucDon-Ban_G04__ID_bvlUURSpSVIbv8YSqP7O.png" alt="QR G04" />
+      <h3>G04</h3>
+      <p class="location">📍 Sân vườn</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/G04?tid=bvlUURSpSVIbv8YSqP7O</p>
+      <button onclick="printQR('QR-ThucDon-Ban_G04__ID_bvlUURSpSVIbv8YSqP7O.png', 'G04', 'Sân vườn')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">G05</div>
+      <img src="QR-ThucDon-Ban_G05__ID_BM82gTgk6p80oiPN9Gur.png" alt="QR G05" />
+      <h3>G05</h3>
+      <p class="location">📍 Sân vườn</p>
+      <p class="capacity">👥 8 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/G05?tid=BM82gTgk6p80oiPN9Gur</p>
+      <button onclick="printQR('QR-ThucDon-Ban_G05__ID_BM82gTgk6p80oiPN9Gur.png', 'G05', 'Sân vườn')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T01</div>
+      <img src="QR-ThucDon-Ban_T01__ID_s0D7LyWjAbNj9EZzYXqF.png" alt="QR T01" />
+      <h3>T01</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 2 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T01?tid=s0D7LyWjAbNj9EZzYXqF</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T01__ID_s0D7LyWjAbNj9EZzYXqF.png', 'T01', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T02</div>
+      <img src="QR-ThucDon-Ban_T02__ID_ocKEg5gXx4MapZMjHP7l.png" alt="QR T02" />
+      <h3>T02</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 2 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T02?tid=ocKEg5gXx4MapZMjHP7l</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T02__ID_ocKEg5gXx4MapZMjHP7l.png', 'T02', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T03</div>
+      <img src="QR-ThucDon-Ban_T03__ID_2tVbWgdWF68h6UL2ZMfG.png" alt="QR T03" />
+      <h3>T03</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T03?tid=2tVbWgdWF68h6UL2ZMfG</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T03__ID_2tVbWgdWF68h6UL2ZMfG.png', 'T03', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T04</div>
+      <img src="QR-ThucDon-Ban_T04__ID_EUTeZCSS7lwBiooO0YJW.png" alt="QR T04" />
+      <h3>T04</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T04?tid=EUTeZCSS7lwBiooO0YJW</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T04__ID_EUTeZCSS7lwBiooO0YJW.png', 'T04', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T05</div>
+      <img src="QR-ThucDon-Ban_T05__ID_A1MejkEB9pyFKGzdCNZq.png" alt="QR T05" />
+      <h3>T05</h3>
+      <p class="location">📍 Tầng 1 - Khu A</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T05?tid=A1MejkEB9pyFKGzdCNZq</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T05__ID_A1MejkEB9pyFKGzdCNZq.png', 'T05', 'Tầng 1 - Khu A')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T06</div>
+      <img src="QR-ThucDon-Ban_T06__ID_POIpREoRzMqYp9ukGNiE.png" alt="QR T06" />
+      <h3>T06</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 2 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T06?tid=POIpREoRzMqYp9ukGNiE</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T06__ID_POIpREoRzMqYp9ukGNiE.png', 'T06', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T07</div>
+      <img src="QR-ThucDon-Ban_T07__ID_6IMGVxkxwphzRj2l0b2t.png" alt="QR T07" />
+      <h3>T07</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 2 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T07?tid=6IMGVxkxwphzRj2l0b2t</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T07__ID_6IMGVxkxwphzRj2l0b2t.png', 'T07', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T08</div>
+      <img src="QR-ThucDon-Ban_T08__ID_88mJ8aSnXdnMRJRLJ1hq.png" alt="QR T08" />
+      <h3>T08</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T08?tid=88mJ8aSnXdnMRJRLJ1hq</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T08__ID_88mJ8aSnXdnMRJRLJ1hq.png', 'T08', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T09</div>
+      <img src="QR-ThucDon-Ban_T09__ID_dPlZllH32ZOoNs4XZcO4.png" alt="QR T09" />
+      <h3>T09</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T09?tid=dPlZllH32ZOoNs4XZcO4</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T09__ID_dPlZllH32ZOoNs4XZcO4.png', 'T09', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">T10</div>
+      <img src="QR-ThucDon-Ban_T10__ID_iNTCqAghwJaRevdjjrog.png" alt="QR T10" />
+      <h3>T10</h3>
+      <p class="location">📍 Tầng 1 - Khu B</p>
+      <p class="capacity">👥 8 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/T10?tid=iNTCqAghwJaRevdjjrog</p>
+      <button onclick="printQR('QR-ThucDon-Ban_T10__ID_iNTCqAghwJaRevdjjrog.png', 'T10', 'Tầng 1 - Khu B')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">V01</div>
+      <img src="QR-ThucDon-Ban_V01__ID_a3hhkLXDWFLpB3HyDnok.png" alt="QR V01" />
+      <h3>V01</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 4 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/V01?tid=a3hhkLXDWFLpB3HyDnok</p>
+      <button onclick="printQR('QR-ThucDon-Ban_V01__ID_a3hhkLXDWFLpB3HyDnok.png', 'V01', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">V02</div>
+      <img src="QR-ThucDon-Ban_V02__ID_zEM84LJ7nA3n2IipwkfY.png" alt="QR V02" />
+      <h3>V02</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 6 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/V02?tid=zEM84LJ7nA3n2IipwkfY</p>
+      <button onclick="printQR('QR-ThucDon-Ban_V02__ID_zEM84LJ7nA3n2IipwkfY.png', 'V02', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">V03</div>
+      <img src="QR-ThucDon-Ban_V03__ID_XDl3T3V58gkkYV9TeZHS.png" alt="QR V03" />
+      <h3>V03</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 8 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/V03?tid=XDl3T3V58gkkYV9TeZHS</p>
+      <button onclick="printQR('QR-ThucDon-Ban_V03__ID_XDl3T3V58gkkYV9TeZHS.png', 'V03', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">V04</div>
+      <img src="QR-ThucDon-Ban_V04__ID_JmkL7w3PObx6O70zKIkr.png" alt="QR V04" />
+      <h3>V04</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 10 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/V04?tid=JmkL7w3PObx6O70zKIkr</p>
+      <button onclick="printQR('QR-ThucDon-Ban_V04__ID_JmkL7w3PObx6O70zKIkr.png', 'V04', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  
+    <div class="qr-card">
+      <div class="badge">V05</div>
+      <img src="QR-ThucDon-Ban_V05__ID_IqHmF0JeQ9rR62oYW4xS.png" alt="QR V05" />
+      <h3>V05</h3>
+      <p class="location">📍 Tầng 2 - VIP</p>
+      <p class="capacity">👥 12 chỗ</p>
+      <p class="url">http://192.168.1.7:8081/table/V05?tid=IqHmF0JeQ9rR62oYW4xS</p>
+      <button onclick="printQR('QR-ThucDon-Ban_V05__ID_IqHmF0JeQ9rR62oYW4xS.png', 'V05', 'Tầng 2 - VIP')">🖨️ In QR</button>
+    </div>
+  </div>
+    <div class="actions">
+      <button onclick="window.print()">🖨️ In Tất Cả</button>
+    </div>
+  </div>
+  <script>
+    function printQR(fileName, tableNumber, location) {
+      const w = window.open('', '_blank');
+      w.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Print QR - Bàn ${tableNumber}</title>
+          <style>
+            body {
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              align-items: center;
+              height: 100vh;
+              margin: 0;
+              font-family: Arial, sans-serif;
+            }
+            h1 { color: #667eea; font-size: 3rem; margin-bottom: 10px; }
+            .location { color: #666; font-size: 1.5rem; margin-bottom: 30px; }
+            img { max-width: 400px; border: 4px solid #f0f0f0; border-radius: 15px; }
+          </style>
+        </head>
+        <body>
+          <h1>Bàn ${tableNumber}</h1>
+          <div class="location">📍 ${location}</div>
+          <img src="${fileName}" alt="QR Bàn ${tableNumber}" />
+        </body>
+        </html>
+      `);
+      w.document.close();
+      setTimeout(() => w.print(), 500);
+    }
+  </script>
+</body>
+</html>

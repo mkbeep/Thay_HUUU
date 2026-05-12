@@ -15,7 +15,7 @@ import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 export class OrderController {
   private orderRepository: OrderRepository;
   private notificationService: NotificationService;
-  private readonly operationRoles = ['staff', 'manager', 'admin'] as const;
+  private readonly operationRoles = ['staff', 'manager', 'admin', 'chef'] as const;
 
   constructor() {
     this.orderRepository = new OrderRepository();
@@ -283,7 +283,7 @@ export class OrderController {
       const { id } = req.params;
       const order = await this.orderRepository.confirmPayment(id);
 
-      // 🔥 Emit WebSocket event
+      // 🔥 Emit WebSocket event trước khi xóa
       try {
         const socketManager = SocketManager.getInstance();
         socketManager.notifyOrderUpdated(order);
@@ -291,9 +291,47 @@ export class OrderController {
         console.error('WebSocket emit error:', error);
       }
 
+      // ✅ Kiểm tra xem còn order nào chưa thanh toán của session này không
+      if (order.table_session_id) {
+        const remainingOrders = await this.orderRepository.findByTableSession(order.table_session_id);
+        const unpaidOrders = remainingOrders.filter(o => 
+          o.id !== order.id && o.payment_status !== 'paid'
+        );
+
+        console.log(`📊 Session ${order.table_session_id}: ${unpaidOrders.length} unpaid orders remaining`);
+
+        // Nếu không còn order nào chưa thanh toán → Cập nhật bàn về available
+        if (unpaidOrders.length === 0) {
+          try {
+            const tableRepository = new (require('../../infrastructure/database/repositories/TableRepository').TableRepository)();
+            const session = await tableRepository.findSessionById(order.table_session_id);
+            
+            if (session && session.is_active) {
+              // End session
+              await tableRepository.endSession(order.table_session_id);
+              
+              // Update table status to available
+              await tableRepository.updateStatus(session.table_id, 'available');
+              
+              console.log(`✅ Table ${session.table_id} set to available - all orders paid`);
+              
+              // Notify table status changed
+              const socketManager = SocketManager.getInstance();
+              socketManager.notifyTableUpdated(session.table_id);
+            }
+          } catch (error) {
+            console.error('❌ Error updating table status:', error);
+          }
+        }
+      }
+
+      // 🗑️ XÓA ORDER ĐÃ THANH TOÁN
+      await this.orderRepository.delete(id);
+      console.log(`🗑️ Deleted paid order: ${id}`);
+
       res.status(200).json({
         success: true,
-        message: 'Xác nhận thanh toán thành công',
+        message: 'Xác nhận thanh toán và xóa đơn hàng thành công',
         data: order,
       });
     } catch (error) {

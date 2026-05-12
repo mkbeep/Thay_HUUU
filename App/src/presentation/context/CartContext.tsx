@@ -31,10 +31,44 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
+  // ✅ KHÔNG tự động restore từ localStorage - Luôn bắt đầu với giỏ hàng trống
   const [items, setItems] = useState<CartItem[]>([]);
 
+  // ✅ Không cần lắng nghe storage event nữa vì không dùng localStorage
+  // useEffect(() => {
+  //   const handleStorageChange = (e: StorageEvent) => {
+  //     if (e.key === 'cart' && e.newValue === null) {
+  //       console.log('🧹 Cart cleared by table change');
+  //       setItems([]);
+  //     }
+  //   };
+  //   
+  //   window.addEventListener('storage', handleStorageChange);
+  //   return () => window.removeEventListener('storage', handleStorageChange);
+  // }, []);
+
+  // ✅ KHÔNG lưu vào localStorage nữa - Chỉ lưu trong memory
+  // Khi đổi bàn, TableContext sẽ clear tất cả và component sẽ unmount/remount
+  // useEffect(() => {
+  //   try {
+  //     if (items.length === 0) {
+  //       localStorage.removeItem('cart');
+  //       console.log('💾 Removed empty cart from localStorage');
+  //     } else {
+  //       localStorage.setItem('cart', JSON.stringify(items));
+  //       console.log('💾 Saved cart to localStorage:', items.length, 'items');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error saving cart to localStorage:', error);
+  //   }
+  // }, [items]);
+
   const addItem = (item: Omit<CartItem, 'quantity'>) => {
+    console.log('🛒 CartContext.addItem called:', item);
+    
     setItems((prevItems) => {
+      console.log('📦 Current cart items:', prevItems.length);
+      
       // Kiểm tra xem món đã có trong giỏ chưa
       const existingItemIndex = prevItems.findIndex((i) => i.id === item.id);
       
@@ -42,10 +76,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         // Nếu đã có, tăng số lượng
         const newItems = [...prevItems];
         newItems[existingItemIndex].quantity += 1;
+        console.log(`✅ Increased quantity for "${item.name}" to ${newItems[existingItemIndex].quantity}`);
         return newItems;
       } else {
         // Nếu chưa có, thêm mới với quantity = 1
-        return [...prevItems, { ...item, quantity: 1 }];
+        const newItem = { ...item, quantity: 1 };
+        console.log(`✅ Added new item "${item.name}" to cart`);
+        return [...prevItems, newItem];
       }
     });
   };

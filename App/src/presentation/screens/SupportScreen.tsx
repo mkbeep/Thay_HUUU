@@ -23,7 +23,7 @@ interface SupportRequest {
 
 interface SupportScreenProps {
   onBack: () => void;
-  tableNumber?: number;
+  tableNumber?: number | string;
 }
 
 const MOCK_REQUESTS: SupportRequest[] = [

@@ -71,16 +71,17 @@ Các file QR code này được tạo tự động cho từng bàn trong nhà h�
 
 1. **In QR codes**: In các file PNG này và dán lên bàn tương ứng
 2. **Khách quét QR**: Khách hàng dùng camera điện thoại quét QR code
-3. **Tự động nhận diện bàn**: App sẽ tự động nhận diện số bàn và tạo session
+3. **Tự động nhận diện bàn**: Trình duyệt mở đúng bàn trên bản web (Expo Web trong App, thư mục \`web-app\` khi build)
 
 ## Thông tin trong QR Code
 
-Mỗi QR code chứa:
-- \`type\`: "table"
-- \`tableId\`: ID của bàn trong database
-- \`tableNumber\`: Số bàn (T01, T02, V01, etc.)
-- \`restaurantId\`: ID nhà hàng
-- \`timestamp\`: Thời gian tạo QR
+Mỗi QR code chứa **một URL HTTPS/HTTP** tới **bản web khách** (mặc định \`CUSTOMER_WEB_BASE_URL\`, ví dụ \`http://localhost:8081/table/T01?tid=...\`). Khách quét bằng camera điện thoại sẽ mở trình duyệt, không cần Expo Go.
+
+Cấu hình base URL khi tạo lại QR:
+
+\`\`\`env
+CUSTOMER_WEB_BASE_URL=https://menu.ten-nha-hang.com
+\`\`\`
 
 ## Tái tạo QR Codes
 
@@ -91,8 +92,9 @@ cd backend
 npm run generate-qr
 \`\`\`
 
-## Kích thước
+## Kích thước và tên file
 
+- Tên file: \`QR-ThucDon-Ban_{số bàn}__ID_{id Firebase}.png\` (dễ phân biệt khi in / lưu trữ)
 - Kích thước: 400x400 pixels
 - Format: PNG
 - Margin: 2

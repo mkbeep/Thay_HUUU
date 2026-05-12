@@ -6,6 +6,7 @@
 import * as admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { buildTableWebUrl } from '../src/infrastructure/utils/tableWebUrl';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -82,16 +83,14 @@ async function checkTables() {
       });
     });
 
-    console.log('\n\n🎯 Sample QR Code Data:');
+    console.log('\n\n🎯 Mẫu nội dung QR (phải là URL — khách quét → mở web):');
     const sampleTable = tables[0];
-    const qrData = {
-      type: 'table',
+    const url = buildTableWebUrl({
       tableId: sampleTable.id,
-      tableNumber: sampleTable.table_number,
-      restaurantId: 'restaurant-001',
-      timestamp: new Date().toISOString(),
-    };
-    console.log(JSON.stringify(qrData, null, 2));
+      tableNumber: String(sampleTable.table_number || ''),
+    });
+    console.log(url);
+    console.log('\n   → In QR từ URL này (hoặc chạy: npm run generate-qr). Không dùng JSON trong QR.');
 
     console.log('\n\n📊 Summary:');
     console.log(`   Total tables: ${tables.length}`);
@@ -105,7 +104,7 @@ async function checkTables() {
     if (withQR === 0) {
       console.log('   1. Generate QR codes: npm run generate-qr');
     }
-    console.log('   2. Test API: curl http://192.168.1.2:3000/api/v1/tables/by-number/G01');
+    console.log('   2. Test API: curl http://192.168.1.7:3000/api/v1/tables/by-number/G01');
     console.log('   3. Scan QR code in mobile app');
 
   } catch (error) {

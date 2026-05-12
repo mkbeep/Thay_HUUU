@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { IMAGES } from '../../domain/constants/images';
 import { MenuService } from '../../business/services/MenuService';
 import { useCart } from '../context/CartContext';
+import { useTable } from '../context/TableContext';
 import { MenuItem as DomainMenuItem } from '../../domain/models/MenuItem';
 import { MenuGridSkeleton } from '../components/MenuSkeleton';
 
@@ -32,7 +33,6 @@ interface MenuItem {
 }
 
 interface HomeMenuScreenProps {
-  tableNumber?: number;
   onCartPress?: () => void;
   onNavigate?: (screen: string) => void;
   onMenuItemPress?: (item: MenuItem) => void;
@@ -48,11 +48,13 @@ const CATEGORIES = [
 ];
 
 export default function HomeMenuScreen({ 
-  tableNumber = 12,
   onCartPress,
   onNavigate,
   onMenuItemPress,
 }: HomeMenuScreenProps) {
+  // ✅ LẤY THÔNG TIN BÀN TỪ CONTEXT THAY VÌ DÙNG GIÁ TRỊ MẶC ĐỊNH
+  const { tableNumber: contextTableNumber } = useTable();
+  const tableNumber = contextTableNumber || 'Chưa chọn';
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -238,19 +240,31 @@ export default function HomeMenuScreen({
             disabled={!item.available}
             activeOpacity={0.7}
             onPress={(e) => {
+              console.log('========================================');
+              console.log('🔘 ADD BUTTON PRESSED!');
+              console.log('Item:', item.name);
+              console.log('Price string:', item.price);
+              
               // Ngăn event bubble lên parent TouchableOpacity
               e.stopPropagation();
               
-              // Thêm món vào giỏ hàng
-              const priceNumber = parseFloat(item.price.replace('k', ''));
-              addItem({
+              // Thêm món vào giỏ hàng - Parse giá đúng cách
+              const priceNumber = parseFloat(item.price.replace('k', '').trim());
+              console.log('Price number:', priceNumber);
+              
+              const cartItem = {
                 id: item.id,
                 name: item.name,
                 price: priceNumber,
                 priceDisplay: item.price,
                 image: item.image,
                 category: item.category,
-              });
+              };
+              
+              console.log('Adding to cart:', cartItem);
+              addItem(cartItem);
+              console.log('✅ Item added to cart');
+              console.log('========================================');
             }}
           >
             <Ionicons 

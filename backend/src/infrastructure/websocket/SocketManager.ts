@@ -53,6 +53,18 @@ export class SocketManager {
         console.log(`👨‍🍳 Kitchen joined: ${socket.id}`);
       });
 
+      // Join table room for customers
+      socket.on('join:table', (tableSessionId: string) => {
+        socket.join(`table:${tableSessionId}`);
+        console.log(`🪑 Customer joined table room: ${tableSessionId} (${socket.id})`);
+      });
+
+      // Leave table room
+      socket.on('leave:table', (tableSessionId: string) => {
+        socket.leave(`table:${tableSessionId}`);
+        console.log(`🚪 Customer left table room: ${tableSessionId} (${socket.id})`);
+      });
+
       socket.on('disconnect', () => {
         console.log(`🔌 Client disconnected: ${socket.id}`);
       });
@@ -68,6 +80,10 @@ export class SocketManager {
     this.io.to('kitchen').emit(event, data);
   }
 
+  public emitToTable(tableSessionId: string, event: string, data: any): void {
+    this.io.to(`table:${tableSessionId}`).emit(event, data);
+  }
+
   public emitToAll(event: string, data: any): void {
     this.io.emit(event, data);
   }
@@ -76,21 +92,40 @@ export class SocketManager {
   public notifyOrderCreated(order: any): void {
     this.emitToAdmin('order:created', order);
     this.emitToKitchen('order:created', order);
+    // Notify the table that placed the order
+    if (order.table_session_id) {
+      this.emitToTable(order.table_session_id, 'order:created', order);
+    }
   }
 
   public notifyOrderUpdated(order: any): void {
     this.emitToAdmin('order:updated', order);
     this.emitToKitchen('order:updated', order);
+    // Notify the table
+    if (order.table_session_id) {
+      this.emitToTable(order.table_session_id, 'order:updated', order);
+    }
   }
 
   public notifyOrderStatusChanged(orderId: string, status: string, order: any): void {
     this.emitToAdmin('order:status_changed', { orderId, status, order });
     this.emitToKitchen('order:status_changed', { orderId, status, order });
+    // Notify the table
+    if (order.table_session_id) {
+      this.emitToTable(order.table_session_id, 'order:status_changed', { orderId, status, order });
+    }
   }
 
   // Notification events
   public notifyNewNotification(notification: any): void {
     this.emitToAdmin('notification:new', notification);
+  }
+
+  // Table events
+  public notifyTableUpdated(tableId: string): void {
+    this.emitToAdmin('table:updated', { tableId });
+    this.emitToAll('table:status_changed', { tableId });
+    console.log(`📢 Table ${tableId} status updated - broadcasted to all clients`);
   }
 
   public getIO(): Server {

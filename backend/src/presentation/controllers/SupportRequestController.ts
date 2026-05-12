@@ -72,7 +72,7 @@ export class SupportRequestController {
         priority: this.mapPriority(supportRequest.priority),
       };
       await Promise.all(
-        (['staff', 'manager', 'admin'] as const).map((role) =>
+        (['staff', 'manager', 'admin', 'chef'] as const).map((role) =>
           this.notificationService.sendToRole(role, notifyPayload)
         )
       );

@@ -17,7 +17,7 @@ interface OrderHistoryScreenProps {
   onBack: () => void;
   onPayment?: () => void;
   onSupport?: () => void;
-  tableNumber?: number;
+  tableNumber?: number | string;
 }
 
 const STATUS_CONFIG: Record<

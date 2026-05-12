@@ -41,7 +41,6 @@ export class NotificationService {
     // 2. Lấy FCM token của user
     const user = await this.userRepository.findById(dto.user_id);
     if (!user?.fcm_token) {
-      console.log(`User ${dto.user_id} không có FCM token`);
       return;
     }
 

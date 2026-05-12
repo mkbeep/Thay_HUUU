@@ -27,7 +27,7 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // Backend server URL (fallback)
-const BACKEND_URL = process.env.BACKEND_URL || 'http://192.168.1.3:3000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://192.168.1.7:3000';
 const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || 'dqnnwl8h8';
 const USE_CLOUDINARY = (process.env.IMAGE_PROVIDER || '').toLowerCase() === 'cloudinary';
 

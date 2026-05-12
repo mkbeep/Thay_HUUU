@@ -117,6 +117,17 @@ export class OrderRepository implements IOrderRepository {
     return orders;
   }
 
+  async findByTableSession(tableSessionId: string): Promise<Order[]> {
+    const snapshot = await this.collection
+      .where('table_session_id', '==', tableSessionId)
+      .get();
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as Order));
+  }
+
   async create(orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'>): Promise<Order> {
     const now = new Date();
     const data = {

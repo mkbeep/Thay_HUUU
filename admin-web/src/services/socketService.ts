@@ -38,6 +38,9 @@ class SocketService {
     });
 
     this.setupEventHandlers();
+    
+    // ✅ Expose socket to window for easy access
+    (window as any).socket = this.socket;
 
     return this.socket;
   }

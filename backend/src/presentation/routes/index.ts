@@ -8,28 +8,32 @@ import authRoutes from './auth.routes';
 import foodRoutes from './food.routes';
 import notificationRoutes from './notification.routes';
 import orderRoutes from './order.routes';
-import tableRoutes from './table.routes';
+import createTableRoutes from './table.routes';
 import inventoryRoutes from './inventory.routes';
 import supportRequestRoutes from './support-request.routes';
+import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 
-const router = Router();
+// Export function để nhận socketManager từ server.ts
+export default function createRoutes(socketManager: SocketManager): Router {
+  const router = Router();
 
-// Health check
-router.get('/health', (_req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
+  // Health check
+  router.get('/health', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Server is running',
+      timestamp: new Date().toISOString(),
+    });
   });
-});
 
-// API routes
-router.use('/auth', authRoutes);
-router.use('/foods', foodRoutes);
-router.use('/notifications', notificationRoutes);
-router.use('/orders', orderRoutes);
-router.use('/tables', tableRoutes);
-router.use('/inventory', inventoryRoutes);
-router.use('/support-requests', supportRequestRoutes);
+  // API routes
+  router.use('/auth', authRoutes);
+  router.use('/foods', foodRoutes);
+  router.use('/notifications', notificationRoutes);
+  router.use('/orders', orderRoutes);
+  router.use('/tables', createTableRoutes(socketManager)); // ✅ Truyền socketManager
+  router.use('/inventory', inventoryRoutes);
+  router.use('/support-requests', supportRequestRoutes);
 
-export default router;
+  return router;
+}

@@ -1,18 +1,17 @@
 import { MenuItem, MenuCategory } from '../../domain/models/MenuItem';
 import axios from 'axios';
-import { API_URL } from '@env';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApiBaseUrl } from '../../utils/apiBaseUrl';
 
-// Đọc API_URL từ .env, fallback về localhost nếu không có
-const API_BASE_URL = API_URL || 'http://192.168.1.3:3000/api/v1';
+const resolvedBase = getApiBaseUrl();
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: resolvedBase,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
+  timeout: 30000,
 });
 
-const API_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
+const API_ORIGIN = resolvedBase.replace(/\/api\/v\d+\/?$/, '');
 
 const normalizeCategoryToVi = (category?: string): MenuCategory => {
   const value = (category || '').toString().trim().toLowerCase();

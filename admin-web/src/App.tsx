@@ -24,7 +24,19 @@ function App() {
   useEffect(() => {
     if (isAuthenticated) {
       const token = localStorage.getItem('token')
-      socketService.connect(token || undefined)
+      const socket = socketService.connect(token || undefined)
+      
+      // ✅ Đảm bảo join admin room
+      if (socket && socket.connected) {
+        socket.emit('join:admin')
+        console.log('👨‍💼 Joined admin room')
+      } else {
+        // Đợi kết nối xong rồi join
+        socket?.on('connect', () => {
+          socket.emit('join:admin')
+          console.log('👨‍💼 Joined admin room after connect')
+        })
+      }
       
       return () => {
         // Don't disconnect on unmount, keep connection alive

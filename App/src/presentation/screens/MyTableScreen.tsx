@@ -84,20 +84,18 @@ export default function MyTableScreen({
             <Ionicons name="restaurant" size={24} color="#AD2C00" />
             <Text style={styles.headerTitle}>BÀN CỦA TÔI</Text>
           </View>
-          <TouchableOpacity
-            style={styles.qrButton}
-            onPress={() => {
-              if (onQRScan) {
+          {onQRScan ? (
+            <TouchableOpacity
+              style={styles.qrButton}
+              onPress={() => {
                 onQRScan();
-              } else {
-                Alert.alert('Mã QR', `Mã QR của bàn ${tableNumber}`, [
-                  { text: 'OK' },
-                ]);
-              }
-            }}
-          >
-            <Ionicons name="qr-code" size={24} color="#5F5E5E" />
-          </TouchableOpacity>
+              }}
+            >
+              <Ionicons name="qr-code" size={24} color="#5F5E5E" />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.qrButtonPlaceholder} />
+          )}
         </View>
       </View>
 
@@ -346,6 +344,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F6F3F2',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  qrButtonPlaceholder: {
+    width: 40,
+    height: 40,
   },
   content: {
     flex: 1,

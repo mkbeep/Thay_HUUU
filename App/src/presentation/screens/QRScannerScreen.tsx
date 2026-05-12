@@ -1,16 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from 'react-native';
 import { Camera, CameraView } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { useTable } from '../context/TableContext';
 import { TableRepository } from '../../data/repositories/TableRepository';
+import { buildCustomerTableWebUrl } from '../../utils/customerWebUrl';
+import { parseCustomerTableUrl } from '../../utils/parseCustomerTableUrl';
 
 interface QRScannerScreenProps {
-  onSuccess: (tableNumber: string | number) => void;
   onCancel: () => void;
 }
 
-export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreenProps) {
+/** QR in cho khách mở bản web (Expo Web) trong trình duyệt — không ép vào Expo Go. */
+function isTableMenuWebUrl(data: string): boolean {
+  if (!/^https?:\/\//i.test(data)) return false;
+  try {
+    const url = new URL(data);
+    const segs = url.pathname.split('/').filter(Boolean);
+    const idx = segs.findIndex((p) => ['table', 't', 'ban'].includes(p.toLowerCase()));
+    return idx >= 0 && !!segs[idx + 1];
+  } catch {
+    return false;
+  }
+}
+
+/** Nhận số bàn từ URL web thực đơn (QR in trên bàn). */
+function parseTableNumberFromUrl(data: string): string | null {
+  if (!/^https?:\/\//i.test(data)) return null;
+  try {
+    const url = new URL(data);
+    const fromQuery =
+      url.searchParams.get('table') ||
+      url.searchParams.get('tableNumber') ||
+      url.searchParams.get('n');
+    if (fromQuery) {
+      return decodeURIComponent(fromQuery.trim()) || null;
+    }
+    const parts = url.pathname.split('/').filter(Boolean);
+    const idx = parts.findIndex((p) => ['table', 't', 'ban'].includes(p.toLowerCase()));
+    if (idx >= 0 && parts[idx + 1]) {
+      return decodeURIComponent(parts[idx + 1]);
+    }
+    const last = parts.length ? decodeURIComponent(parts[parts.length - 1]) : '';
+    return last && !last.includes('.') ? last : null;
+  } catch {
+    return null;
+  }
+}
+
+export default function QRScannerScreen({ onCancel }: QRScannerScreenProps) {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
   const [processing, setProcessing] = useState(false); // Prevent multiple scans
@@ -36,6 +74,42 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
     try {
       // Only log once at the start
       console.log('🔍 QR Code scanned, processing...');
+
+      if (isTableMenuWebUrl(data)) {
+        try {
+          const parsed = parseCustomerTableUrl(data);
+          let table =
+            parsed.tableId != null && parsed.tableId.length > 0
+              ? await tableRepository.getTableById(parsed.tableId)
+              : undefined;
+          if (!table && parsed.tableNumber) {
+            table = await tableRepository.getTableByNumber(parsed.tableNumber);
+          }
+          if (!table) {
+            setProcessing(false);
+            Alert.alert(
+              'Không tìm thấy bàn',
+              'Liên kết trên mã QR không khớp với bàn trong hệ thống. Vui lòng quét mã trên bàn hoặc liên hệ nhân viên.',
+              [
+                { text: 'Thử lại', onPress: () => { setScanned(false); setProcessing(false); } },
+                { text: 'Hủy', onPress: onCancel, style: 'cancel' },
+              ]
+            );
+            return;
+          }
+          await setTableInfo(table.number, table.id);
+          await Linking.openURL(data);
+          setProcessing(false);
+          onCancel();
+        } catch {
+          setProcessing(false);
+          Alert.alert('Không mở được liên kết', 'Hãy quét lại hoặc mở liên kết bằng camera điện thoại.', [
+            { text: 'Thử lại', onPress: () => { setScanned(false); setProcessing(false); } },
+            { text: 'Hủy', onPress: onCancel, style: 'cancel' },
+          ]);
+        }
+        return;
+      }
       
       let tableNumber: string = '';
       let tableId: string | undefined;
@@ -49,7 +123,7 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
           tableNumber = qrData.tableNumber; // G01, T01, V01, etc.
           tableId = qrData.tableId; // Firebase document ID
           isValidQR = true;
-          console.log('✅ Valid table QR:', { tableNumber, tableId });
+          console.log('✅ Valid table QR (JSON) → mở bản web:', { tableNumber, tableId });
         } else {
           throw new Error('QR code không đúng định dạng');
         }
@@ -60,14 +134,27 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
           tableNumber = data.replace('restaurant://table/', '');
           isValidQR = true;
         } else if (data.startsWith('http')) {
-          // Handle URL format: https://restaurant.com/table/T01
-          try {
-            const url = new URL(data);
-            const parts = url.pathname.split('/');
-            tableNumber = parts[parts.length - 1] || '';
-            isValidQR = !!tableNumber;
-          } catch {
-            isValidQR = false;
+          const parsed = parseCustomerTableUrl(data);
+          if (parsed.tableId) {
+            const t = await tableRepository.getTableById(parsed.tableId);
+            if (t) {
+              tableNumber = String(t.number);
+              tableId = t.id;
+              isValidQR = true;
+            }
+          }
+          if (!isValidQR && parsed.tableNumber) {
+            tableNumber = parsed.tableNumber;
+            isValidQR = true;
+          }
+          if (!isValidQR) {
+            const fromWeb = parseTableNumberFromUrl(data);
+            if (fromWeb) {
+              tableNumber = fromWeb;
+              isValidQR = true;
+            } else {
+              isValidQR = false;
+            }
           }
         } else {
           // Check if it looks like a table number
@@ -107,9 +194,14 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
         return;
       }
 
-      // Fetch table info from backend using table number (string)
-      const table = await tableRepository.getTableByNumber(tableNumber);
-      
+      let table =
+        tableId != null && tableId.length > 0
+          ? await tableRepository.getTableById(tableId)
+          : undefined;
+      if (!table) {
+        table = await tableRepository.getTableByNumber(tableNumber);
+      }
+
       if (!table) {
         setProcessing(false);
         Alert.alert(
@@ -133,14 +225,23 @@ export default function QRScannerScreen({ onSuccess, onCancel }: QRScannerScreen
         return;
       }
 
-      console.log('🎯 Table found:', table.number, '- Navigating...');
+      console.log('🎯 Table found:', table.number, '→ mở bản web');
 
-      // Save table info to context
       await setTableInfo(table.number, table.id);
 
-      // Success - navigate immediately
+      try {
+        await Linking.openURL(buildCustomerTableWebUrl(table.number, table.id));
+      } catch {
+        setProcessing(false);
+        Alert.alert('Không mở được liên kết', 'Hãy quét lại hoặc mở liên kết bằng camera điện thoại.', [
+          { text: 'Thử lại', onPress: () => { setScanned(false); setProcessing(false); } },
+          { text: 'Hủy', onPress: onCancel, style: 'cancel' },
+        ]);
+        return;
+      }
+
       setProcessing(false);
-      onSuccess(table.number);
+      onCancel();
       
     } catch (error) {
       console.error('Error scanning QR code:', error);
