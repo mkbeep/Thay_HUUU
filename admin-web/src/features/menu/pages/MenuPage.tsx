@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { 
   Plus, 
@@ -9,7 +9,9 @@ import {
   PlusCircle
 } from 'lucide-react'
 import { MenuService } from '../../../business/services/MenuService'
-import { MenuItem as MenuItemModel } from '../../../domain/models/MenuItem'
+import { MenuCategory } from '../../../domain/models/MenuItem'
+import { mapFoodApiCategoryToMenuCategory } from '../../../data/repositories/MenuRepository'
+import { useWebSocket } from '../../../hooks/useWebSocket'
 
 // Types
 interface Topping {
@@ -30,53 +32,6 @@ interface MenuItem {
   toppings: Topping[]
 }
 
-// Mock data
-const mockMenuItems: MenuItem[] = [
-  {
-    id: '1',
-    name: 'Salad Heirloom',
-    category: 'Khai Vị',
-    price: 18.00,
-    description: 'Cà chua hữu cơ với burrata, bọt húng quế và giấm balsamic lâu năm.',
-    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC5il62G_hSHiuQWq9Eys-E0N8H1w5yd56TsUrfe--xQ5rziwWfroW36WP0QsE5LzCxwa110jsd1hXgknE-zB7hZmZu_ZpPiuvtQe7QD4sBm3LgbRFlAu2zXbXT_QfnQfBmNOdKy4tSdmW0JJGV8VUcsKU_mg2ZVDHMst78ZyGt_iHi1GRMkjOb3WmcakcpzHXIWOTDIV69EN0H1IRmVixnR33HZa7FORFJv0uPAnSkoRdvd5KofwZbDTH8j0YEZ2lDcuu72A1wFA',
-    inStock: true,
-    toppings: [
-      { id: 't1', name: 'Thêm Burrata', price: 4.00, mandatory: false },
-      { id: 't2', name: 'Thịt Xông Khói', price: 6.00, mandatory: false }
-    ]
-  },
-  {
-    id: '2',
-    name: 'Arancini Nấm Rừng',
-    category: 'Khai Vị',
-    price: 14.00,
-    description: 'Viên risotto giòn thơm truffle nhồi phô mai fontina và nấm porcini.',
-    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDEwTs7KpN5sMwIJCa_aAowedNhP6RZQoO99XFzpN-ma8_T0n9uNgaUrU_SSdiik6bG2lAXfhUkYLOm5N0nBN2rVvXhXbxgxb4WOz_mtpg5tjcMQoIcr8a_TuvH_CDSrDtIYaY01KhP4XDnoi6GvGs6Tnb4XcI_JCsBP9P2rjo8gpCxRoMx4VS7svODLAA538JwUA-ulfCOSBZXGt7GLymJwVdzyrhmuKSUcBI0Svy_ad0NcMNGvcn-n0zfz_l2GwQ88jEyyvbAeg',
-    inStock: true,
-    toppings: []
-  },
-  {
-    id: '3',
-    name: 'Mì Ý Truffle Đen',
-    category: 'Khai Vị',
-    price: 22.00,
-    description: 'Tagliatelle thủ công, bơ lên men, nấm truffle Perigord bào mỏng.',
-    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBo809s-fIkDBWzsCNVu0uWnnPdINvZd3dplOfngzyEBDIJXP-iW-WZq6vtjRQZ_KTimgTkiZvbWiyUwFQAhiaqQ8INnVI0y1vReSkbXH1aH0qQoj15mpB0EwsQnTsYLtURcyTzD72T8E4PCKjl8pHF90-lxKGHqaGwlXP5aN99YH9I4N11IZIPiJgGnUbjeoVZvZPZi5VNCn9w5RZV8-bSYUOG7ZJVOy7EJtV8BLFqKcdS_mb_LRA49GYzrrD9r9WnA1NTZig9ig',
-    inStock: false,
-    toppings: []
-  },
-  {
-    id: '4',
-    name: 'Súp Tôm Hùm',
-    category: 'Khai Vị',
-    price: 16.00,
-    description: 'Súp kem tôm hùm truyền thống với cognac và kem tươi.',
-    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBmepLMxgB1Es1xxN0QONxayXLhHrjU4qHwpa_gmzhxXuCg6-J4hQilBcZ5EjDvOrqvXr_8K5mrzuGbeLFRwwLg6vNvZV6MSo0pkWAoiFkERw-ckJkkQP6a7kFrofNof8sb4FfGf2IpPeY7gGf4dRdLs3kjDdsIAXnG4i7rKPxesz63A4PUmroXoanTiZ-Tsv9uxvTlviMb31DWE5_4bw_7uhx3jMmuWQ3dVot2bKVh2-uEx3WdaeNm84cJAZ5a20ErFKYP0YbO7A',
-    inStock: true,
-    toppings: []
-  }
-]
-
 const categories = ['Khai vị', 'Món chính', 'Tráng miệng', 'Đồ uống', 'Đặc biệt']
 
 export default function MenuPage() {
@@ -84,6 +39,7 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true)
   const [showDrawer, setShowDrawer] = useState(false)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
+  const [togglingItems, setTogglingItems] = useState<Set<string>>(new Set()) // Track which items are being toggled
   const [formData, setFormData] = useState<Partial<MenuItem>>({
     name: '',
     category: 'Khai vị',
@@ -94,12 +50,91 @@ export default function MenuPage() {
     toppings: []
   })
 
+  const [saveLoading, setSaveLoading] = useState(false)
+  const [imageUploading, setImageUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const menuService = new MenuService()
+  const { isConnected, socket } = useWebSocket()
 
   // Load menu items from API
   useEffect(() => {
     loadMenuItems()
   }, [])
+
+  // 🔥 WebSocket real-time updates
+  useEffect(() => {
+    if (!socket || !isConnected) return
+
+    console.log('🔌 Setting up WebSocket listeners for menu updates')
+
+    // Listen for food updates (including availability changes)
+    const handleFoodUpdated = (updatedFood: any) => {
+      setMenuItems(prevItems => {
+        return prevItems.map(item => {
+          if (item.id === updatedFood.id) {
+            const nextCategory =
+              updatedFood.category !== undefined &&
+              updatedFood.category !== null &&
+              String(updatedFood.category).trim() !== ''
+                ? mapFoodApiCategoryToMenuCategory(String(updatedFood.category))
+                : item.category
+
+            const nextName = updatedFood.name ?? item.name
+            const nextPrice = updatedFood.base_price ?? item.price
+            const nextDescription = updatedFood.description ?? item.description
+            const nextInStock =
+              typeof updatedFood.is_available === 'boolean'
+                ? updatedFood.is_available
+                : item.inStock
+
+            const hasChanges =
+              item.name !== nextName ||
+              item.category !== nextCategory ||
+              item.price !== nextPrice ||
+              item.description !== nextDescription ||
+              item.inStock !== nextInStock
+
+            if (!hasChanges) {
+              return item
+            }
+
+            return {
+              ...item,
+              name: nextName,
+              category: nextCategory,
+              price: nextPrice,
+              description: nextDescription,
+              inStock: nextInStock,
+            }
+          }
+          return item
+        })
+      })
+    }
+
+    // Listen for new food items
+    const handleFoodCreated = (newFood: any) => {
+      console.log('📢 Received food:created event:', newFood)
+      loadMenuItems() // Reload to get the new item with proper mapping
+    }
+
+    // Listen for deleted food items
+    const handleFoodDeleted = (data: { foodId: string }) => {
+      console.log('📢 Received food:deleted event:', data)
+      setMenuItems(prevItems => prevItems.filter(item => item.id !== data.foodId))
+    }
+
+    socket.on('food:updated', handleFoodUpdated)
+    socket.on('food:created', handleFoodCreated)
+    socket.on('food:deleted', handleFoodDeleted)
+
+    return () => {
+      socket.off('food:updated', handleFoodUpdated)
+      socket.off('food:created', handleFoodCreated)
+      socket.off('food:deleted', handleFoodDeleted)
+    }
+  }, [socket, isConnected])
 
   const loadMenuItems = async () => {
     try {
@@ -128,9 +163,8 @@ export default function MenuPage() {
         console.error('API Error:', error.response?.data)
         console.error('Status:', error.response?.status)
       }
-      // Fallback to mock data if API fails
-      console.log('Using mock data as fallback')
-      setMenuItems(mockMenuItems)
+      setMenuItems([])
+      alert('Không tải được menu từ máy chủ. Kiểm tra VITE_API_URL, backend và đăng nhập quản trị.')
     } finally {
       setLoading(false)
     }
@@ -156,40 +190,137 @@ export default function MenuPage() {
     setShowDrawer(true)
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc muốn xóa món này?')) {
-      setMenuItems(menuItems.filter(item => item.id !== id))
+  const handleDelete = async (id: string) => {
+    if (!confirm('Bạn có chắc muốn xóa món này?')) return
+    try {
+      const ok = await menuService.deleteMenuItem(id)
+      if (!ok) {
+        alert('Không xóa được món này.')
+        return
+      }
+      // No need to reload - WebSocket will handle the update!
+    } catch (error) {
+      console.error('Error deleting menu item:', error)
+      alert('Không xóa được món này.')
     }
   }
 
   const handleToggleStock = async (id: string) => {
+    // Prevent multiple simultaneous toggles on same item
+    if (togglingItems.has(id)) return
+    
     try {
-      await menuService.toggleItemAvailability(id)
-      // Update local state
-      setMenuItems(menuItems.map(item => 
-        item.id === id ? { ...item, inStock: !item.inStock } : item
-      ))
-    } catch (error) {
-      console.error('Error toggling stock:', error)
-      alert('Không thể cập nhật trạng thái món ăn')
+      // Mark item as being toggled
+      setTogglingItems(prev => new Set(prev).add(id))
+      
+      // Get current state
+      const currentItem = menuItems.find(item => item.id === id)
+      if (!currentItem) return
+      
+      const newState = !currentItem.inStock
+      
+      // Immediate optimistic update for instant feedback
+      setMenuItems(prevItems => 
+        prevItems.map(item => 
+          item.id === id ? { ...item, inStock: newState } : item
+        )
+      )
+      
+      // Call API in background (don't wait for WebSocket)
+      menuService.toggleItemAvailability(id).catch(error => {
+        console.error('Error toggling stock:', error)
+        // Revert on error
+        setMenuItems(prevItems => 
+          prevItems.map(item => 
+            item.id === id ? { ...item, inStock: !newState } : item
+          )
+        )
+        alert('Không thể cập nhật trạng thái món ăn')
+      })
+      
+    } finally {
+      // Remove from toggling set immediately for fast re-toggle
+      setTimeout(() => {
+        setTogglingItems(prev => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+      }, 100) // Very short delay
     }
   }
 
-  const handleSave = () => {
-    if (editingItem) {
-      // Update existing item
-      setMenuItems(menuItems.map(item => 
-        item.id === editingItem.id ? { ...item, ...formData } : item
-      ))
-    } else {
-      // Add new item
-      const newItem: MenuItem = {
-        ...formData as MenuItem,
-        id: Date.now().toString()
-      }
-      setMenuItems([...menuItems, newItem])
+  const uploadMenuImage = async (file: File) => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
+    const token = localStorage.getItem('token')
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await axios.post(`${API_URL}/media/menu-image`, fd, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    const url = res.data?.data?.url
+    if (!url || typeof url !== 'string') {
+      throw new Error('Phản hồi upload không hợp lệ')
     }
-    setShowDrawer(false)
+    return url
+  }
+
+  const onMenuImageSelected: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ảnh tối đa 5MB')
+      e.target.value = ''
+      return
+    }
+    try {
+      setImageUploading(true)
+      const url = await uploadMenuImage(file)
+      setFormData((prev) => ({ ...prev, imageUrl: url }))
+    } catch (err) {
+      console.error(err)
+      alert('Không upload được ảnh. Kiểm tra CLOUDINARY_* trong backend/.env và quyền đăng nhập quản trị.')
+    } finally {
+      setImageUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleSave = async () => {
+    if (!formData.name?.trim()) {
+      alert('Vui lòng nhập tên món')
+      return
+    }
+    const cat = (formData.category || 'Khai vị') as MenuCategory
+    try {
+      setSaveLoading(true)
+      if (editingItem) {
+        await menuService.updateMenuItem(editingItem.id, {
+          name: formData.name,
+          description: formData.description || '',
+          price: Number(formData.price) || 0,
+          category: cat,
+          imageUrl: formData.imageUrl,
+          preparationTime: 15,
+        })
+      } else {
+        await menuService.createMenuItem({
+          name: formData.name.trim(),
+          description: formData.description || '',
+          price: Number(formData.price) || 0,
+          category: cat,
+          imageUrl: formData.imageUrl?.trim() || undefined,
+          preparationTime: 15,
+        })
+      }
+      // No need to reload - WebSocket will handle the update!
+      setShowDrawer(false)
+    } catch (error) {
+      console.error('Error saving menu item:', error)
+      alert(error instanceof Error ? error.message : 'Không lưu được món. Vui lòng thử lại.')
+    } finally {
+      setSaveLoading(false)
+    }
   }
 
   const handleAddTopping = () => {
@@ -234,7 +365,20 @@ export default function MenuPage() {
       {/* Header */}
       <div className="flex justify-between items-end mb-12">
         <div className="space-y-1">
-          <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">Quản Lý Menu</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">Quản Lý Menu</h1>
+            {/* WebSocket Status Indicator */}
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${
+              isConnected 
+                ? 'bg-green-100 text-green-700' 
+                : 'bg-gray-100 text-gray-500'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${
+                isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+              }`}></div>
+              {isConnected ? 'Real-time' : 'Offline'}
+            </div>
+          </div>
           <p className="text-gray-600 font-medium">
             Quản lý món ăn và tùy chỉnh thực đơn của bạn.
           </p>
@@ -256,13 +400,11 @@ export default function MenuPage() {
             <p className="mt-4 text-gray-600 font-medium">Đang tải menu...</p>
           </div>
         </div>
-      ) : menuItems.length === 0 ? (
-        <div className="text-center py-20">
-          <p className="text-gray-600 font-medium">Chưa có món ăn nào</p>
-        </div>
       ) : (
         <div className="space-y-16">
-          {Object.entries(groupedItems).map(([category, items]) => (
+          {categories.map((category) => {
+            const items = groupedItems[category] || []
+            return (
           <section key={category}>
             <div className="flex items-center gap-4 mb-8">
               <h2 className="text-2xl font-bold text-gray-900">{category}</h2>
@@ -272,6 +414,11 @@ export default function MenuPage() {
               </span>
             </div>
 
+            {items.length === 0 ? (
+              <div className="text-center py-10 text-gray-500 text-sm border border-dashed border-gray-200 rounded-lg bg-gray-50/50">
+                Chưa có món trong danh mục này
+              </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {items.map((item) => (
                 <div
@@ -302,9 +449,10 @@ export default function MenuPage() {
                           type="checkbox"
                           className="sr-only peer"
                           checked={item.inStock}
+                          disabled={togglingItems.has(item.id)}
                           onChange={() => handleToggleStock(item.id)}
                         />
-                        <div className="w-11 h-6 bg-[#E5E2E1] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#006A35]"></div>
+                        <div className={`w-11 h-6 bg-[#E5E2E1] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#006A35] ${togglingItems.has(item.id) ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
                       </label>
                     </div>
 
@@ -327,7 +475,7 @@ export default function MenuPage() {
                           <Edit className="w-5 h-5" />
                         </button>
                         <button
-                          onClick={() => handleDelete(item.id)}
+                          onClick={() => void handleDelete(item.id)}
                           className="w-10 h-10 flex items-center justify-center rounded-full bg-[#E5E2E1] text-[#5F5E5E] hover:bg-[#FFDAD6] hover:text-[#BA1A1A] transition-colors"
                         >
                           <Trash2 className="w-5 h-5" />
@@ -338,9 +486,11 @@ export default function MenuPage() {
                 </div>
               ))}
             </div>
+            )}
           </section>
-        ))}
-      </div>
+            )
+          })}
+        </div>
       )}
 
       {/* Slide-over Drawer */}
@@ -368,14 +518,37 @@ export default function MenuPage() {
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-8 space-y-8 pb-10 pt-8">
               {/* Image Upload */}
-              <div className="w-full aspect-video bg-[#E5E2E1] rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-[#916F67]/50 group cursor-pointer hover:bg-orange-50/30 hover:border-[#AD2C00]/50 transition-all">
-                <Upload className="w-10 h-10 text-gray-600 mb-2 group-hover:text-[#AD2C00]" />
-                <p className="text-sm font-bold text-gray-700 group-hover:text-[#AD2C00]">
-                  Click để tải ảnh món ăn
-                </p>
-                <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
-                  JPG, PNG tối đa 5MB
-                </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={onMenuImageSelected}
+              />
+              <div
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    fileInputRef.current?.click()
+                  }
+                }}
+                onClick={() => !imageUploading && fileInputRef.current?.click()}
+                className="w-full aspect-video bg-[#E5E2E1] rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-[#916F67]/50 group cursor-pointer hover:bg-orange-50/30 hover:border-[#AD2C00]/50 transition-all relative overflow-hidden"
+              >
+                {formData.imageUrl ? (
+                  <img src={formData.imageUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
+                ) : null}
+                <div className={`relative z-10 flex flex-col items-center ${formData.imageUrl ? 'bg-black/40 text-white px-4 py-3 rounded-lg' : ''}`}>
+                  <Upload className={`w-10 h-10 mb-2 ${formData.imageUrl ? 'text-white' : 'text-gray-600 group-hover:text-[#AD2C00]'}`} />
+                  <p className={`text-sm font-bold ${formData.imageUrl ? 'text-white' : 'text-gray-700 group-hover:text-[#AD2C00]'}`}>
+                    {imageUploading ? 'Đang tải lên Cloudinary…' : 'Click để tải ảnh món ăn'}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
+                    JPG, PNG tối đa 5MB
+                  </p>
+                </div>
               </div>
 
               {/* Basic Fields */}
@@ -500,10 +673,12 @@ export default function MenuPage() {
                 Hủy Bỏ
               </button>
               <button
-                onClick={handleSave}
-                className="flex-[2] bg-gradient-to-r from-[#AD2C00] to-[#D83900] text-white py-4 rounded-xl font-bold shadow-lg shadow-[#AD2C00]/30 transition-all active:scale-98 hover:brightness-110"
+                type="button"
+                disabled={saveLoading}
+                onClick={() => void handleSave()}
+                className="flex-[2] bg-gradient-to-r from-[#AD2C00] to-[#D83900] text-white py-4 rounded-xl font-bold shadow-lg shadow-[#AD2C00]/30 transition-all active:scale-98 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Lưu Thay Đổi
+                {saveLoading ? 'Đang lưu…' : 'Lưu Thay Đổi'}
               </button>
             </div>
           </div>

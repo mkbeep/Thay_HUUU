@@ -4,6 +4,7 @@
  */
 
 import { firebaseAdmin } from '../../infrastructure/config/firebase.config';
+import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 import { INotificationRepository } from '../../domain/repositories/INotificationRepository';
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { NotificationType, NotificationPriority } from '../../domain/entities/Notification';
@@ -37,6 +38,12 @@ export class NotificationService {
       priority: dto.priority || NotificationPriority.NORMAL,
       is_read: false,
     });
+
+    try {
+      SocketManager.getInstance().notifyNewNotification(notification);
+    } catch (err) {
+      console.warn('notifyNewNotification (socket) skipped:', err);
+    }
 
     // 2. Lấy FCM token của user
     const user = await this.userRepository.findById(dto.user_id);
@@ -105,6 +112,30 @@ export class NotificationService {
     const users = await this.userRepository.findAll({ role, is_active: true });
     const userIds = users.map(u => u.id);
     await this.sendToMultipleUsers(userIds, dto);
+  }
+
+  /**
+   * Gửi cho nhiều role nhưng mỗi user chỉ nhận một bản (tránh trùng khi user có nhiều vai trò).
+   * Log cảnh báo nếu không có người nhận (thường do thiếu bản ghi user_role trong DB).
+   */
+  async sendToRolesDeduped(
+    roles: string[],
+    dto: Omit<SendNotificationDTO, 'user_id'>
+  ): Promise<void> {
+    const seen = new Set<string>();
+    for (const role of roles) {
+      const users = await this.userRepository.findAll({ role, is_active: true });
+      for (const u of users) {
+        if (u?.id) seen.add(u.id);
+      }
+    }
+    if (seen.size === 0) {
+      console.warn(
+        `[NotificationService] Không tìm thấy user active cho các role: ${roles.join(', ')} — bỏ qua lưu thông báo`
+      );
+      return;
+    }
+    await this.sendToMultipleUsers([...seen], dto);
   }
 
   /**

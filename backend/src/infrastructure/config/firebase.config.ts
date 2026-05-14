@@ -27,7 +27,7 @@ const initializeFirebase = (): admin.app.App => {
     const app = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
       databaseURL: process.env.FIREBASE_DATABASE_URL,
-      storageBucket: `${process.env.FIREBASE_PROJECT_ID}.appspot.com`,
+      storageBucket: `${process.env.FIREBASE_PROJECT_ID}.firebasestorage.app`,
     });
 
     console.log('✅ Firebase Admin SDK initialized successfully');
@@ -45,7 +45,7 @@ const firebaseApp = initializeFirebase();
 export const db = admin.firestore();
 
 // Export Firebase Storage bucket
-export const bucket = admin.storage().bucket(`${process.env.FIREBASE_PROJECT_ID}.appspot.com`);
+export const bucket = admin.storage().bucket(`${process.env.FIREBASE_PROJECT_ID}.firebasestorage.app`);
 
 // Export Firebase Admin
 export const firebaseAdmin = admin;

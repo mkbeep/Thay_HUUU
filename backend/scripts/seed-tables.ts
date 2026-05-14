@@ -1,16 +1,16 @@
 /**
- * Seed Tables Data to Firestore
- * Run: npx ts-node scripts/seed-tables.ts
+ * Seed bàn vào collection `dining_table` (schema backend / admin).
+ * Chạy: npm run seed:tables
+ *
+ * Xóa toàn bộ `dining_table` + `table_session` trước khi ghi lại (phù hợp Firebase mới).
  */
 
 import * as admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-// Initialize Firebase Admin
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -23,89 +23,77 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-interface TableData {
-  tableNumber: number;
+async function deleteCollection(collName: string) {
+  const snap = await db.collection(collName).get();
+  if (snap.empty) return;
+  let batch = db.batch();
+  let n = 0;
+  for (const doc of snap.docs) {
+    batch.delete(doc.ref);
+    n++;
+    if (n >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+  console.log(`   🗑  Đã xóa collection: ${collName} (${snap.size} doc)`);
+}
+
+const TABLES: Array<{
+  table_number: string;
   capacity: number;
   status: 'available' | 'occupied' | 'reserved' | 'cleaning';
   location: string;
-  qrCode: string;
-  currentSessionId: string | null;
-  createdAt: admin.firestore.Timestamp;
-  updatedAt: admin.firestore.Timestamp;
-}
-
-const tables: Omit<TableData, 'createdAt' | 'updatedAt'>[] = [
-  // Tầng 1 - Khu A (Bàn nhỏ 2-4 người)
-  { tableNumber: 1, capacity: 2, status: 'available', location: 'Tầng 1 - Khu A', qrCode: 'restaurant://table/1', currentSessionId: null },
-  { tableNumber: 2, capacity: 2, status: 'available', location: 'Tầng 1 - Khu A', qrCode: 'restaurant://table/2', currentSessionId: null },
-  { tableNumber: 3, capacity: 4, status: 'available', location: 'Tầng 1 - Khu A', qrCode: 'restaurant://table/3', currentSessionId: null },
-  { tableNumber: 4, capacity: 4, status: 'available', location: 'Tầng 1 - Khu A', qrCode: 'restaurant://table/4', currentSessionId: null },
-  { tableNumber: 5, capacity: 4, status: 'available', location: 'Tầng 1 - Khu A', qrCode: 'restaurant://table/5', currentSessionId: null },
-
-  // Tầng 1 - Khu B (Bàn trung 4-6 người)
-  { tableNumber: 6, capacity: 4, status: 'available', location: 'Tầng 1 - Khu B', qrCode: 'restaurant://table/6', currentSessionId: null },
-  { tableNumber: 7, capacity: 6, status: 'available', location: 'Tầng 1 - Khu B', qrCode: 'restaurant://table/7', currentSessionId: null },
-  { tableNumber: 8, capacity: 6, status: 'available', location: 'Tầng 1 - Khu B', qrCode: 'restaurant://table/8', currentSessionId: null },
-  { tableNumber: 9, capacity: 6, status: 'available', location: 'Tầng 1 - Khu B', qrCode: 'restaurant://table/9', currentSessionId: null },
-  { tableNumber: 10, capacity: 4, status: 'available', location: 'Tầng 1 - Khu B', qrCode: 'restaurant://table/10', currentSessionId: null },
-
-  // Tầng 2 - Khu VIP (Bàn lớn 6-10 người)
-  { tableNumber: 11, capacity: 8, status: 'available', location: 'Tầng 2 - VIP', qrCode: 'restaurant://table/11', currentSessionId: null },
-  { tableNumber: 12, capacity: 8, status: 'available', location: 'Tầng 2 - VIP', qrCode: 'restaurant://table/12', currentSessionId: null },
-  { tableNumber: 13, capacity: 10, status: 'available', location: 'Tầng 2 - VIP', qrCode: 'restaurant://table/13', currentSessionId: null },
-  { tableNumber: 14, capacity: 10, status: 'available', location: 'Tầng 2 - VIP', qrCode: 'restaurant://table/14', currentSessionId: null },
-  { tableNumber: 15, capacity: 12, status: 'available', location: 'Tầng 2 - VIP', qrCode: 'restaurant://table/15', currentSessionId: null },
-
-  // Tầng 2 - Khu ngoài trời
-  { tableNumber: 16, capacity: 4, status: 'available', location: 'Tầng 2 - Ngoài trời', qrCode: 'restaurant://table/16', currentSessionId: null },
-  { tableNumber: 17, capacity: 4, status: 'available', location: 'Tầng 2 - Ngoài trời', qrCode: 'restaurant://table/17', currentSessionId: null },
-  { tableNumber: 18, capacity: 6, status: 'available', location: 'Tầng 2 - Ngoài trời', qrCode: 'restaurant://table/18', currentSessionId: null },
-  { tableNumber: 19, capacity: 6, status: 'available', location: 'Tầng 2 - Ngoài trời', qrCode: 'restaurant://table/19', currentSessionId: null },
-  { tableNumber: 20, capacity: 8, status: 'available', location: 'Tầng 2 - Ngoài trời', qrCode: 'restaurant://table/20', currentSessionId: null },
+}> = [
+  { table_number: '1', capacity: 2, status: 'available', location: 'Tầng 1 - Khu A' },
+  { table_number: '2', capacity: 2, status: 'available', location: 'Tầng 1 - Khu A' },
+  { table_number: '3', capacity: 4, status: 'available', location: 'Tầng 1 - Khu A' },
+  { table_number: '4', capacity: 4, status: 'available', location: 'Tầng 1 - Khu A' },
+  { table_number: '5', capacity: 4, status: 'available', location: 'Tầng 1 - Khu A' },
+  { table_number: '6', capacity: 4, status: 'available', location: 'Tầng 1 - Khu B' },
+  { table_number: '7', capacity: 6, status: 'available', location: 'Tầng 1 - Khu B' },
+  { table_number: '8', capacity: 6, status: 'available', location: 'Tầng 1 - Khu B' },
+  { table_number: '9', capacity: 6, status: 'available', location: 'Tầng 1 - Khu B' },
+  { table_number: '10', capacity: 4, status: 'available', location: 'Tầng 1 - Khu B' },
+  { table_number: '11', capacity: 8, status: 'available', location: 'Tầng 2 - VIP' },
+  { table_number: '12', capacity: 8, status: 'available', location: 'Tầng 2 - VIP' },
+  { table_number: '13', capacity: 10, status: 'available', location: 'Tầng 2 - VIP' },
+  { table_number: '14', capacity: 10, status: 'available', location: 'Tầng 2 - VIP' },
+  { table_number: '15', capacity: 12, status: 'available', location: 'Tầng 2 - VIP' },
+  { table_number: '16', capacity: 4, status: 'available', location: 'Tầng 2 - Ngoài trời' },
+  { table_number: '17', capacity: 4, status: 'available', location: 'Tầng 2 - Ngoài trời' },
+  { table_number: '18', capacity: 6, status: 'available', location: 'Tầng 2 - Ngoài trời' },
+  { table_number: '19', capacity: 6, status: 'available', location: 'Tầng 2 - Ngoài trời' },
+  { table_number: '20', capacity: 8, status: 'available', location: 'Tầng 2 - Ngoài trời' },
 ];
 
 async function seedTables() {
-  console.log('🌱 Starting to seed tables...');
-  
-  const batch = db.batch();
+  console.log('🌱 Seed dining_table (20 bàn)...\n');
+
+  await deleteCollection('table_session');
+  await deleteCollection('dining_table');
+
   const now = admin.firestore.Timestamp.now();
-
-  for (const table of tables) {
-    // Use tableNumber as document ID for easy lookup
-    const docRef = db.collection('dining_table').doc(`table${table.tableNumber}`);
-    
-    const tableData: TableData = {
-      ...table,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    batch.set(docRef, tableData);
-    console.log(`✅ Added table ${table.tableNumber} (${table.location})`);
+  for (const t of TABLES) {
+    await db.collection('dining_table').add({
+      table_number: t.table_number,
+      capacity: t.capacity,
+      status: t.status,
+      location: t.location,
+      created_at: now,
+      updated_at: now,
+    });
+    console.log(`   ✅ Bàn ${t.table_number} — ${t.location}`);
   }
 
-  try {
-    await batch.commit();
-    console.log('\n🎉 Successfully seeded all tables!');
-    console.log(`📊 Total tables created: ${tables.length}`);
-    console.log('\n📋 Summary:');
-    console.log(`   - Tầng 1 Khu A: 5 bàn (2-4 người)`);
-    console.log(`   - Tầng 1 Khu B: 5 bàn (4-6 người)`);
-    console.log(`   - Tầng 2 VIP: 5 bàn (8-12 người)`);
-    console.log(`   - Tầng 2 Ngoài trời: 5 bàn (4-8 người)`);
-  } catch (error) {
-    console.error('❌ Error seeding tables:', error);
-    throw error;
-  }
+  console.log(`\n🎉 Đã tạo ${TABLES.length} bàn (table_number dùng cho API & QR).`);
 }
 
-// Run the seed function
 seedTables()
-  .then(() => {
-    console.log('\n✨ Seed completed successfully!');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('\n💥 Seed failed:', error);
+  .then(() => process.exit(0))
+  .catch((e) => {
+    console.error(e);
     process.exit(1);
   });

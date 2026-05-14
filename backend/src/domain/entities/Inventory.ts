@@ -22,6 +22,8 @@ export interface Inventory {
   reorder_quantity: number;
   unit_cost: number;
   supplier?: string;
+  /** ID món trong `food` (có thể nhiều món dùng cùng NL) — tách tên nguyên liệu vs tên món. */
+  linked_food_ids?: string[];
   last_restocked_at?: Date;
   created_at: Date;
   updated_at: Date;

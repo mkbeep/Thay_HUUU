@@ -22,25 +22,30 @@ function App() {
 
   // Initialize WebSocket connection when authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      const token = localStorage.getItem('token')
-      const socket = socketService.connect(token || undefined)
-      
-      // ✅ Đảm bảo join admin room
-      if (socket && socket.connected) {
-        socket.emit('join:admin')
-        console.log('👨‍💼 Joined admin room')
-      } else {
-        // Đợi kết nối xong rồi join
-        socket?.on('connect', () => {
-          socket.emit('join:admin')
-          console.log('👨‍💼 Joined admin room after connect')
-        })
-      }
-      
-      return () => {
-        // Don't disconnect on unmount, keep connection alive
-      }
+    if (!isAuthenticated) return
+
+    const token = localStorage.getItem('token')
+    const socket = socketService.connect(token || undefined)
+
+    const onNewNotification = () => {
+      window.dispatchEvent(new CustomEvent('admin:notifications:refresh'))
+    }
+    socket.on('notification:new', onNewNotification)
+
+    const onConnect = () => {
+      socket.emit('join:admin')
+      console.log('👨‍💼 Joined admin room')
+    }
+
+    if (socket.connected) {
+      onConnect()
+    } else {
+      socket.on('connect', onConnect)
+    }
+
+    return () => {
+      socket.off('notification:new', onNewNotification)
+      socket.off('connect', onConnect)
     }
   }, [isAuthenticated])
 

@@ -104,7 +104,7 @@ async function checkTables() {
     if (withQR === 0) {
       console.log('   1. Generate QR codes: npm run generate-qr');
     }
-    console.log('   2. Test API: curl http://192.168.1.7:3000/api/v1/tables/by-number/G01');
+    console.log('   2. Test API: curl http://192.168.1.2:3000/api/v1/tables/by-number/G01');
     console.log('   3. Scan QR code in mobile app');
 
   } catch (error) {

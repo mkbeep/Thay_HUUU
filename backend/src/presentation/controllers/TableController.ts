@@ -5,7 +5,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { TableRepository } from '../../infrastructure/database/repositories/TableRepository';
 import { NotFoundError } from '../../application/errors/AppError';
-import { TableStatus } from '../../domain/entities/Table';
+import { TableStatus, TableSessionCustomerCartDraft } from '../../domain/entities/Table';
 import { v4 as uuidv4 } from 'uuid';
 import { attachCustomerMenuUrl } from '../../infrastructure/utils/tableResponse';
 import { SocketManager } from '../../infrastructure/websocket/SocketManager';
@@ -157,12 +157,128 @@ export class TableController {
   };
 
   /**
+   * GET /api/v1/tables/session/:sessionId/cart-draft
+   * Giỏ nháp đồng bộ server (khôi phục sau khi xóa cache nếu cùng phiên).
+   */
+  getCartDraft = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { sessionId } = req.params;
+      const session = await this.tableRepository.findSessionById(sessionId);
+      if (!session) {
+        throw new NotFoundError('Phiên không tồn tại');
+      }
+      if (!session.is_active) {
+        res.status(200).json({
+          success: true,
+          data: null,
+          inactive: true,
+        });
+        return;
+      }
+      const raw = session.customer_cart_draft as TableSessionCustomerCartDraft | undefined;
+      const normalized = this.normalizeCartDraft(raw);
+      res.status(200).json({
+        success: true,
+        data: normalized,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * PUT /api/v1/tables/session/:sessionId/cart-draft
+   */
+  putCartDraft = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { sessionId } = req.params;
+      const session = await this.tableRepository.findSessionById(sessionId);
+      if (!session) {
+        throw new NotFoundError('Phiên không tồn tại');
+      }
+      if (!session.is_active) {
+        res.status(409).json({
+          success: false,
+          message: 'Phiên đã kết thúc, không thể lưu giỏ nháp',
+        });
+        return;
+      }
+
+      const bodyItems = req.body?.items;
+      const items = Array.isArray(bodyItems) ? bodyItems : [];
+      if (items.length > 120) {
+        res.status(400).json({ success: false, message: 'Giỏ vượt quá giới hạn' });
+        return;
+      }
+
+      const sanitized = items.map((it: Record<string, unknown>) => ({
+        id: String(it.id ?? '').slice(0, 160),
+        name: String(it.name ?? 'Món').slice(0, 240),
+        price: Number(it.price) || 0,
+        priceDisplay: String(it.priceDisplay ?? '').slice(0, 40),
+        quantity: Math.min(999, Math.max(1, Math.floor(Number(it.quantity) || 1))),
+        note: it.note != null ? String(it.note).slice(0, 600) : undefined,
+        options: it.options != null ? String(it.options).slice(0, 600) : undefined,
+        category: it.category != null ? String(it.category).slice(0, 100) : undefined,
+        image_url: typeof it.image_url === 'string' ? it.image_url.slice(0, 2500) : undefined,
+      }));
+
+      const updated_at = Number(req.body?.updated_at) || Date.now();
+      const draft: TableSessionCustomerCartDraft = { items: sanitized, updated_at };
+      await this.tableRepository.updateSessionCustomerDraft(sessionId, draft);
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã lưu giỏ nháp',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  private normalizeCartDraft(
+    raw: TableSessionCustomerCartDraft | Record<string, unknown> | undefined | null
+  ): TableSessionCustomerCartDraft | null {
+    if (!raw || typeof raw !== 'object') {
+      return null;
+    }
+    const r = raw as Record<string, unknown>;
+    let u = r.updated_at as number | { toMillis?: () => number; seconds?: number } | undefined;
+    let ms = 0;
+    if (u != null && typeof u === 'object' && typeof (u as { toMillis?: () => number }).toMillis === 'function') {
+      ms = (u as { toMillis: () => number }).toMillis();
+    } else if (u != null && typeof u === 'object' && typeof (u as { seconds?: number }).seconds === 'number') {
+      ms = (u as { seconds: number }).seconds * 1000;
+    } else {
+      ms = Number(u) || 0;
+    }
+    const arr = Array.isArray(r.items) ? r.items : [];
+    return {
+      items: arr as TableSessionCustomerCartDraft['items'],
+      updated_at: ms,
+    };
+  }
+
+  /**
    * POST /api/v1/tables/:id/session
    */
   createSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const { customer_count } = req.body;
+
+      const existing = await this.tableRepository.findActiveSessionByTableId(id);
+      if (existing) {
+        await this.tableRepository.updateStatus(id, TableStatus.OCCUPIED);
+        this.socketManager.notifyTableUpdated(id);
+        res.status(200).json({
+          success: true,
+          message: 'Đã có phiên đang hoạt động cho bàn này',
+          data: existing,
+          reused: true,
+        });
+        return;
+      }
 
       // Generate session code
       const sessionCode = uuidv4().substring(0, 8).toUpperCase();

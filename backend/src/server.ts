@@ -143,7 +143,19 @@ app.use(errorMiddleware);
 // Start server
 const PORT = config.server.port;
 
+function logHostFromBackendUrl(): string {
+  const raw = (process.env.BACKEND_URL || '').trim();
+  if (!raw) return 'localhost';
+  try {
+    const u = new URL(raw.startsWith('http') ? raw : `http://${raw}`);
+    return u.hostname || 'localhost';
+  } catch {
+    return 'localhost';
+  }
+}
+
 httpServer.listen(PORT, '0.0.0.0', () => {
+  const lanHost = logHostFromBackendUrl();
   console.log('='.repeat(50));
   console.log('🚀 Restaurant Management System API');
   console.log('='.repeat(50));
@@ -151,8 +163,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🌍 Environment: ${config.server.env}`);
   console.log(`📝 API Version: ${config.server.apiVersion}`);
   console.log(`🔗 Local: http://localhost:${PORT}`);
-  console.log(`🔗 Network: http://192.168.1.7:${PORT}`);
-  console.log(`🏥 Health check: http://192.168.1.7:${PORT}/api/${config.server.apiVersion}/health`);
+  console.log(`🔗 LAN host (từ BACKEND_URL): http://${lanHost}:${PORT}`);
+  console.log(`🏥 Health check: http://${lanHost}:${PORT}/api/${config.server.apiVersion}/health`);
   console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   console.log('='.repeat(50));
 });

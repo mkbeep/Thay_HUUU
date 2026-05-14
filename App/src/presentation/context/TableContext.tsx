@@ -60,15 +60,28 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
           t = await repo.getTableByNumber(parsed.tableNumber);
         }
         if (cancelled || !t) return false;
+
+        // Ưu tiên phiên đang active trên server (tránh lưu session cũ đã kết thúc),
+        // rồi mới tạo phiên mới + occupied để admin thấy ngay khi mở link/QR web.
+        let sessionIdToUse: string | null = t.currentOrderId ?? null;
+        if (!sessionIdToUse) {
+          try {
+            const session = await repo.createTableSession(t.id, 1);
+            sessionIdToUse = session?.id != null ? String(session.id) : null;
+          } catch (e) {
+            console.error('Web table URL: could not ensure table session', e);
+          }
+        }
+
         const info: TableInfo = {
           tableNumber: t.number,
           tableId: t.id,
-          sessionId: null,
+          sessionId: sessionIdToUse,
         };
         await AsyncStorage.setItem(TABLE_STORAGE_KEY, JSON.stringify(info));
         setTableNumber(t.number);
         setTableId(t.id);
-        setSessionId(null);
+        setSessionId(sessionIdToUse);
         return true;
       } catch (error) {
         console.error('Web table URL bootstrap failed:', error);
@@ -142,31 +155,37 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
       const oldTableNumber = tableNumber;
       const oldTableId = tableId;
       const oldSessionId = sessionId;
-      const isDifferentTable = oldTableNumber !== null && oldTableNumber !== newTableNumber;
+
+      let previousInfo: TableInfo | null = null;
+      try {
+        const rawPrevious = await AsyncStorage.getItem(TABLE_STORAGE_KEY);
+        if (rawPrevious) previousInfo = JSON.parse(rawPrevious) as TableInfo;
+      } catch {
+        previousInfo = null;
+      }
+
+      const sameTableAsStored =
+        previousInfo != null &&
+        String(previousInfo.tableNumber) === String(newTableNumber) &&
+        previousInfo.tableId === newTableId;
+
+      const isDifferentTable =
+        oldTableNumber !== null &&
+        (String(oldTableNumber) !== String(newTableNumber) || oldTableId !== newTableId);
       
       console.log(`🔍 setTableInfo called:`, {
         oldTableNumber,
         newTableNumber,
         isDifferentTable,
+        sameTableAsStored,
         oldTableId,
         newTableId,
         oldSessionId
       });
       
-      // ✅ XÓA TOÀN BỘ STORAGE TRƯỚC (kể cả lần đầu quét QR)
-      console.log(`🧹 Clearing ALL storage before setting new table...`);
-      
-      // XÓA localStorage và sessionStorage (chỉ trên Web)
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        try {
-          localStorage.clear();
-          sessionStorage.clear();
-          console.log('✅ Web storage cleared');
-        } catch (e) {
-          console.error('Error clearing web storage:', e);
-        }
-      }
-      
+      // Không gọi localStorage.clear() — trên web nó xóa luôn bản ghi AsyncStorage/@restaurant_table_info
+      // và làm mất session bàn khi khách mở lại trình duyệt hoặc quét lại QR.
+
       // Xóa AsyncStorage (React Native) - TRỪ TABLE_STORAGE_KEY để tránh xóa mất thông tin đang set
       try {
         const allKeys = await AsyncStorage.getAllKeys();
@@ -179,21 +198,30 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
         console.error('Error clearing AsyncStorage:', e);
       }
       
-      // Kết thúc session cũ nếu có VÀ đang đổi bàn
-      if (isDifferentTable && oldTableId && oldSessionId) {
+      // Kết thúc session bàn trước (theo storage) khi khách chọn bàn khác
+      if (
+        previousInfo?.sessionId &&
+        previousInfo.tableId &&
+        (previousInfo.tableId !== newTableId ||
+          String(previousInfo.tableNumber) !== String(newTableNumber))
+      ) {
         try {
           const tableRepo = new TableRepository();
-          await tableRepo.endTableSession(oldSessionId);
-          await tableRepo.updateTableStatus(oldTableId, TableStatus.AVAILABLE);
-          console.log(`✅ Old table ${oldTableNumber} session ended and set to available`);
+          await tableRepo.endTableSession(previousInfo.sessionId);
+          await tableRepo.updateTableStatus(previousInfo.tableId, TableStatus.AVAILABLE);
+          console.log(`✅ Ended prior table session ${previousInfo.sessionId}`);
         } catch (error) {
-          console.error('❌ Error ending old table session:', error);
+          console.error('❌ Error ending prior table session:', error);
         }
       }
       
       // ✅ TẠO TABLE SESSION VÀ CẬP NHẬT TRẠNG THÁI BÀN
-      let sessionIdToSave = newSessionId;
-      
+      let sessionIdToSave = newSessionId?.trim() || undefined;
+      if (!sessionIdToSave && sameTableAsStored && previousInfo?.sessionId) {
+        sessionIdToSave = previousInfo.sessionId;
+        console.log(`♻️ Reusing existing table session for same table: ${sessionIdToSave}`);
+      }
+
       if (!sessionIdToSave) {
         try {
           console.log(`📡 Creating table session for table ${newTableId}...`);

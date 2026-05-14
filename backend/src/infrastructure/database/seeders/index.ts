@@ -28,11 +28,13 @@ async function clearDatabase() {
     'orders',
     'order_item',
     'order_item_topping',
+    'kitchen_ticket',
+    'payment',
     'inventory',
     'inventory_transaction',
     'notification',
     'promotion',
-    'payment',
+    'support_requests',
     'settings',
   ];
 

@@ -1,58 +1,19 @@
 {
   "collectionName": "role",
-  "description": "Collection quản lý vai trò người dùng",
+  "description": "Vai trò — khớp roleSeeder.ts (role_name, permissions)",
   "fields": {
-    "id": {
+    "id": { "type": "string", "required": true, "indexed": true },
+    "role_name": {
       "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
-      "required": true,
-      "indexed": true
-    },
-    "name": {
-      "type": "string",
-      "description": "Tên vai trò",
+      "description": "Slug: admin | manager | staff | chef | customer",
       "required": true,
       "indexed": true,
-      "unique": true,
-      "enum": ["admin", "manager", "chef", "waiter", "cashier"]
-    },
-    "displayName": {
-      "type": "string",
-      "description": "Tên hiển thị tiếng Việt",
-      "required": true,
-      "indexed": false
-    },
-    "permissions": {
-      "type": "array",
-      "description": "Danh sách quyền",
-      "required": true,
-      "indexed": false,
-      "itemType": "string"
-    },
-    "description": {
-      "type": "string",
-      "description": "Mô tả vai trò",
-      "required": false,
-      "indexed": false
-    },
-    "createdAt": {
-      "type": "timestamp",
-      "description": "Thời gian tạo",
-      "required": true,
-      "indexed": false
-    },
-    "updatedAt": {
-      "type": "timestamp",
-      "description": "Thời gian cập nhật",
-      "required": true,
-      "indexed": false
-    }
-  },
-  "indexes": [
-    {
-      "fields": ["name"],
-      "queryScope": "COLLECTION",
       "unique": true
-    }
-  ]
+    },
+    "description": { "type": "string", "required": false },
+    "permissions": { "type": "array", "itemType": "string", "required": true },
+    "created_at": { "type": "timestamp", "required": true },
+    "updated_at": { "type": "timestamp", "required": true }
+  },
+  "indexes": [{ "fields": ["role_name"], "queryScope": "COLLECTION", "unique": true }]
 }

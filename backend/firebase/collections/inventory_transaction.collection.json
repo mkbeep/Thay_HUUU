@@ -1,0 +1,24 @@
+{
+  "collectionName": "inventory_transaction",
+  "description": "Lịch sử nhập/xuất kho — khớp InventoryRepository (collection inventory_transaction)",
+  "fields": {
+    "id": { "type": "string", "required": true, "indexed": true },
+    "inventory_id": { "type": "string", "description": "FK → inventory.id", "required": true, "indexed": true },
+    "transaction_type": {
+      "type": "string",
+      "enum": ["in", "out", "adjustment"],
+      "required": true,
+      "indexed": true
+    },
+    "quantity": { "type": "number", "required": true },
+    "unit_cost": { "type": "number", "required": false },
+    "reference_id": { "type": "string", "description": "Tham chiếu đơn hàng / phiếu", "required": false },
+    "notes": { "type": "string", "required": false },
+    "created_by": { "type": "string", "description": "users.id", "required": true },
+    "created_at": { "type": "timestamp", "required": true, "indexed": true }
+  },
+  "indexes": [
+    { "fields": ["inventory_id", "created_at"], "queryScope": "COLLECTION" },
+    { "fields": ["transaction_type", "created_at"], "queryScope": "COLLECTION" }
+  ]
+}

@@ -1,97 +1,32 @@
 {
   "collectionName": "payment",
-  "description": "Collection quản lý thanh toán",
+  "description": "Thanh toán tách bảng (nếu dùng) — khớp domain Payment.ts; hiện flow QR có thể chỉ cập nhật orders.payment_*",
   "fields": {
-    "id": {
+    "id": { "type": "string", "required": true, "indexed": true },
+    "order_id": { "type": "string", "description": "FK → orders.id", "required": true, "indexed": true },
+    "payment_method": {
       "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
+      "enum": ["cash", "credit_card", "debit_card", "mobile_payment", "bank_transfer", "qr"],
       "required": true,
       "indexed": true
     },
-    "orderId": {
-      "type": "string",
-      "description": "ID đơn hàng (reference to orders)",
-      "required": true,
-      "indexed": true
-    },
-    "amount": {
-      "type": "number",
-      "description": "Số tiền thanh toán (VNĐ)",
-      "required": true,
-      "indexed": false
-    },
-    "method": {
-      "type": "string",
-      "description": "Phương thức thanh toán",
-      "required": true,
-      "indexed": true,
-      "enum": ["cash", "card", "momo", "zalopay", "banking"]
-    },
+    "amount": { "type": "number", "required": true },
     "status": {
       "type": "string",
-      "description": "Trạng thái thanh toán",
+      "enum": ["pending", "processing", "completed", "failed", "refunded"],
       "required": true,
       "indexed": true,
-      "enum": ["pending", "completed", "failed", "refunded"],
       "default": "pending"
     },
-    "paidAt": {
-      "type": "timestamp",
-      "description": "Thời gian thanh toán thành công",
-      "required": false,
-      "indexed": true
-    },
-    "processedBy": {
-      "type": "string",
-      "description": "ID nhân viên xử lý (reference to users)",
-      "required": false,
-      "indexed": true
-    },
-    "transactionCode": {
-      "type": "string",
-      "description": "Mã giao dịch từ cổng thanh toán",
-      "required": false,
-      "indexed": true
-    },
-    "note": {
-      "type": "string",
-      "description": "Ghi chú thanh toán",
-      "required": false,
-      "indexed": false
-    },
-    "createdAt": {
-      "type": "timestamp",
-      "description": "Thời gian tạo",
-      "required": true,
-      "indexed": true
-    },
-    "updatedAt": {
-      "type": "timestamp",
-      "description": "Thời gian cập nhật",
-      "required": true,
-      "indexed": false
-    }
+    "transaction_id": { "type": "string", "required": false, "indexed": true },
+    "payment_details": { "type": "map", "required": false },
+    "processed_by": { "type": "string", "description": "FK → users", "required": false },
+    "processed_at": { "type": "timestamp", "required": false },
+    "created_at": { "type": "timestamp", "required": true, "indexed": true },
+    "updated_at": { "type": "timestamp", "required": true }
   },
   "indexes": [
-    {
-      "fields": ["orderId", "status"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["status", "createdAt"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["method", "paidAt"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["transactionCode"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["processedBy", "paidAt"],
-      "queryScope": "COLLECTION"
-    }
+    { "fields": ["order_id", "status"], "queryScope": "COLLECTION" },
+    { "fields": ["status", "created_at"], "queryScope": "COLLECTION" }
   ]
 }

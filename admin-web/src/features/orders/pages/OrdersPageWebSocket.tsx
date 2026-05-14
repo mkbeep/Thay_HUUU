@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { useSearchParams } from 'react-router-dom'
-import { CheckCircle, ChefHat, Clock, MessageSquare, Wifi, WifiOff, XCircle } from 'lucide-react'
+import { Armchair, CheckCircle, ChefHat, Clock, MessageSquare, Wifi, WifiOff, XCircle } from 'lucide-react'
 import { useWebSocket } from '../../../hooks/useWebSocket'
+import { formatOrderTableBadgeLine } from '../utils/orderTableBadge'
 
 type KitchenStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served' | 'cancelled'
 type PaymentStatus = 'unpaid' | 'payment_pending_confirmation' | 'paid'
@@ -19,6 +20,7 @@ interface ApiOrder {
   id: string
   order_number: string
   table_session_id?: string
+  table_display_label?: string
   status: KitchenStatus
   payment_status?: PaymentStatus
   notes?: string
@@ -86,6 +88,7 @@ function mergeOrder(prev: ApiOrder, incoming: ApiOrder): ApiOrder {
     notes: incoming.notes ?? prev.notes,
     order_number: incoming.order_number || prev.order_number,
     table_session_id: incoming.table_session_id ?? prev.table_session_id,
+    table_display_label: incoming.table_display_label ?? prev.table_display_label,
     created_at: (incoming.created_at as any) ?? prev.created_at,
   }
 }
@@ -376,9 +379,14 @@ export default function OrdersPageWebSocket() {
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex-1 min-w-0">
             <div className="text-xs font-bold text-[#AD2C00] mb-1 truncate">{order.order_number || order.id}</div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1">
-              <span className="text-xs font-medium text-indigo-600">Bàn</span>
-              <span className="text-sm font-bold text-indigo-800">{order.table_session_id || '—'}</span>
+            <div
+              className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1"
+              title={order.table_session_id ? `Phiên: ${order.table_session_id}` : undefined}
+            >
+              <Armchair className="h-3.5 w-3.5 shrink-0 text-indigo-600" aria-hidden />
+              <span className="text-sm font-semibold text-indigo-900 tabular-nums">
+                {formatOrderTableBadgeLine(order.table_display_label, order.table_session_id)}
+              </span>
             </div>
           </div>
           <div className="text-right shrink-0">

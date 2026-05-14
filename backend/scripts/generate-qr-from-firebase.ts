@@ -58,7 +58,7 @@ async function getTablesFromFirebase(): Promise<TableData[]> {
   console.log('📡 Fetching tables from Firebase...');
   
   try {
-    const snapshot = await db.collection('tables').get();
+    const snapshot = await db.collection('dining_table').get();
     console.log(`📊 Snapshot size: ${snapshot.size}`);
     console.log(`📊 Snapshot empty: ${snapshot.empty}`);
     

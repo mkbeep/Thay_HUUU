@@ -1,93 +1,33 @@
 {
   "collectionName": "inventory",
-  "description": "Collection quản lý kho nguyên liệu",
+  "description": "Nguyên liệu / tồn kho — khớp Inventory entity + inventorySeeder",
   "fields": {
-    "id": {
-      "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
-      "required": true,
-      "indexed": true
-    },
-    "name": {
-      "type": "string",
-      "description": "Tên nguyên liệu",
-      "required": true,
-      "indexed": true
-    },
-    "category": {
-      "type": "string",
-      "description": "Danh mục",
-      "required": true,
-      "indexed": true
-    },
+    "id": { "type": "string", "required": true, "indexed": true },
+    "item_name": { "type": "string", "required": true, "indexed": true },
+    "description": { "type": "string", "required": false },
+    "category": { "type": "string", "required": true, "indexed": true },
+    "current_quantity": { "type": "number", "required": true, "indexed": true },
     "unit": {
       "type": "string",
-      "description": "Đơn vị tính",
-      "required": true,
-      "indexed": false
+      "enum": ["kg", "g", "l", "ml", "piece", "pack"],
+      "required": true
     },
-    "currentStock": {
-      "type": "number",
-      "description": "Số lượng hiện tại",
-      "required": true,
-      "indexed": true
+    "minimum_quantity": { "type": "number", "required": true },
+    "reorder_quantity": { "type": "number", "required": true },
+    "unit_cost": { "type": "number", "required": true },
+    "supplier": { "type": "string", "required": false },
+    "linked_food_ids": {
+      "type": "array",
+      "itemType": "string",
+      "description": "Tùy chọn: id món food liên quan (tên NL ≠ tên món)",
+      "required": false
     },
-    "minStock": {
-      "type": "number",
-      "description": "Ngưỡng tồn kho tối thiểu",
-      "required": true,
-      "indexed": true
-    },
-    "estimatedDaysLeft": {
-      "type": "number",
-      "description": "Số ngày dự kiến còn lại",
-      "required": false,
-      "indexed": false
-    },
-    "lastRestocked": {
-      "type": "string",
-      "description": "Ngày nhập kho gần nhất (YYYY-MM-DD)",
-      "required": false,
-      "indexed": true
-    },
-    "supplier": {
-      "type": "string",
-      "description": "Tên nhà cung cấp",
-      "required": false,
-      "indexed": false
-    },
-    "status": {
-      "type": "string",
-      "description": "Trạng thái tồn kho",
-      "required": true,
-      "indexed": true,
-      "enum": ["in-stock", "low-stock", "out-of-stock"]
-    },
-    "createdAt": {
-      "type": "timestamp",
-      "description": "Thời gian tạo",
-      "required": true,
-      "indexed": false
-    },
-    "updatedAt": {
-      "type": "timestamp",
-      "description": "Thời gian cập nhật",
-      "required": true,
-      "indexed": false
-    }
+    "last_restocked_at": { "type": "timestamp", "required": false },
+    "created_at": { "type": "timestamp", "required": true },
+    "updated_at": { "type": "timestamp", "required": true }
   },
   "indexes": [
-    {
-      "fields": ["category", "status"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["status", "currentStock"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["name"],
-      "queryScope": "COLLECTION"
-    }
+    { "fields": ["category", "current_quantity"], "queryScope": "COLLECTION" },
+    { "fields": ["item_name"], "queryScope": "COLLECTION" }
   ]
 }

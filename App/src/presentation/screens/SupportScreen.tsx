@@ -1,108 +1,127 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   StatusBar,
-  Alert,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SupportRequestRepository } from '../../data/repositories/SupportRequestRepository';
 
-interface SupportRequest {
+interface SupportRequestRow {
   id: string;
-  tableNumber: number;
-  type: string;
+  tableNumber: string;
+  typeLabel: string;
   time: string;
-  status: 'pending' | 'confirmed' | 'completed';
-  priority: 'high' | 'normal';
+  status: string;
+  priority: string;
 }
 
 interface SupportScreenProps {
   onBack: () => void;
+  tableId?: string | null;
   tableNumber?: number | string;
 }
 
-const MOCK_REQUESTS: SupportRequest[] = [
-  {
-    id: '1',
-    tableNumber: 12,
-    type: 'Yêu cầu hỗ trợ',
-    time: '1 phút trước',
-    status: 'pending',
-    priority: 'high',
-  },
-  {
-    id: '2',
-    tableNumber: 8,
-    type: 'Gọi thanh toán',
-    time: '2 phút trước',
-    status: 'pending',
-    priority: 'normal',
-  },
-  {
-    id: '3',
-    tableNumber: 24,
-    type: 'Yêu cầu thêm nước',
-    time: '5 phút trước',
-    status: 'pending',
-    priority: 'normal',
-  },
-  {
-    id: '4',
-    tableNumber: 15,
-    type: 'Đặt món thêm',
-    time: '12 phút trước',
-    status: 'confirmed',
-    priority: 'normal',
-  },
-  {
-    id: '5',
-    tableNumber: 3,
-    type: 'Đổi khăn trải bàn',
-    time: '18 phút trước',
-    status: 'pending',
-    priority: 'normal',
-  },
-];
+const SUPPORT_TYPE_LABELS: Record<string, string> = {
+  'call-staff': 'Gọi nhân viên',
+  'add-water': 'Thêm nước',
+  'add-tissue': 'Thêm khăn giấy',
+  'add-utensils': 'Thêm dụng cụ ăn',
+  'change-gas': 'Đổi bình gas',
+  'clean-table': 'Dọn bàn',
+  'ask-question': 'Hỏi đáp',
+  'report-issue': 'Báo sự cố',
+};
+
+function labelForSupportType(type: string): string {
+  return SUPPORT_TYPE_LABELS[type] || type;
+}
+
+function formatRelativeVi(date: Date): string {
+  const sec = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (sec < 45) return 'Vừa xong';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} phút trước`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} giờ trước`;
+  return date.toLocaleString('vi-VN');
+}
+
+function mapApiToRow(raw: any): SupportRequestRow {
+  const createdRaw = raw.created_at;
+  const created =
+    createdRaw instanceof Date
+      ? createdRaw
+      : typeof createdRaw === 'string' || typeof createdRaw === 'number'
+        ? new Date(createdRaw)
+        : new Date();
+  return {
+    id: String(raw.id),
+    tableNumber: String(raw.table_number ?? ''),
+    typeLabel: labelForSupportType(String(raw.type ?? '')),
+    time: formatRelativeVi(created),
+    status: String(raw.status ?? 'pending'),
+    priority: String(raw.priority ?? 'normal'),
+  };
+}
 
 export default function SupportScreen({
   onBack,
-  tableNumber = 12,
+  tableId,
+  tableNumber,
 }: SupportScreenProps) {
-  const [requests, setRequests] = useState<SupportRequest[]>(MOCK_REQUESTS);
+  const [requests, setRequests] = useState<SupportRequestRow[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadHint, setLoadHint] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!tableId) {
+      setRequests([]);
+      setLoadHint('Chưa xác định bàn — hãy quét mã QR bàn để xem yêu cầu.');
+      return;
+    }
+    setLoadHint(null);
+    try {
+      const repo = new SupportRequestRepository();
+      const list = await repo.getSupportRequestsByTable(tableId);
+      setRequests(Array.isArray(list) ? list.map(mapApiToRow) : []);
+    } catch {
+      setLoadHint('Không tải được danh sách. Kéo xuống để thử lại.');
+      setRequests([]);
+    }
+  }, [tableId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   const pendingRequests = requests.filter((r) => r.status === 'pending');
   const urgentRequest = requests.find(
-    (r) => r.tableNumber === tableNumber && r.status === 'pending'
+    (r) =>
+      r.status === 'pending' &&
+      tableNumber != null &&
+      String(r.tableNumber) === String(tableNumber)
   );
-
-  const handleConfirm = (requestId: string) => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === requestId ? { ...r, status: 'confirmed' as const } : r
-      )
-    );
-    Alert.alert('Đã xác nhận', 'Yêu cầu đã được xác nhận');
-  };
-
-  const handleComplete = (requestId: string) => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === requestId ? { ...r, status: 'completed' as const } : r
-      )
-    );
-    Alert.alert('Hoàn thành', 'Yêu cầu đã được xử lý xong');
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'confirmed':
         return '#006A35';
       case 'completed':
+        return '#78716C';
+      case 'in_progress':
+        return '#B45309';
+      case 'cancelled':
         return '#78716C';
       default:
         return '#AD2C00';
@@ -115,6 +134,10 @@ export default function SupportScreen({
         return 'Đã nhận';
       case 'completed':
         return 'Hoàn thành';
+      case 'in_progress':
+        return 'Đang xử lý';
+      case 'cancelled':
+        return 'Đã hủy';
       default:
         return 'Chờ xử lý';
     }
@@ -131,18 +154,17 @@ export default function SupportScreen({
           <Text style={styles.headerTitle}>Gourmet Tech</Text>
         </View>
         <View style={styles.headerRight}>
-          <View style={styles.notificationBadge}>
-            <Ionicons name="notifications" size={20} color="#5F5E5E" />
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>5</Text>
+            <View style={styles.notificationBadge}>
+              <Ionicons name="notifications" size={20} color="#5F5E5E" />
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {pendingRequests.length > 99 ? '99+' : String(pendingRequests.length)}
+                </Text>
+              </View>
             </View>
+          <View style={styles.avatarPlaceholder}>
+            <Ionicons name="person" size={22} color="#78716C" />
           </View>
-          <Image
-            source={{
-              uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDxQ7Yd3TDkYN2TAzLPSBO_uza7AnBmHy5el7LYmGBvtociCHqKt2elN2tE3X4SEQQcWZxSGRFiOvqMgM0GQhd0YnYk4ftbyTnl-5kOaNFm4LjKvGepPn0I8VmAmimBUeXAaMv7HXnpH9WY8nkBHkzPY6_kreFRepp9nfGP6_EBOnI6XLn1d7Q9gNVRRqvR3QYo9Lrbx7qkaDmRsUHxTCy7sr7MPIA_kQYDcqUwVZEpjzzcRNzSbExzprd2dSZYk8B2M-26XULJBg',
-            }}
-            style={styles.avatar}
-          />
         </View>
       </View>
 
@@ -150,7 +172,16 @@ export default function SupportScreen({
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#AD2C00" />
+        }
       >
+        {loadHint ? (
+          <View style={styles.hintBox}>
+            <Ionicons name="information-circle-outline" size={22} color="#5F5E5E" />
+            <Text style={styles.hintText}>{loadHint}</Text>
+          </View>
+        ) : null}
         {/* Urgent Request Card */}
         {urgentRequest && (
           <View style={styles.urgentCard}>
@@ -174,30 +205,11 @@ export default function SupportScreen({
               YÊU CẦU HỖ TRỢ TẠI BÀN {urgentRequest.tableNumber}
             </Text>
 
-            <View style={styles.urgentActions}>
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={() => handleConfirm(urgentRequest.id)}
-              >
-                <Ionicons name="hand-left" size={20} color="#1C1B1B" />
-                <Text style={styles.confirmButtonText}>Xác nhận</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.completeButton}
-                onPress={() => handleComplete(urgentRequest.id)}
-                activeOpacity={0.9}
-              >
-                <LinearGradient
-                  colors={['#AD2C00', '#D83900']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.completeButtonGradient}
-                >
-                  <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                  <Text style={styles.completeButtonText}>Đã xử lý</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+            <View style={styles.urgentHintBox}>
+              <Ionicons name="people-outline" size={20} color="#1C1B1B" />
+              <Text style={styles.urgentHintText}>
+                Nhân viên đã nhận thông báo. Bạn có thể kéo xuống để làm mới trạng thái.
+              </Text>
             </View>
           </View>
         )}
@@ -228,14 +240,19 @@ export default function SupportScreen({
                     </Text>
                   </View>
                   <View style={styles.requestInfo}>
-                    <Text style={styles.requestType}>{request.type}</Text>
+                    <Text style={styles.requestType}>{request.typeLabel}</Text>
                     <View style={styles.requestTime}>
                       <Ionicons name="time" size={14} color="#5F5E5E" />
                       <Text style={styles.requestTimeText}>{request.time}</Text>
                     </View>
-                    {request.status === 'confirmed' && (
+                    {request.status !== 'pending' && (
                       <View style={styles.statusBadge}>
-                        <Text style={styles.statusBadgeText}>
+                        <Text
+                          style={[
+                            styles.statusBadgeText,
+                            { color: getStatusColor(request.status) },
+                          ]}
+                        >
                           {getStatusText(request.status)}
                         </Text>
                       </View>
@@ -264,15 +281,12 @@ export default function SupportScreen({
 
         {/* Staff Info Card */}
         <View style={styles.staffCard}>
-          <Image
-            source={{
-              uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDbjO4O_F4LhoSFBXAn3RIen91YyLf78EWYP_LCa3u-aAdKEoZ0DukWx3-9jdo4tIvs_T9pnCYd-ORT57-xl2gNp0t5_1jw-wxJnN50Gr1AReoN1y62x0PN0qUVXubYURNNhhUUlNsoaDltaDctX1oQJbjt0oiGvZD9HiMY3nvPv6k_yXVn2J_5VP3sI7z3o3ABT0Yxk1Kd0H_q3nJ8a8SPVzFdQkDMkRDKZePL8G3IpXES2sQUwW_9kpM7lRtrKKPuGpK3EP8K2g',
-            }}
-            style={styles.staffImage}
-          />
-          <View>
-            <Text style={styles.staffTitle}>Khu vực phục vụ: Tầng 1</Text>
-            <Text style={styles.staffName}>Đang trực: Nguyễn Văn A</Text>
+          <Ionicons name="headset-outline" size={40} color="#AD2C00" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.staffTitle}>Hỗ trợ nhà hàng</Text>
+            <Text style={styles.staffName}>
+              Yêu cầu của bạn được gửi tới nhân viên qua hệ thống. Kéo xuống để cập nhật trạng thái.
+            </Text>
           </View>
         </View>
 
@@ -369,12 +383,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  avatar: {
+  avatarPlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 2,
     borderColor: '#E5E2E1',
+    backgroundColor: '#F5F5F4',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
@@ -382,6 +399,21 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: 24,
     paddingTop: 24,
+  },
+  hintBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#F6F3F2',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  hintText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#44403C',
+    lineHeight: 20,
   },
   urgentCard: {
     backgroundColor: '#FFFFFF',
@@ -430,50 +462,23 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '900',
     color: '#1C1B1B',
-    marginBottom: 24,
+    marginBottom: 16,
     lineHeight: 28,
     letterSpacing: -0.5,
   },
-  urgentActions: {
+  urgentHintBox: {
     flexDirection: 'row',
-    gap: 16,
-  },
-  confirmButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#E2DFDE',
-    paddingVertical: 16,
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#F6F3F2',
+    padding: 14,
     borderRadius: 12,
   },
-  confirmButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1C1B1B',
-  },
-  completeButton: {
+  urgentHintText: {
     flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#AD2C00',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  completeButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  completeButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: 14,
+    color: '#44403C',
+    lineHeight: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -595,11 +600,6 @@ const styles = StyleSheet.create({
     gap: 16,
     backgroundColor: 'rgba(229, 226, 225, 0.5)',
     padding: 16,
-    borderRadius: 12,
-  },
-  staffImage: {
-    width: 64,
-    height: 64,
     borderRadius: 12,
   },
   staffTitle: {

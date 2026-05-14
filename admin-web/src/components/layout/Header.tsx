@@ -12,7 +12,7 @@ interface NotificationItem {
   message: string
   created_at: string
   is_read: boolean
-  data?: { order_id?: string; [key: string]: unknown }
+  data?: { order_id?: string; support_request_id?: string; [key: string]: unknown }
 }
 
 export default function Header() {
@@ -59,6 +59,15 @@ export default function Header() {
     }
   }
 
+  const markAllAsRead = async () => {
+    try {
+      await axios.patch(`${API_URL}/notifications/read-all`, {}, { headers: getAuthHeaders() })
+      await fetchNotifications()
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error)
+    }
+  }
+
   useEffect(() => {
     if (!showNotifications) return
     const handlePointerDown = (e: MouseEvent | PointerEvent) => {
@@ -73,6 +82,9 @@ export default function Header() {
 
   useEffect(() => {
     void fetchNotifications()
+
+    const onSocketRefresh = () => void fetchNotifications()
+    window.addEventListener('admin:notifications:refresh', onSocketRefresh)
     
     // Chỉ poll khi tab đang active
     const handleVisibilityChange = () => {
@@ -93,6 +105,7 @@ export default function Header() {
     return () => {
       clearInterval(timer)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('admin:notifications:refresh', onSocketRefresh)
     }
   }, [])
 
@@ -108,7 +121,9 @@ export default function Header() {
   }
 
   const handleNotificationClick = () => {
-    setShowNotifications(!showNotifications)
+    const next = !showNotifications
+    setShowNotifications(next)
+    if (next) void fetchNotifications()
     setShowUserMenu(false)
     setShowSettings(false)
   }
@@ -156,8 +171,14 @@ export default function Header() {
   const handleNotificationItemActivate = async (notif: NotificationItem) => {
     if (!notif.is_read) await markAsRead(notif.id)
 
-    const docId = notif.data?.order_id
+    const supportId = notif.data?.support_request_id
     setShowNotifications(false)
+    if (supportId && typeof supportId === 'string') {
+      navigate('/tables')
+      return
+    }
+
+    const docId = notif.data?.order_id
     if (docId && typeof docId === 'string') {
       navigate(`/orders?orderId=${encodeURIComponent(docId)}`)
       return
@@ -212,7 +233,11 @@ export default function Header() {
               className="p-2 text-stone-500 hover:bg-stone-100 rounded-full transition-colors relative"
             >
               <Bell className="w-5 h-5" />
-              {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-[#AD2C00] rounded-full"></span>}
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[1.125rem] h-[1.125rem] px-1 flex items-center justify-center bg-[#AD2C00] text-white text-[10px] font-bold rounded-full">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
 
             {showNotifications && (
@@ -254,8 +279,14 @@ export default function Header() {
                   ))}
                 </div>
                 <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
-                  <button className="text-sm font-semibold text-[#AD2C00] hover:underline w-full text-center">
-                    {unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : 'Tất cả đã đọc'}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (unreadCount > 0) void markAllAsRead()
+                    }}
+                    className="text-sm font-semibold text-[#AD2C00] hover:underline w-full text-center"
+                  >
+                    {unreadCount > 0 ? `Đánh dấu tất cả đã đọc (${unreadCount})` : 'Tất cả đã đọc'}
                   </button>
                 </div>
               </div>

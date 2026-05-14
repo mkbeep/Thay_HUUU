@@ -1,0 +1,47 @@
+{
+  "collectionName": "support_requests",
+  "description": "Yêu cầu hỗ trợ từ bàn — khớp SupportRequestRepository + domain SupportRequest",
+  "fields": {
+    "id": { "type": "string", "required": true, "indexed": true },
+    "table_id": { "type": "string", "description": "FK → dining_table.id", "required": true, "indexed": true },
+    "table_number": { "type": "string", "required": true, "indexed": false },
+    "type": {
+      "type": "string",
+      "enum": [
+        "call-staff",
+        "add-water",
+        "add-tissue",
+        "add-utensils",
+        "change-gas",
+        "clean-table",
+        "ask-question",
+        "report-issue"
+      ],
+      "required": true,
+      "indexed": true
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "confirmed", "in_progress", "completed", "cancelled"],
+      "required": true,
+      "indexed": true,
+      "default": "pending"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "urgent"],
+      "required": true,
+      "default": "normal"
+    },
+    "note": { "type": "string", "required": false },
+    "assigned_staff_id": { "type": "string", "description": "FK → users", "required": false },
+    "created_at": { "type": "timestamp", "required": true, "indexed": true },
+    "updated_at": { "type": "timestamp", "required": true },
+    "confirmed_at": { "type": "timestamp", "required": false },
+    "completed_at": { "type": "timestamp", "required": false }
+  },
+  "indexes": [
+    { "fields": ["status", "created_at"], "queryScope": "COLLECTION" },
+    { "fields": ["table_id", "status"], "queryScope": "COLLECTION" }
+  ]
+}

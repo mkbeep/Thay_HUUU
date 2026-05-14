@@ -1,141 +1,31 @@
 {
   "collectionName": "promotion",
-  "description": "Collection quản lý chương trình khuyến mãi",
+  "description": "Khuyến mãi — khớp promotionSeeder.ts (snake_case)",
   "fields": {
-    "id": {
-      "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
-      "required": true,
-      "indexed": true
-    },
-    "code": {
-      "type": "string",
-      "description": "Mã khuyến mãi (unique)",
-      "required": true,
-      "indexed": true,
-      "unique": true
-    },
-    "name": {
-      "type": "string",
-      "description": "Tên chương trình",
-      "required": true,
-      "indexed": false
-    },
-    "description": {
-      "type": "string",
-      "description": "Mô tả chi tiết",
-      "required": true,
-      "indexed": false
-    },
+    "id": { "type": "string", "required": true, "indexed": true },
+    "code": { "type": "string", "required": true, "indexed": true, "unique": true },
+    "name": { "type": "string", "required": true },
+    "description": { "type": "string", "required": true },
     "type": {
       "type": "string",
-      "description": "Loại khuyến mãi",
-      "required": true,
-      "indexed": true,
-      "enum": ["percentage", "fixed_amount", "buy_x_get_y", "free_item", "combo"]
-    },
-    "discountValue": {
-      "type": "number",
-      "description": "Giá trị giảm (% hoặc số tiền)",
-      "required": true,
-      "indexed": false
-    },
-    "maxDiscount": {
-      "type": "number",
-      "description": "Giảm giá tối đa (VNĐ)",
-      "required": false,
-      "indexed": false
-    },
-    "minOrderAmount": {
-      "type": "number",
-      "description": "Giá trị đơn hàng tối thiểu",
-      "required": false,
-      "indexed": false
-    },
-    "applicableFoodIds": {
-      "type": "array",
-      "description": "Danh sách ID món áp dụng (references to food)",
-      "required": false,
-      "indexed": false,
-      "itemType": "string"
-    },
-    "applicableCategories": {
-      "type": "array",
-      "description": "Danh mục món áp dụng",
-      "required": false,
-      "indexed": false,
-      "itemType": "string"
-    },
-    "startDate": {
-      "type": "timestamp",
-      "description": "Ngày bắt đầu",
+      "enum": ["percentage", "fixed_amount", "buy_x_get_y", "free_item", "combo"],
       "required": true,
       "indexed": true
     },
-    "endDate": {
-      "type": "timestamp",
-      "description": "Ngày kết thúc",
-      "required": true,
-      "indexed": true
-    },
-    "usageLimit": {
-      "type": "number",
-      "description": "Số lần sử dụng tối đa",
-      "required": false,
-      "indexed": false
-    },
-    "usageCount": {
-      "type": "number",
-      "description": "Số lần đã sử dụng",
-      "required": true,
-      "indexed": false,
-      "default": 0
-    },
-    "usageLimitPerCustomer": {
-      "type": "number",
-      "description": "Giới hạn sử dụng mỗi khách",
-      "required": false,
-      "indexed": false
-    },
-    "isActive": {
-      "type": "boolean",
-      "description": "Trạng thái kích hoạt",
-      "required": true,
-      "indexed": true,
-      "default": true
-    },
-    "createdBy": {
-      "type": "string",
-      "description": "ID người tạo (reference to users)",
-      "required": true,
-      "indexed": false
-    },
-    "createdAt": {
-      "type": "timestamp",
-      "description": "Thời gian tạo",
-      "required": true,
-      "indexed": false
-    },
-    "updatedAt": {
-      "type": "timestamp",
-      "description": "Thời gian cập nhật",
-      "required": true,
-      "indexed": false
-    }
+    "discount_value": { "type": "number", "required": true },
+    "min_order_amount": { "type": "number", "required": false },
+    "max_discount_amount": { "type": "number", "required": false },
+    "start_date": { "type": "timestamp", "required": true, "indexed": true },
+    "end_date": { "type": "timestamp", "required": true, "indexed": true },
+    "usage_limit": { "type": "number", "required": false },
+    "usage_count": { "type": "number", "required": true, "default": 0 },
+    "is_active": { "type": "boolean", "required": true, "indexed": true, "default": true },
+    "created_at": { "type": "timestamp", "required": true },
+    "updated_at": { "type": "timestamp", "required": true }
   },
   "indexes": [
-    {
-      "fields": ["code"],
-      "queryScope": "COLLECTION",
-      "unique": true
-    },
-    {
-      "fields": ["isActive", "startDate", "endDate"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["type", "isActive"],
-      "queryScope": "COLLECTION"
-    }
+    { "fields": ["code"], "queryScope": "COLLECTION", "unique": true },
+    { "fields": ["is_active", "start_date", "end_date"], "queryScope": "COLLECTION" },
+    { "fields": ["type", "is_active"], "queryScope": "COLLECTION" }
   ]
 }

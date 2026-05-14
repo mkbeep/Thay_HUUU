@@ -29,12 +29,15 @@ interface CartScreenProps {
   onBack: () => void;
   onSubmitOrder: () => void;
   tableNumber?: string | number;
+  /** Session bàn trên server — ưu tiên dùng cho table_session_id */
+  tableSessionId?: string | null;
 }
 
 export default function CartScreen({
   onBack,
   onSubmitOrder,
   tableNumber,
+  tableSessionId,
 }: CartScreenProps) {
   const { items, removeItem, updateQuantity, getTotal, getTax, getServiceFee, getGrandTotal, clearCart } = useCart();
   const { createOrder } = useOrder();
@@ -107,7 +110,7 @@ export default function CartScreen({
     onSubmitOrder();
     
     // Gửi API ở background (không đợi)
-    createOrder(items, total, tableNumber).then(result => {
+    createOrder(items, total, tableNumber, tableSessionId).then(result => {
       if (!result.success) {
         console.error('❌ Order submission failed:', result.error);
         // Có thể thêm toast notification ở đây nếu cần

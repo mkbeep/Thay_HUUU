@@ -28,10 +28,9 @@ export class SupportRequestRepository {
 
   async getSupportRequestsByTable(tableId: string): Promise<any[]> {
     try {
-      const response = await apiClient.get('/support-requests', {
-        params: { table_id: tableId },
-      });
-      return response.data.data;
+      const enc = encodeURIComponent(tableId);
+      const response = await apiClient.get(`/support-requests/table/${enc}`);
+      return response.data.data ?? [];
     } catch (error) {
       console.error('Error fetching support requests:', error);
       return [];

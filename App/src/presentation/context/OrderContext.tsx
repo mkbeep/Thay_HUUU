@@ -5,12 +5,15 @@ import React, {
   ReactNode,
   useEffect,
   useMemo,
+  useCallback,
+  useRef,
 } from 'react';
 import { Alert } from 'react-native';
 import { Order as DomainOrder, OrderStatus as DomainOrderStatus } from '../../domain/models/Order';
 import { OrderService } from '../../business/services/OrderService';
 import axios from 'axios';
 import { getApiBaseUrl } from '../../utils/apiBaseUrl';
+import { fixCloudinaryMenuFoodImageUrl } from '../../utils/cloudinaryMenuImageFixes';
 import { socketService } from '../../services/socketService';
 
 // Presentation layer status mapping
@@ -40,14 +43,26 @@ export interface Order {
   createdAt: Date;
   updatedAt: Date;
   tableNumber: string | number;
+  /** Giá trị gửi API/WebSocket (session Firestore hoặc legacy: số bàn) */
+  tableSessionId?: string;
 }
 
 interface OrderContextType {
   orders: Order[];
   currentOrder: Order | null;
-  createOrder: (items: OrderItem[], total: number, tableNumber: string | number) => Promise<{ success: boolean; error?: any }>;
+  createOrder: (
+    items: OrderItem[],
+    total: number,
+    tableNumber: string | number,
+    tableSessionId?: string | null
+  ) => Promise<{ success: boolean; error?: any }>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  requestPaymentForServedOrders: () => boolean;
+  requestPaymentForServedOrders: () => Promise<boolean>;
+  hydrateOrdersFromServer: (
+    tableSessionKey: string,
+    displayTableNumber?: string | number | null
+  ) => Promise<void>;
+  clearLocalOrders: () => void;
   markPaymentConfirmed: () => void;
   hasPendingPaymentConfirmation: () => boolean;
   isTableFullyPaid: () => boolean;
@@ -57,6 +72,61 @@ interface OrderContextType {
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
+
+const FALLBACK_MENU_IMAGE = require('../../../assets/images/menu/appetizers/nem-ran.jpg');
+
+function mapPublicApiOrderToOrder(row: any, displayTableNumber: string | number): Order {
+  const statusMap: Record<string, OrderStatus> = {
+    pending: 'pending',
+    confirmed: 'confirmed',
+    preparing: 'cooking',
+    ready: 'ready',
+    served: 'served',
+    completed: 'served',
+    cancelled: 'cancelled',
+  };
+  const paymentMap: Record<string, PaymentStatus> = {
+    unpaid: 'unpaid',
+    payment_pending_confirmation: 'pending_confirmation',
+    paid: 'paid',
+  };
+
+  const items: OrderItem[] = (row.items || []).map((it: any) => {
+    const food = it.food || {};
+    const imgUrlRaw =
+      typeof food.image_url === 'string'
+        ? food.image_url
+        : typeof food.photo_url === 'string'
+          ? food.photo_url
+          : '';
+    const imgUrl = imgUrlRaw ? fixCloudinaryMenuFoodImageUrl(imgUrlRaw.trim()) : '';
+    const price = Number(it.unit_price) || 0;
+    return {
+      id: String(it.food_id || food.id || it.id),
+      name: String(food.name || 'Món'),
+      price,
+      priceDisplay: `${Math.round(price / 1000)}k`,
+      image: imgUrl ? { uri: imgUrl } : FALLBACK_MENU_IMAGE,
+      quantity: Number(it.quantity) || 0,
+      note: it.special_instructions ? String(it.special_instructions) : undefined,
+    };
+  });
+
+  const sid = row.table_session_id != null ? String(row.table_session_id) : String(displayTableNumber);
+
+  return {
+    id: String(row.id),
+    orderNumber: String(row.order_number || row.id),
+    items,
+    total: Number(row.total_amount) || 0,
+    status: statusMap[row.status] || 'pending',
+    paymentStatus: paymentMap[row.payment_status] || 'unpaid',
+    createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+    updatedAt: row.updated_at ? new Date(row.updated_at) : new Date(),
+    tableNumber: displayTableNumber,
+    tableSessionId: sid,
+  };
+}
 
 // Helper: Map domain OrderStatus to presentation OrderStatus
 const mapDomainStatusToPresentation = (domainStatus: DomainOrderStatus): OrderStatus => {
@@ -97,6 +167,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   // ✅ KHÔNG tự động restore từ localStorage - Luôn bắt đầu với danh sách đơn trống
   const [orders, setOrders] = useState<Order[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const paymentRequestInFlight = useRef(false);
   
   const orderService = new OrderService();
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
@@ -148,12 +219,23 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     return `GT-${random}`;
   };
 
-  const createOrder = async (items: OrderItem[], total: number, tableNumber: string | number): Promise<{ success: boolean; error?: any }> => {
+  const createOrder = async (
+    items: OrderItem[],
+    total: number,
+    tableNumber: string | number,
+    tableSessionId?: string | null
+  ): Promise<{ success: boolean; error?: any }> => {
+    const sessionKey =
+      tableSessionId != null && String(tableSessionId).trim() !== ''
+        ? String(tableSessionId).trim()
+        : String(tableNumber);
+
     console.log('📝 Creating order:', { 
       itemsCount: items.length, 
       total, 
       tableNumber,
-      tableNumberType: typeof tableNumber 
+      tableNumberType: typeof tableNumber,
+      sessionKey,
     });
 
     // ✅ CHỈ XÉT CÁC ĐƠN CHƯA THANH TOÁN (bỏ qua đơn đã paid)
@@ -203,6 +285,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       createdAt: new Date(),
       updatedAt: new Date(),
       tableNumber,
+      tableSessionId: sessionKey,
     };
 
     setOrders((prev) => [newOrder, ...prev]);
@@ -213,7 +296,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       .map((item) => `${item.name}: ${item.note!.trim()}`);
 
     const payload = {
-      table_session_id: String(tableNumber),
+      table_session_id: sessionKey,
       order_type: 'dine_in',
       items: itemsToOrder.map((item) => ({
         food_id: item.id,
@@ -241,6 +324,10 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
                   ...order,
                   id: serverOrder.id,
                   orderNumber: serverOrder.order_number || order.orderNumber,
+                  tableSessionId:
+                    serverOrder.table_session_id != null
+                      ? String(serverOrder.table_session_id)
+                      : order.tableSessionId,
                 }
               : order
           )
@@ -270,50 +357,53 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
-  const requestPaymentForServedOrders = (): boolean => {
-    const eligibleOrderIds = orders
-      .filter((order) => order.status === 'served' && order.paymentStatus === 'unpaid')
-      .map((order) => order.id);
+  const requestPaymentForServedOrders = async (): Promise<boolean> => {
+    if (paymentRequestInFlight.current) {
+      return false;
+    }
+    paymentRequestInFlight.current = true;
 
-    let hasEligibleOrder = false;
-    
-    // Cập nhật state local NGAY LẬP TỨC
-    setOrders((prev) =>
-      prev.map((order) => {
-        if (order.status === 'served' && order.paymentStatus === 'unpaid') {
-          hasEligibleOrder = true;
-          return {
-            ...order,
-            paymentStatus: 'pending_confirmation',
-            updatedAt: new Date(),
-          };
-        }
-        return order;
-      })
-    );
-
-    // Gửi yêu cầu thanh toán lên backend (best effort)
-    eligibleOrderIds.forEach((orderId) => {
-      axios.patch(`${apiBaseUrl}/orders/${orderId}/request-payment`, {
-        payment_method: 'qr',
-      })
-      .then(() => {
-        console.log(`✅ Payment request sent for order ${orderId}`);
-      })
-      .catch((error) => {
-        console.error(`❌ Error requesting payment for order ${orderId}:`, error?.response?.data || error.message);
-        // Rollback nếu lỗi
-        setOrders((prev) =>
-          prev.map((order) =>
-            order.id === orderId
-              ? { ...order, paymentStatus: 'unpaid', updatedAt: new Date() }
-              : order
-          )
-        );
-      });
+    let eligibleIds: string[] = [];
+    setOrders((prev) => {
+      eligibleIds = prev
+        .filter((o) => o.status === 'served' && o.paymentStatus === 'unpaid')
+        .map((o) => o.id);
+      if (eligibleIds.length === 0) return prev;
+      return prev.map((order) =>
+        eligibleIds.includes(order.id)
+          ? { ...order, paymentStatus: 'pending_confirmation' as PaymentStatus, updatedAt: new Date() }
+          : order
+      );
     });
 
-    return hasEligibleOrder;
+    if (eligibleIds.length === 0) {
+      paymentRequestInFlight.current = false;
+      return false;
+    }
+
+    try {
+      await Promise.all(
+        eligibleIds.map((orderId) =>
+          axios.patch(`${apiBaseUrl}/orders/${orderId}/request-payment`, {
+            payment_method: 'qr',
+          })
+        )
+      );
+      eligibleIds.forEach((id) => console.log(`✅ Payment request sent for order ${id}`));
+      return true;
+    } catch (error: any) {
+      console.error('❌ Error requesting payment:', error?.response?.data || error?.message);
+      setOrders((prev) =>
+        prev.map((order) =>
+          eligibleIds.includes(order.id)
+            ? { ...order, paymentStatus: 'unpaid', updatedAt: new Date() }
+            : order
+        )
+      );
+      return false;
+    } finally {
+      paymentRequestInFlight.current = false;
+    }
   };
 
   const cancelCustomerOrder = async (orderId: string): Promise<boolean> => {
@@ -323,7 +413,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     }
     try {
       await axios.patch(`${apiBaseUrl}/orders/${orderId}/cancel`, {
-        table_session_id: String(order.tableNumber),
+        table_session_id: order.tableSessionId ?? String(order.tableNumber),
       });
       setOrders((prev) =>
         prev.map((o) =>
@@ -356,10 +446,57 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     return servedOrders.every((order) => order.paymentStatus === 'paid');
   };
 
+  const clearLocalOrders = useCallback(() => {
+    setOrders([]);
+  }, []);
+
+  const hydrateOrdersFromServer = useCallback(
+    async (tableSessionKey: string, displayTableNumber?: string | number | null) => {
+      const primary = String(tableSessionKey).trim();
+      if (!primary && (displayTableNumber === undefined || displayTableNumber === null || displayTableNumber === '')) {
+        return;
+      }
+      const tryKeys: string[] = [];
+      if (primary) tryKeys.push(primary);
+      const num =
+        displayTableNumber !== undefined && displayTableNumber !== null && String(displayTableNumber).trim() !== ''
+          ? String(displayTableNumber).trim()
+          : '';
+      if (num && !tryKeys.includes(num)) tryKeys.push(num);
+      if (tryKeys.length === 0) return;
+
+      const display =
+        displayTableNumber !== undefined && displayTableNumber !== null && displayTableNumber !== ''
+          ? displayTableNumber
+          : primary || num;
+
+      for (const key of tryKeys) {
+        try {
+          const response = await axios.get(`${apiBaseUrl}/orders/public`, {
+            params: { table_session_id: key },
+          });
+          const rows = response?.data?.data || [];
+          const mapped = rows
+            .filter((row: any) => row.payment_status !== 'paid')
+            .map((row: any) => mapPublicApiOrderToOrder(row, display));
+          if (mapped.length > 0) {
+            setOrders(mapped);
+            return;
+          }
+        } catch (error) {
+          console.error('hydrateOrdersFromServer', key, error);
+        }
+      }
+      setOrders([]);
+    },
+    [apiBaseUrl]
+  );
+
   // WebSocket real-time updates
   useEffect(() => {
     if (orders.length === 0) return;
-    const tableSessionId = String(orders[0].tableNumber);
+    const tableSessionId =
+      orders[0].tableSessionId?.trim() || String(orders[0].tableNumber);
 
     // Initial sync
     const syncOrders = async () => {
@@ -370,32 +507,41 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
         const serverOrders = response?.data?.data || [];
 
         setOrders((prev) =>
-          prev.map((local) => {
-            const remote = serverOrders.find((item: any) => item.id === local.id);
-            if (!remote) return local;
+          prev
+            .map((local) => {
+              const remote = serverOrders.find((item: any) => item.id === local.id);
+              if (!remote) {
+                if (String(local.id).startsWith('order_')) return local;
+                return null;
+              }
 
-            const statusMap: Record<string, OrderStatus> = {
-              pending: 'pending',
-              confirmed: 'confirmed',
-              preparing: 'cooking',
-              ready: 'ready',
-              served: 'served',
-              completed: 'served',
-              cancelled: 'cancelled',
-            };
-            const paymentMap: Record<string, PaymentStatus> = {
-              unpaid: 'unpaid',
-              payment_pending_confirmation: 'pending_confirmation',
-              paid: 'paid',
-            };
+              const statusMap: Record<string, OrderStatus> = {
+                pending: 'pending',
+                confirmed: 'confirmed',
+                preparing: 'cooking',
+                ready: 'ready',
+                served: 'served',
+                completed: 'served',
+                cancelled: 'cancelled',
+              };
+              const paymentMap: Record<string, PaymentStatus> = {
+                unpaid: 'unpaid',
+                payment_pending_confirmation: 'pending_confirmation',
+                paid: 'paid',
+              };
 
-            return {
-              ...local,
-              status: statusMap[remote.status] || local.status,
-              paymentStatus: paymentMap[remote.payment_status] || local.paymentStatus,
-              updatedAt: remote.updated_at ? new Date(remote.updated_at) : local.updatedAt,
-            };
-          })
+              return {
+                ...local,
+                status: statusMap[remote.status] || local.status,
+                paymentStatus: paymentMap[remote.payment_status] || local.paymentStatus,
+                updatedAt: remote.updated_at ? new Date(remote.updated_at) : local.updatedAt,
+                tableSessionId:
+                  remote.table_session_id != null
+                    ? String(remote.table_session_id)
+                    : local.tableSessionId,
+              };
+            })
+            .filter((o): o is Order => o !== null)
         );
       } catch (error) {
         console.error('Error syncing order statuses:', error);
@@ -507,7 +653,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       socketService.off('order:status_changed', handleOrderStatusChanged);
       socketService.leaveTable();
     };
-  }, [orders.length, orders[0]?.tableNumber, apiBaseUrl]);
+  }, [orders.length, orders[0]?.tableNumber, orders[0]?.tableSessionId, apiBaseUrl]);
 
   const getOrderHistory = () => {
     return orders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -528,6 +674,8 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
         createOrder,
         updateOrderStatus,
         requestPaymentForServedOrders,
+        hydrateOrdersFromServer,
+        clearLocalOrders,
         markPaymentConfirmed,
         hasPendingPaymentConfirmation,
         isTableFullyPaid,

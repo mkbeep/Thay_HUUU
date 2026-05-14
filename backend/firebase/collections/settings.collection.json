@@ -1,131 +1,22 @@
 {
   "collectionName": "settings",
-  "description": "Collection cấu hình hệ thống (single document)",
-  "documentIdFormat": "system",
+  "description": "Cấu hình — document id `system` (seed-ancillary.ts). Top-level snake_case: updated_at, updated_by; map lồng nhau giữ key như code seed (camelCase trong restaurant, payment).",
+  "documentId": "system",
   "fields": {
     "restaurant": {
       "type": "map",
-      "description": "Thông tin nhà hàng",
-      "required": true,
-      "schema": {
-        "name": "string",
-        "address": "string",
-        "phone": "string",
-        "email": "string",
-        "website": "string",
-        "logo": "string",
-        "openTime": "string",
-        "closeTime": "string",
-        "taxRate": "number",
-        "serviceFeeRate": "number"
-      }
+      "description": "name, address, phone, email, taxRate, serviceFeeRate, …",
+      "required": false
     },
     "payment": {
       "type": "map",
-      "description": "Cấu hình thanh toán",
-      "required": true,
-      "schema": {
-        "enableCash": "boolean",
-        "enableCard": "boolean",
-        "enableMomo": "boolean",
-        "enableZaloPay": "boolean",
-        "enableBanking": "boolean",
-        "momoConfig": "map",
-        "zaloPayConfig": "map"
-      }
+      "description": "enableCash, enableCard, enableMomo, enableZaloPay, enableBanking, …",
+      "required": false
     },
-    "loyalty": {
-      "type": "map",
-      "description": "Chương trình khách hàng thân thiết",
-      "required": true,
-      "schema": {
-        "enabled": "boolean",
-        "pointsPerVND": "number",
-        "bronzeThreshold": "number",
-        "silverThreshold": "number",
-        "goldThreshold": "number",
-        "platinumThreshold": "number",
-        "bronzeDiscount": "number",
-        "silverDiscount": "number",
-        "goldDiscount": "number",
-        "platinumDiscount": "number"
-      }
-    },
-    "reservation": {
-      "type": "map",
-      "description": "Cấu hình đặt bàn",
-      "required": true,
-      "schema": {
-        "enabled": "boolean",
-        "requireDeposit": "boolean",
-        "depositAmount": "number",
-        "maxAdvanceDays": "number",
-        "minAdvanceHours": "number",
-        "autoConfirm": "boolean"
-      }
-    },
-    "notification": {
-      "type": "map",
-      "description": "Cấu hình thông báo",
-      "required": true,
-      "schema": {
-        "enablePush": "boolean",
-        "enableEmail": "boolean",
-        "enableSMS": "boolean",
-        "notifyNewOrder": "boolean",
-        "notifyLowInventory": "boolean",
-        "notifyNewReservation": "boolean",
-        "notifyNewReview": "boolean"
-      }
-    },
-    "kitchen": {
-      "type": "map",
-      "description": "Cấu hình bếp",
-      "required": true,
-      "schema": {
-        "autoAssignChef": "boolean",
-        "priorityRules": "array",
-        "preparationTimeBuffer": "number"
-      }
-    },
-    "analytics": {
-      "type": "map",
-      "description": "Cấu hình báo cáo",
-      "required": true,
-      "schema": {
-        "enableDailyReport": "boolean",
-        "enableWeeklyReport": "boolean",
-        "enableMonthlyReport": "boolean",
-        "reportRecipients": "array"
-      }
-    },
-    "maintenance": {
-      "type": "map",
-      "description": "Chế độ bảo trì",
-      "required": true,
-      "schema": {
-        "enabled": "boolean",
-        "message": "string",
-        "startTime": "timestamp",
-        "endTime": "timestamp"
-      }
-    },
-    "updatedAt": {
-      "type": "timestamp",
-      "description": "Thời gian cập nhật",
-      "required": true,
-      "indexed": false
-    },
-    "updatedBy": {
-      "type": "string",
-      "description": "ID người cập nhật (reference to users)",
-      "required": true,
-      "indexed": false
-    }
+    "updated_at": { "type": "timestamp", "required": true },
+    "updated_by": { "type": "string", "description": "users.id hoặc 'seed-ancillary'", "required": false }
   },
   "notes": [
-    "Collection này chỉ có 1 document với ID = 'system'",
-    "Chứa tất cả cấu hình hệ thống",
-    "Chỉ admin mới được sửa"
+    "Có thể mở rộng loyalty, kitchen, … khi seed thêm field — cập nhật đồng bộ với scripts/seed-ancillary.ts."
   ]
 }

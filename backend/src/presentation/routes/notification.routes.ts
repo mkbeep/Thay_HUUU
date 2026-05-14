@@ -31,8 +31,8 @@ router.use(authMiddleware);
 // User routes
 router.get('/', notificationController.getMyNotifications);
 router.get('/unread-count', notificationController.getUnreadCount);
-router.patch('/:id/read', notificationController.markAsRead);
 router.patch('/read-all', notificationController.markAllAsRead);
+router.patch('/:id/read', notificationController.markAsRead);
 
 // Admin routes
 router.post(

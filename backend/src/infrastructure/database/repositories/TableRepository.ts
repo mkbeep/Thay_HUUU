@@ -4,7 +4,13 @@
 
 import { db } from '../../config/firebase.config';
 import { ITableRepository } from '../../../domain/repositories/ITableRepository';
-import { DiningTable, TableWithSession, TableStatus, TableSession } from '../../../domain/entities/Table';
+import {
+  DiningTable,
+  TableWithSession,
+  TableStatus,
+  TableSession,
+  TableSessionCustomerCartDraft,
+} from '../../../domain/entities/Table';
 
 export class TableRepository implements ITableRepository {
   private readonly collection = db.collection('dining_table');
@@ -172,5 +178,19 @@ export class TableRepository implements ITableRepository {
     const session = await this.findSessionById(sessionId);
     if (!session) throw new Error('Session not found after update');
     return session;
+  }
+
+  async updateSessionCustomerDraft(
+    sessionId: string,
+    draft: TableSessionCustomerCartDraft | null
+  ): Promise<void> {
+    const ref = this.sessionsCollection.doc(sessionId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      throw new Error('Session not found');
+    }
+    await ref.update({
+      customer_cart_draft: draft,
+    });
   }
 }

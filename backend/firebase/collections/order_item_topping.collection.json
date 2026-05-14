@@ -1,0 +1,13 @@
+{
+  "collectionName": "order_item_topping",
+  "description": "Topping đã chọn trên dòng order_item — khớp OrderRepository (where order_item_id)",
+  "fields": {
+    "id": { "type": "string", "required": true, "indexed": true },
+    "order_item_id": { "type": "string", "description": "FK → order_item.id", "required": true, "indexed": true },
+    "topping_id": { "type": "string", "description": "FK → food_topping.id (hoặc id topping nguồn)", "required": true, "indexed": true },
+    "quantity": { "type": "number", "required": true, "default": 1 },
+    "unit_price": { "type": "number", "required": true },
+    "subtotal": { "type": "number", "required": true }
+  },
+  "indexes": [{ "fields": ["order_item_id"], "queryScope": "COLLECTION" }]
+}

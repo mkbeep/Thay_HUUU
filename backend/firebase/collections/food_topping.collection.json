@@ -1,37 +1,14 @@
 {
   "collectionName": "food_topping",
-  "description": "Subcollection hoặc collection riêng cho topping của món ăn",
-  "documentPath": "food/{foodId}/toppings/{toppingId}",
+  "description": "Topping dùng chung — collection gốc (seed-ancillary.ts, foodSeeder), không phải subcollection food/{id}/toppings",
   "fields": {
-    "id": {
-      "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
-      "required": true,
-      "indexed": true
-    },
-    "name": {
-      "type": "string",
-      "description": "Tên topping",
-      "required": true,
-      "indexed": false
-    },
-    "price": {
-      "type": "number",
-      "description": "Giá topping (VNĐ)",
-      "required": true,
-      "indexed": false
-    },
-    "mandatory": {
-      "type": "boolean",
-      "description": "Bắt buộc chọn",
-      "required": true,
-      "indexed": false,
-      "default": false
-    }
+    "id": { "type": "string", "required": true, "indexed": true },
+    "name": { "type": "string", "required": true },
+    "description": { "type": "string", "required": false },
+    "price": { "type": "number", "required": true },
+    "is_available": { "type": "boolean", "required": true, "default": true },
+    "created_at": { "type": "timestamp", "required": true },
+    "updated_at": { "type": "timestamp", "required": true }
   },
-  "notes": [
-    "Đây là subcollection của food: food/{foodId}/toppings/{toppingId}",
-    "Mỗi món ăn có thể có nhiều topping",
-    "Admin quản lý topping trong MenuPage"
-  ]
+  "indexes": [{ "fields": ["is_available", "name"], "queryScope": "COLLECTION" }]
 }

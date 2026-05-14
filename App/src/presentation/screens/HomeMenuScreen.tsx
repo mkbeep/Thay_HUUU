@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   StatusBar,
   ImageSourcePropType,
   RefreshControl,
+  DeviceEventEmitter,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { IMAGES } from '../../domain/constants/images';
@@ -25,6 +26,7 @@ interface MenuItem {
   name: string;
   price: string;
   image: ImageSourcePropType;
+  imageUrl?: string;
   badge?: string;
   badgeColor?: string;
   available: boolean;
@@ -47,6 +49,31 @@ const CATEGORIES = [
   { id: 'specials', name: 'Đặc biệt', icon: 'star' as const },
 ];
 
+function mapCategoryToId(category: unknown): string {
+  const categoryMap: { [key: string]: string } = {
+    appetizer: 'starters',
+    'khai vị': 'starters',
+    'khai vi': 'starters',
+    main_course: 'main',
+    main: 'main',
+    'món chính': 'main',
+    'mon chinh': 'main',
+    dessert: 'desserts',
+    'tráng miệng': 'desserts',
+    'trang mieng': 'desserts',
+    beverage: 'drinks',
+    drink: 'drinks',
+    drinks: 'drinks',
+    'đồ uống': 'drinks',
+    'do uong': 'drinks',
+    special: 'specials',
+    specials: 'specials',
+    'đặc biệt': 'specials',
+    'dac biet': 'specials',
+  };
+  return categoryMap[(category || '').toString().trim().toLowerCase()] || 'main';
+}
+
 export default function HomeMenuScreen({ 
   onCartPress,
   onNavigate,
@@ -67,7 +94,7 @@ export default function HomeMenuScreen({
   const cartTotal = `${getGrandTotal().toFixed(1)}k`;
 
   // Khởi tạo MenuService
-  const menuService = new MenuService();
+  const menuService = useMemo(() => new MenuService(), []);
 
   // Load menu items từ service
   useEffect(() => {
@@ -84,6 +111,7 @@ export default function HomeMenuScreen({
         name: item.name,
         price: `${(item.price / 1000).toFixed(0)}k`, // 145000 -> "145k"
         image: item.image,
+        imageUrl: item.imageUrl,
         badge: item.badge,
         badgeColor: item.badgeColor,
         available: item.available,
@@ -107,6 +135,7 @@ export default function HomeMenuScreen({
         name: item.name,
         price: `${(item.price / 1000).toFixed(0)}k`,
         image: item.image,
+        imageUrl: item.imageUrl,
         badge: item.badge,
         badgeColor: item.badgeColor,
         available: item.available,
@@ -121,31 +150,31 @@ export default function HomeMenuScreen({
     }
   };
 
-  // Helper để map MenuCategory enum sang category id
-  const mapCategoryToId = (category: any): string => {
-    const categoryMap: { [key: string]: string } = {
-      'appetizer': 'starters',
-      'khai vị': 'starters',
-      'khai vi': 'starters',
-      'main_course': 'main',
-      'main': 'main',
-      'món chính': 'main',
-      'mon chinh': 'main',
-      'dessert': 'desserts',
-      'tráng miệng': 'desserts',
-      'trang mieng': 'desserts',
-      'beverage': 'drinks',
-      'drink': 'drinks',
-      'drinks': 'drinks',
-      'đồ uống': 'drinks',
-      'do uong': 'drinks',
-      'special': 'specials',
-      'specials': 'specials',
-      'đặc biệt': 'specials',
-      'dac biet': 'specials',
-    };
-    return categoryMap[(category || '').toString().trim().toLowerCase()] || 'main';
-  };
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('menu:invalidate', () => {
+      void (async () => {
+        try {
+          const items: DomainMenuItem[] = await menuService.refreshMenuItems();
+          const displayItems: MenuItem[] = items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: `${(item.price / 1000).toFixed(0)}k`,
+            image: item.image,
+            imageUrl: item.imageUrl,
+            badge: item.badge,
+            badgeColor: item.badgeColor,
+            available: item.available,
+            category: mapCategoryToId(item.category),
+            description: item.description,
+          }));
+          setMenuItems(displayItems);
+        } catch (error) {
+          console.error('Realtime menu refresh failed:', error);
+        }
+      })();
+    });
+    return () => sub.remove();
+  }, [menuService]);
 
   // Filter menu items theo category và search
   const filteredMenuItems = menuItems.filter((item) => {
@@ -258,6 +287,7 @@ export default function HomeMenuScreen({
                 price: priceNumber,
                 priceDisplay: item.price,
                 image: item.image,
+                imageUrl: item.imageUrl,
                 category: item.category,
               };
               

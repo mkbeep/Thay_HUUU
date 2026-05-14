@@ -2,18 +2,20 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Platform } from 'react-native';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { DeviceEventEmitter, Linking, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { CartProvider } from './src/presentation/context/CartContext';
-import { OrderProvider } from './src/presentation/context/OrderContext';
+import { OrderProvider, useOrder } from './src/presentation/context/OrderContext';
 import { TableProvider, useTable } from './src/presentation/context/TableContext';
 import WelcomeScreen from './src/presentation/screens/WelcomeScreen';
 import { buildCustomerTableWebUrl, getCustomerWebRootUrl } from './src/utils/customerWebUrl';
 import { resolveWebTableBootstrapHref, urlSignalsCustomerTable } from './src/utils/parseCustomerTableUrl';
+import { socketService } from './src/services/socketService';
+import { MenuRepository } from './src/data/repositories/MenuRepository';
 
 // Wrapper components to use hooks
 function WelcomeScreenWrapper({ onExploreMenu, onViewDrinks, onQRScan }: any) {
@@ -40,14 +42,110 @@ function HomeMenuScreenWrapper({ onCartPress, onNavigate, onMenuItemPress }: any
 }
 
 function CartScreenWrapper({ onBack, onSubmitOrder }: any) {
-  const { tableNumber } = useTable();
+  const { tableNumber, sessionId } = useTable();
   return (
     <CartScreen
       tableNumber={tableNumber ?? undefined}
+      tableSessionId={sessionId}
       onBack={onBack}
       onSubmitOrder={onSubmitOrder}
     />
   );
+}
+
+/** Khi đổi bàn: xóa đơn local ngay (tránh hiển thị đơn bàn A khi đang ở bàn B). */
+function TableDataIsolationBridge() {
+  const { tableId, isLoading } = useTable();
+  const { clearLocalOrders } = useOrder();
+  const prevTableId = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (isLoading) return;
+    const next = tableId != null ? String(tableId) : null;
+    if (prevTableId.current !== null && next !== null && prevTableId.current !== next) {
+      clearLocalOrders();
+    }
+    prevTableId.current = next;
+  }, [isLoading, tableId, clearLocalOrders]);
+
+  return null;
+}
+
+/** Remount giỏ hàng theo bàn — tách hoàn toàn state giỏ giữa các bàn. */
+function KeyedCartProvider({ children }: { children: React.ReactNode }) {
+  const { tableId } = useTable();
+  return <CartProvider key={tableId != null ? String(tableId) : '__no_table__'}>{children}</CartProvider>;
+}
+
+/** Đồng bộ đơn từ server khi đã có bàn (reload trình duyệt / quét lại QR) */
+function OrderHydrationBridge() {
+  const { tableNumber, sessionId, isLoading } = useTable();
+  const { hydrateOrdersFromServer } = useOrder();
+
+  useEffect(() => {
+    if (isLoading) return;
+    const sid = sessionId?.trim();
+    const num =
+      tableNumber !== undefined && tableNumber !== null && String(tableNumber).trim() !== ''
+        ? String(tableNumber).trim()
+        : '';
+    const key = sid || num;
+    if (!key) return;
+    void hydrateOrdersFromServer(key, tableNumber ?? num);
+  }, [isLoading, sessionId, tableNumber, hydrateOrdersFromServer]);
+
+  return null;
+}
+
+/** WebSocket menu: server đã emit `menu:updated` toàn cục — kết nối theo bàn để nhận và làm mới cache menu khách. */
+function MenuRealtimeBridge() {
+  const { sessionId, tableNumber, isLoading } = useTable();
+
+  useEffect(() => {
+    if (isLoading) return;
+    const sid = sessionId?.trim();
+    const num =
+      tableNumber !== undefined && tableNumber !== null && String(tableNumber).trim() !== ''
+        ? String(tableNumber).trim()
+        : '';
+    const key = sid || num;
+    if (!key) return;
+
+    const pushMenuRefresh = async () => {
+      try {
+        const repo = new MenuRepository();
+        await repo.clearCache();
+        DeviceEventEmitter.emit('menu:invalidate');
+      } catch (e) {
+        console.error('MenuRealtimeBridge: clear cache failed', e);
+      }
+    };
+
+    socketService.connect(key);
+    socketService.joinTable(key);
+
+    const onMenuUpdated = () => {
+      void pushMenuRefresh();
+    };
+    const onMenuRemoved = () => {
+      void pushMenuRefresh();
+    };
+    const onMenuAdded = () => {
+      void pushMenuRefresh();
+    };
+
+    socketService.on('menu:updated', onMenuUpdated);
+    socketService.on('menu:item_removed', onMenuRemoved);
+    socketService.on('menu:item_added', onMenuAdded);
+
+    return () => {
+      socketService.off('menu:updated', onMenuUpdated);
+      socketService.off('menu:item_removed', onMenuRemoved);
+      socketService.off('menu:item_added', onMenuAdded);
+    };
+  }, [isLoading, sessionId, tableNumber]);
+
+  return null;
 }
 
 function OrderHistoryScreenWrapper({ onBack, onPayment, onSupport }: any) {
@@ -85,9 +183,10 @@ function PaymentScreenWrapper({ onBack, onPaymentComplete }: any) {
 }
 
 function SupportScreenWrapper({ onBack }: any) {
-  const { tableNumber } = useTable();
+  const { tableNumber, tableId } = useTable();
   return (
     <SupportScreen
+      tableId={tableId}
       tableNumber={tableNumber ?? undefined}
       onBack={onBack}
     />
@@ -150,6 +249,7 @@ interface SelectedMenuItem {
   price: number;
   priceDisplay: string;
   image: any;
+  imageUrl?: string;
   description?: string;
   category: string;
 }
@@ -159,12 +259,15 @@ export default function App() {
     <SafeAreaProvider>
       <TableProvider>
         <OrderProvider>
-          <CartProvider>
+          <TableDataIsolationBridge />
+          <KeyedCartProvider>
+            <OrderHydrationBridge />
+            <MenuRealtimeBridge />
             <NavigationContainer>
               <AppScreens />
               <StatusBar style="dark" />
             </NavigationContainer>
-          </CartProvider>
+          </KeyedCartProvider>
         </OrderProvider>
       </TableProvider>
     </SafeAreaProvider>
@@ -281,6 +384,7 @@ function AppScreens() {
                 price: priceNumber,
                 priceDisplay: item.price,
                 image: item.image,
+                imageUrl: item.imageUrl,
                 description: item.description,
                 category: item.category,
               });

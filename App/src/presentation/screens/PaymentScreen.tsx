@@ -116,9 +116,9 @@ export default function PaymentScreen({
     try {
       setIsSubmitting(true); // ✅ Bắt đầu loading
       
-      // Gửi yêu cầu thanh toán
+      // Gửi yêu cầu thanh toán (chờ API xong — tránh bấm đúp / rollback đúng khi lỗi)
       console.log('📤 Sending payment request...');
-      const requested = requestPaymentForServedOrders();
+      const requested = await requestPaymentForServedOrders();
       
       if (!requested) {
         window.alert('Không có đơn cần thanh toán\n\nVui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
@@ -126,9 +126,6 @@ export default function PaymentScreen({
       }
 
       console.log('✅ Payment request sent successfully');
-      
-      // Đợi một chút để UI cập nhật
-      await new Promise(resolve => setTimeout(resolve, 500));
       
     } catch (error) {
       console.error('❌ Error sending payment request:', error);

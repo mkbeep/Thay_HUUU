@@ -11,11 +11,13 @@ import { UserRepository } from '../../infrastructure/database/repositories/UserR
 import { NotificationType, NotificationPriority } from '../../domain/entities/Notification';
 import { PaymentStatus } from '../../domain/entities/Order';
 import { SocketManager } from '../../infrastructure/websocket/SocketManager';
+import { TableRepository } from '../../infrastructure/database/repositories/TableRepository';
+import { DiningTable, TableSession, TableStatus } from '../../domain/entities/Table';
 
 export class OrderController {
   private orderRepository: OrderRepository;
   private notificationService: NotificationService;
-  private readonly operationRoles = ['staff', 'manager', 'admin', 'chef'] as const;
+  private readonly operationRoles = ['staff', 'manager', 'admin', 'chef', 'cashier'] as const;
 
   constructor() {
     this.orderRepository = new OrderRepository();
@@ -33,9 +35,55 @@ export class OrderController {
       priority?: NotificationPriority;
     }
   ) {
-    await Promise.all(
-      this.operationRoles.map((role) => this.notificationService.sendToRole(role, payload))
-    );
+    await this.notificationService.sendToRolesDeduped([...this.operationRoles], payload);
+  }
+
+  /** Hiển thị "Bàn {số}" cho admin — không cần phiên đang active. */
+  private async resolveTableDisplayLabel(tableSessionId: string | undefined): Promise<string> {
+    if (!tableSessionId || !String(tableSessionId).trim()) return '—';
+    const tableRepo = new TableRepository();
+    const raw = String(tableSessionId).trim();
+
+    const session = await tableRepo.findSessionById(raw);
+    if (session) {
+      const table = await tableRepo.findById(session.table_id);
+      if (table?.table_number) return `Bàn ${table.table_number}`;
+    }
+
+    const tableByNumber = await tableRepo.findByTableNumber(raw);
+    if (tableByNumber?.table_number) return `Bàn ${tableByNumber.table_number}`;
+
+    return 'Bàn (chưa rõ)';
+  }
+
+  private async enrichOrderForAdmin<T extends { table_session_id?: string }>(order: T) {
+    const table_display_label = await this.resolveTableDisplayLabel(order.table_session_id);
+    return { ...order, table_display_label };
+  }
+
+  /**
+   * table_session_id trên đơn có thể là:
+   * - id tài liệu Firestore của table_session (chuẩn), hoặc
+   * - legacy: chuỗi số bàn (table_number) mà app khách từng gửi
+   */
+  private async resolveTableAndActiveSession(
+    tableSessionId: string | undefined
+  ): Promise<{ table: DiningTable; session: TableSession } | null> {
+    if (!tableSessionId || !String(tableSessionId).trim()) return null;
+    const tableRepo = new TableRepository();
+    const raw = String(tableSessionId).trim();
+
+    let session = await tableRepo.findSessionById(raw);
+    if (session?.is_active) {
+      const table = await tableRepo.findById(session.table_id);
+      if (table) return { table, session };
+    }
+
+    const table = await tableRepo.findByTableNumber(raw);
+    if (!table) return null;
+    session = await tableRepo.findActiveSessionByTableId(table.id);
+    if (!session?.is_active) return null;
+    return { table, session };
   }
 
   /**
@@ -53,10 +101,12 @@ export class OrderController {
         to_date: to_date ? new Date(to_date as string) : undefined,
       });
 
+      const data = await Promise.all(orders.map((o) => this.enrichOrderForAdmin(o)));
+
       res.status(200).json({
         success: true,
-        data: orders,
-        total: orders.length,
+        data,
+        total: data.length,
       });
     } catch (error) {
       next(error);
@@ -78,9 +128,9 @@ export class OrderController {
         return;
       }
 
-      const orders = await this.orderRepository.findAll({
-        table_session_id: table_session_id as string,
-      });
+      const orders = await this.orderRepository.findByTableSessionWithItems(
+        table_session_id as string
+      );
 
       res.status(200).json({
         success: true,
@@ -127,19 +177,20 @@ export class OrderController {
         payment_status: PaymentStatus.UNPAID,
       });
 
-      // Gửi notification cho toàn bộ bộ phận vận hành (staff/manager/admin)
+      const tableLabel = await this.resolveTableDisplayLabel(order.table_session_id);
       await this.notifyOperationRoles({
         type: NotificationType.ORDER_CREATED,
         title: 'Đơn hàng mới',
-        message: `Đơn hàng ${orderNumber} vừa được tạo`,
-        data: { order_id: order.id },
+        message: `${tableLabel} — Đơn ${orderNumber} vừa được tạo`,
+        data: { order_id: order.id, table_display_label: tableLabel },
         priority: NotificationPriority.HIGH,
       });
 
       // 🔥 Emit WebSocket event
       try {
         const socketManager = SocketManager.getInstance();
-        socketManager.notifyOrderCreated(order);
+        const payload = await this.enrichOrderForAdmin(order);
+        socketManager.notifyOrderCreated(payload);
       } catch (error) {
         console.error('WebSocket emit error:', error);
       }
@@ -147,7 +198,7 @@ export class OrderController {
       res.status(201).json({
         success: true,
         message: 'Tạo đơn hàng thành công',
-        data: order,
+        data: await this.enrichOrderForAdmin(order),
       });
     } catch (error) {
       next(error);
@@ -179,7 +230,8 @@ export class OrderController {
       // 🔥 Emit WebSocket event
       try {
         const socketManager = SocketManager.getInstance();
-        socketManager.notifyOrderStatusChanged(order.id, status, order);
+        const payload = await this.enrichOrderForAdmin(order);
+        socketManager.notifyOrderStatusChanged(order.id, status, payload);
       } catch (error) {
         console.error('WebSocket emit error:', error);
       }
@@ -187,7 +239,7 @@ export class OrderController {
       res.status(200).json({
         success: true,
         message: 'Cập nhật trạng thái thành công',
-        data: order,
+        data: await this.enrichOrderForAdmin(order),
       });
     } catch (error) {
       next(error);
@@ -204,19 +256,33 @@ export class OrderController {
       const paymentMethod = req.body.payment_method || 'qr';
       const order = await this.orderRepository.requestPayment(id, paymentMethod);
 
+      const tableLabel = await this.resolveTableDisplayLabel(order.table_session_id);
       await this.notifyOperationRoles({
         type: NotificationType.PAYMENT_REQUEST,
         title: 'Yêu cầu thanh toán',
-        message: `Đơn ${order.order_number} yêu cầu thanh toán bằng ${paymentMethod}`,
-        data: { order_id: order.id, payment_method: paymentMethod },
+        message: `${tableLabel} — Đơn ${order.order_number} yêu cầu thanh toán (${paymentMethod})`,
+        data: { order_id: order.id, payment_method: paymentMethod, table_display_label: tableLabel },
         priority: NotificationPriority.HIGH,
       });
 
       try {
         const socketManager = SocketManager.getInstance();
-        socketManager.notifyOrderUpdated(order);
+        const payload = await this.enrichOrderForAdmin(order);
+        socketManager.notifyOrderUpdated(payload);
       } catch (error) {
         console.error('WebSocket emit error (request-payment):', error);
+      }
+
+      // Bàn admin: chuyển sang "Thanh toán" (reserved) khi có yêu cầu TT
+      try {
+        const ctx = await this.resolveTableAndActiveSession(order.table_session_id);
+        if (ctx && ctx.table.status === TableStatus.OCCUPIED) {
+          const tableRepo = new TableRepository();
+          await tableRepo.updateStatus(ctx.table.id, TableStatus.RESERVED);
+          SocketManager.getInstance().notifyTableUpdated(ctx.table.id);
+        }
+      } catch (e) {
+        console.error('Table billing status update (request-payment):', e);
       }
 
       res.status(200).json({
@@ -259,7 +325,8 @@ export class OrderController {
 
       try {
         const socketManager = SocketManager.getInstance();
-        socketManager.notifyOrderUpdated(order);
+        const payload = await this.enrichOrderForAdmin(order);
+        socketManager.notifyOrderUpdated(payload);
       } catch (error) {
         console.error('WebSocket emit error (cancel):', error);
       }
@@ -286,7 +353,8 @@ export class OrderController {
       // 🔥 Emit WebSocket event trước khi xóa
       try {
         const socketManager = SocketManager.getInstance();
-        socketManager.notifyOrderUpdated(order);
+        const payload = await this.enrichOrderForAdmin(order);
+        socketManager.notifyOrderUpdated(payload);
       } catch (error) {
         console.error('WebSocket emit error:', error);
       }
@@ -303,21 +371,13 @@ export class OrderController {
         // Nếu không còn order nào chưa thanh toán → Cập nhật bàn về available
         if (unpaidOrders.length === 0) {
           try {
-            const tableRepository = new (require('../../infrastructure/database/repositories/TableRepository').TableRepository)();
-            const session = await tableRepository.findSessionById(order.table_session_id);
-            
-            if (session && session.is_active) {
-              // End session
-              await tableRepository.endSession(order.table_session_id);
-              
-              // Update table status to available
-              await tableRepository.updateStatus(session.table_id, 'available');
-              
-              console.log(`✅ Table ${session.table_id} set to available - all orders paid`);
-              
-              // Notify table status changed
-              const socketManager = SocketManager.getInstance();
-              socketManager.notifyTableUpdated(session.table_id);
+            const tableRepository = new TableRepository();
+            const ctx = await this.resolveTableAndActiveSession(order.table_session_id);
+            if (ctx?.session?.is_active) {
+              await tableRepository.endSession(ctx.session.id);
+              await tableRepository.updateStatus(ctx.table.id, TableStatus.AVAILABLE);
+              console.log(`✅ Table ${ctx.table.id} set to available - all orders paid`);
+              SocketManager.getInstance().notifyTableUpdated(ctx.table.id);
             }
           } catch (error) {
             console.error('❌ Error updating table status:', error);

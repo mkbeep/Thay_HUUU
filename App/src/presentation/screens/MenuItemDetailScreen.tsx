@@ -28,6 +28,7 @@ interface MenuItemDetailScreenProps {
     price: number;
     priceDisplay: string;
     image: any;
+    imageUrl?: string;
     description?: string;
     category: string;
   };
@@ -130,11 +131,12 @@ export default function MenuItemDetailScreen({
     // Thêm từng món với số lượng
     for (let i = 0; i < quantity; i++) {
       addItem({
-        id: `${item.id}_${Date.now()}_${i}`, // Unique ID cho mỗi món
+        id: `${item.id}_${Date.now()}_${i}`,
         name: item.name,
-        price: calculateTotal() / quantity, // Giá cho 1 món (bao gồm topping)
+        price: calculateTotal() / quantity,
         priceDisplay: `${(calculateTotal() / quantity).toFixed(1)}k`,
         image: item.image,
+        imageUrl: item.imageUrl,
         category: item.category,
         options: options.length > 0 ? options.join(' • ') : isDrink ? 'Tuỳ chỉnh đồ uống' : undefined,
         note: specialRequest || undefined,

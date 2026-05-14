@@ -4,7 +4,7 @@
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "start:lan": "expo start --lan --host 192.168.1.7",
+    "start:lan": "expo start --lan --host 10.15.140.15",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",

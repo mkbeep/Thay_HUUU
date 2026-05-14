@@ -1,71 +1,32 @@
 {
   "collectionName": "food",
-  "description": "Collection chứa thông tin các món ăn trong menu",
+  "description": "Món ăn — khớp domain Food + foodSeeder / FoodRepository",
   "fields": {
-    "id": {
-      "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
-      "required": true,
-      "indexed": true
-    },
-    "name": {
-      "type": "string",
-      "description": "Tên món ăn",
-      "required": true,
-      "indexed": false
-    },
-    "description": {
-      "type": "string",
-      "description": "Mô tả chi tiết món ăn",
-      "required": true,
-      "indexed": false
-    },
-    "price": {
-      "type": "number",
-      "description": "Giá món ăn (VNĐ)",
-      "required": true,
-      "indexed": false
-    },
+    "id": { "type": "string", "required": true, "indexed": true },
+    "name": { "type": "string", "required": true, "indexed": false },
+    "description": { "type": "string", "required": false, "indexed": false },
     "category": {
       "type": "string",
-      "description": "Danh mục món ăn",
+      "description": "FoodCategory enum (tiếng Anh)",
       "required": true,
       "indexed": true,
-      "enum": ["Khai vị", "Món chính", "Tráng miệng", "Đồ uống", "Đặc biệt"]
+      "enum": ["appetizer", "main_course", "dessert", "beverage", "side_dish", "special"]
     },
-    "inStock": {
-      "type": "boolean",
-      "description": "Còn hàng (available)",
-      "required": true,
-      "indexed": true,
-      "default": true
-    },
-    "createdAt": {
-      "type": "timestamp",
-      "description": "Thời gian tạo",
-      "required": true,
-      "indexed": true
-    },
-    "updatedAt": {
-      "type": "timestamp",
-      "description": "Thời gian cập nhật",
-      "required": true,
-      "indexed": false
-    }
+    "base_price": { "type": "number", "description": "Giá (VNĐ)", "required": true },
+    "is_available": { "type": "boolean", "required": true, "indexed": true, "default": true },
+    "preparation_time": { "type": "number", "description": "Phút", "required": false, "default": 0 },
+    "calories": { "type": "number", "required": false },
+    "is_vegetarian": { "type": "boolean", "required": false, "default": false },
+    "is_spicy": { "type": "boolean", "required": false, "default": false },
+    "allergens": { "type": "array", "itemType": "string", "required": false },
+    "created_at": { "type": "timestamp", "required": true, "indexed": true },
+    "updated_at": { "type": "timestamp", "required": true, "indexed": false }
   },
   "indexes": [
-    {
-      "fields": ["category", "inStock"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["inStock", "createdAt"],
-      "queryScope": "COLLECTION"
-    }
+    { "fields": ["category", "is_available"], "queryScope": "COLLECTION" },
+    { "fields": ["is_available", "created_at"], "queryScope": "COLLECTION" }
   ],
   "notes": [
-    "Topping được quản lý trong collection riêng hoặc subcollection",
-    "Độ cay (spiceLevel) là lựa chọn của khách khi đặt, không lưu trong food",
-    "Không cần: allergens, ingredients, preparationTime, isVegetarian, isSpicy - không hiển thị trong UI"
+    "Không dùng: price, inStock, createdAt — đã đổi sang base_price, is_available, created_at"
   ]
 }

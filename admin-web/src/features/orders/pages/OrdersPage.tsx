@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import { CheckCircle, ChefHat, Clock } from 'lucide-react'
+import { Armchair, CheckCircle, ChefHat, Clock } from 'lucide-react'
+import { formatOrderTableBadgeLine } from '../utils/orderTableBadge'
 
 type KitchenStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served'
 type PaymentStatus = 'unpaid' | 'payment_pending_confirmation' | 'paid'
@@ -15,6 +16,7 @@ interface ApiOrder {
   id: string
   order_number: string
   table_session_id?: string
+  table_display_label?: string
   status: KitchenStatus
   payment_status?: PaymentStatus
   created_at: string
@@ -200,9 +202,14 @@ export default function OrdersPage() {
           <div className="flex-1">
             <div className="text-xs font-bold text-[#AD2C00] mb-1">{order.order_number || order.id}</div>
             {/* Số bàn với badge nổi bật */}
-            <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-full">
-              <span className="text-xs font-medium text-indigo-600">🪑 Bàn</span>
-              <span className="text-sm font-bold text-indigo-700">{order.table_session_id || 'N/A'}</span>
+            <div
+              className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full"
+              title={order.table_session_id ? `Phiên: ${order.table_session_id}` : undefined}
+            >
+              <Armchair className="h-3.5 w-3.5 shrink-0 text-indigo-600" aria-hidden />
+              <span className="text-sm font-semibold text-indigo-900 tabular-nums">
+                {formatOrderTableBadgeLine(order.table_display_label, order.table_session_id)}
+              </span>
             </div>
           </div>
           <div className="text-xs text-gray-500">{new Date(order.created_at).toLocaleTimeString('vi-VN')}</div>

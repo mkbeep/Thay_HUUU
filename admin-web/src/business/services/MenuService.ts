@@ -25,8 +25,8 @@ export class MenuService {
     if (!dto.name || dto.name.trim().length === 0) {
       throw new Error('Tên món ăn không được để trống');
     }
-    if (dto.price <= 0) {
-      throw new Error('Giá phải lớn hơn 0');
+    if (dto.price < 0) {
+      throw new Error('Giá không được âm');
     }
 
     return await this.menuRepository.createMenuItem(dto);
@@ -34,8 +34,8 @@ export class MenuService {
 
   async updateMenuItem(id: string, dto: UpdateMenuItemDto): Promise<MenuItem | undefined> {
     // Validate input
-    if (dto.price !== undefined && dto.price <= 0) {
-      throw new Error('Giá phải lớn hơn 0');
+    if (dto.price !== undefined && dto.price < 0) {
+      throw new Error('Giá không được âm');
     }
 
     return await this.menuRepository.updateMenuItem(id, dto);

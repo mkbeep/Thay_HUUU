@@ -1,117 +1,45 @@
 {
   "collectionName": "notification",
-  "description": "Collection quản lý thông báo",
+  "description": "Thông báo — khớp Notification entity + NotificationRepository (user_id, is_read, created_at)",
   "fields": {
-    "id": {
-      "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
-      "required": true,
-      "indexed": true
-    },
+    "id": { "type": "string", "required": true, "indexed": true },
+    "user_id": { "type": "string", "description": "Người nhận (query findByUserId)", "required": true, "indexed": true },
     "type": {
       "type": "string",
-      "description": "Loại thông báo",
+      "enum": [
+        "order_created",
+        "order_updated",
+        "order_ready",
+        "order_completed",
+        "table_request",
+        "staff_call",
+        "payment_request",
+        "system_alert",
+        "promotion"
+      ],
       "required": true,
-      "indexed": true,
-      "enum": ["order_new", "order_ready", "order_cancelled", "table_request", "reservation_new", "inventory_low", "review_new", "system"]
-    },
-    "title": {
-      "type": "string",
-      "description": "Tiêu đề",
-      "required": true,
-      "indexed": false
-    },
-    "message": {
-      "type": "string",
-      "description": "Nội dung",
-      "required": true,
-      "indexed": false
-    },
-    "targetUserIds": {
-      "type": "array",
-      "description": "Danh sách ID người nhận (references to users)",
-      "required": false,
-      "indexed": false,
-      "itemType": "string"
-    },
-    "targetRoles": {
-      "type": "array",
-      "description": "Danh sách vai trò nhận",
-      "required": false,
-      "indexed": true,
-      "itemType": "string"
-    },
-    "relatedEntityType": {
-      "type": "string",
-      "description": "Loại entity liên quan",
-      "required": false,
-      "indexed": false,
-      "enum": ["order", "table", "reservation", "inventory", "review"]
-    },
-    "relatedEntityId": {
-      "type": "string",
-      "description": "ID entity liên quan",
-      "required": false,
       "indexed": true
     },
+    "title": { "type": "string", "required": true },
+    "message": { "type": "string", "required": true },
+    "data": { "type": "map", "description": "Payload (order_id, …)", "required": false },
     "priority": {
       "type": "string",
-      "description": "Mức độ ưu tiên",
-      "required": true,
-      "indexed": true,
       "enum": ["low", "normal", "high", "urgent"],
-      "default": "normal"
-    },
-    "isRead": {
-      "type": "boolean",
-      "description": "Đã đọc",
-      "required": true,
-      "indexed": true,
-      "default": false
-    },
-    "readBy": {
-      "type": "array",
-      "description": "Danh sách ID người đã đọc",
       "required": true,
       "indexed": false,
-      "itemType": "string",
-      "default": []
+      "default": "normal"
     },
-    "actionUrl": {
-      "type": "string",
-      "description": "URL hành động",
-      "required": false,
-      "indexed": false
-    },
-    "expiresAt": {
-      "type": "timestamp",
-      "description": "Thời gian hết hạn",
-      "required": false,
-      "indexed": true
-    },
-    "createdAt": {
-      "type": "timestamp",
-      "description": "Thời gian tạo",
-      "required": true,
-      "indexed": true
-    }
+    "is_read": { "type": "boolean", "required": true, "indexed": true, "default": false },
+    "read_at": { "type": "timestamp", "required": false },
+    "created_at": { "type": "timestamp", "required": true, "indexed": true },
+    "expires_at": { "type": "timestamp", "required": false, "indexed": true }
   },
   "indexes": [
-    {
-      "fields": ["targetRoles", "isRead", "createdAt"],
-      "queryScope": "COLLECTION_GROUP"
-    },
-    {
-      "fields": ["priority", "isRead", "createdAt"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["type", "createdAt"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["relatedEntityId"],
-      "queryScope": "COLLECTION"
-    }
+    { "fields": ["user_id", "is_read"], "queryScope": "COLLECTION" },
+    { "fields": ["type", "created_at"], "queryScope": "COLLECTION" }
+  ],
+  "notes": [
+    "Không dùng: targetUserIds, targetRoles, relatedEntityType camelCase như bản spec cũ."
   ]
 }

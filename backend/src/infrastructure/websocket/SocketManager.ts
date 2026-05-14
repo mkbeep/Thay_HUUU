@@ -17,7 +17,9 @@ export class SocketManager {
         origin: config.cors.origin,
         credentials: true,
       },
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'], // Force WebSocket only for lowest latency
+      pingTimeout: 5000, // Lower ping timeout
+      pingInterval: 10000, // More frequent pings to detect disconnects faster
     });
 
     this.setupEventHandlers();
@@ -126,6 +128,25 @@ export class SocketManager {
     this.emitToAdmin('table:updated', { tableId });
     this.emitToAll('table:status_changed', { tableId });
     console.log(`📢 Table ${tableId} status updated - broadcasted to all clients`);
+  }
+
+  // Food/Menu events
+  public notifyFoodUpdated(food: any): void {
+    this.emitToAdmin('food:updated', food);
+    this.emitToAll('menu:updated', food);
+    console.log(`📢 Food ${food.id} updated - broadcasted to all clients`);
+  }
+
+  public notifyFoodCreated(food: any): void {
+    this.emitToAdmin('food:created', food);
+    this.emitToAll('menu:item_added', food);
+    console.log(`📢 Food ${food.id} created - broadcasted to all clients`);
+  }
+
+  public notifyFoodDeleted(foodId: string): void {
+    this.emitToAdmin('food:deleted', { foodId });
+    this.emitToAll('menu:item_removed', { foodId });
+    console.log(`📢 Food ${foodId} deleted - broadcasted to all clients`);
   }
 
   public getIO(): Server {

@@ -10,6 +10,67 @@ const apiClient = axios.create({
 
 const API_ORIGIN = API_URL.replace(/\/api\/v\d+\/?$/, '');
 
+const MENU_IMAGE_FALLBACK =
+  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800';
+
+// Cloudinary URL fix mapping - some menu items have wrong .jpg URLs, actual files are .png
+const BAD_TO_GOOD: [string, string][] = [
+  [
+    'menu/main-courses/com-chien-duong-chau.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324610/menu/main-courses/bo-luc-lac.png',
+  ],
+  [
+    'menu/main-courses/pho-bo-ha-noi.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324623/menu/main-courses/lau-bo-nhat-ban.png',
+  ],
+  [
+    'menu/main-courses/bun-bo-hue.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324623/menu/main-courses/lau-thai.png',
+  ],
+  [
+    'menu/main-courses/mi-xao-hai-san.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324628/menu/main-courses/tom-hum-nuong-pho-mai.png',
+  ],
+  [
+    'menu/specials/set-lau-hai-san.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324623/menu/main-courses/lau-thai.png',
+  ],
+  [
+    'menu/specials/ca-lang-nuong.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324617/menu/main-courses/ca-kho-to.png',
+  ],
+  [
+    'menu/specials/vit-quay-bac-kinh.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324630/menu/main-courses/vit-quay-bac-kinh.png',
+  ],
+  [
+    'menu/specials/lau-nam-chay.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324635/menu/specials/lau-duong-duong.png',
+  ],
+  [
+    'menu/specials/ga-ta-nguyen-con.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324620/menu/main-courses/ga-nuong-mat-ong.png',
+  ],
+  [
+    'menu/specials/hai-san-nuong-tong-hop.jpg',
+    'https://res.cloudinary.com/dqnnwl8h8/image/upload/v1778324633/menu/specials/hai-san-nuong.png',
+  ],
+];
+
+const fixCloudinaryMenuFoodImageUrl = (url: string): string => {
+  const u = (url || '').trim();
+  if (!u || !u.includes('res.cloudinary.com')) {
+    return u;
+  }
+  const lower = u.toLowerCase();
+  for (const [bad, good] of BAD_TO_GOOD) {
+    if (lower.includes(bad.toLowerCase())) {
+      return good;
+    }
+  }
+  return u;
+};
+
 const normalizeCategoryToVi = (category?: string): MenuCategory => {
   const value = (category || '').toString().trim().toLowerCase();
   const map: Record<string, MenuCategory> = {
@@ -36,6 +97,11 @@ const normalizeCategoryToVi = (category?: string): MenuCategory => {
   return map[value] || MenuCategory.MAIN_COURSE;
 };
 
+/** Chuẩn hóa category từ API/Firestore (appetizer, main_course, …) sang nhãn UI admin (Khai vị, Món chính, …). */
+export const mapFoodApiCategoryToMenuCategory = (category?: string | null): MenuCategory => {
+  return normalizeCategoryToVi(category ?? undefined);
+};
+
 const categoryToApiValue = (category: MenuCategory): string => {
   const normalized = normalizeCategoryToVi(category);
   if (normalized === MenuCategory.APPETIZER) return 'appetizer';
@@ -50,10 +116,21 @@ const resolveImageUrl = (rawUrl?: string): string => {
 
   const url = rawUrl.trim();
   if (!url) return '';
-  if (/^https?:\/\//i.test(url) || url.startsWith('//')) return url;
-  if (url.startsWith('/images/')) return `${API_ORIGIN}${url}`;
-  if (url.startsWith('menu/')) return `${API_ORIGIN}/images/${url}`;
-  return `${API_ORIGIN}/images/menu/${url.replace(/^\/+/, '')}`;
+  
+  // Resolve relative/absolute URLs first
+  let resolvedUrl: string;
+  if (/^https?:\/\//i.test(url) || url.startsWith('//')) {
+    resolvedUrl = url;
+  } else if (url.startsWith('/images/')) {
+    resolvedUrl = `${API_ORIGIN}${url}`;
+  } else if (url.startsWith('menu/')) {
+    resolvedUrl = `${API_ORIGIN}/images/${url}`;
+  } else {
+    resolvedUrl = `${API_ORIGIN}/images/menu/${url.replace(/^\/+/, '')}`;
+  }
+  
+  // Apply Cloudinary URL fix after resolution
+  return fixCloudinaryMenuFoodImageUrl(resolvedUrl);
 };
 
 apiClient.interceptors.request.use((config) => {
@@ -61,12 +138,11 @@ apiClient.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  if (config.method?.toLowerCase() === 'get') {
-    config.params = { ...(config.params || {}), _t: Date.now() };
-    config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-    config.headers.Pragma = 'no-cache';
-    config.headers.Expires = '0';
-  }
+  // Add cache busting for all requests to prevent stale data
+  config.params = { ...(config.params || {}), _t: Date.now() };
+  config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+  config.headers.Pragma = 'no-cache';
+  config.headers.Expires = '0';
   return config;
 });
 
@@ -104,13 +180,14 @@ export class MenuRepository {
   async createMenuItem(dto: CreateMenuItemDto): Promise<MenuItem> {
     const response = await apiClient.post('/foods', {
       name: dto.name,
-      description: dto.description,
-      category: dto.category,
+      description: dto.description ?? '',
+      category: dto.category ? categoryToApiValue(dto.category as MenuCategory) : 'main_course',
       base_price: dto.price,
       is_available: true,
-      preparation_time: dto.preparationTime || 15,
-      is_vegetarian: dto.isVegetarian || false,
-      is_spicy: dto.isSpicy || false,
+      preparation_time: dto.preparationTime ?? 15,
+      is_vegetarian: dto.isVegetarian ?? false,
+      is_spicy: dto.isSpicy ?? false,
+      ...(dto.imageUrl?.trim() ? { image_url: dto.imageUrl.trim() } : {}),
     });
     return this.mapToMenuItem(response.data.data);
   }
@@ -140,11 +217,12 @@ export class MenuRepository {
       const response = await apiClient.put(`/foods/${id}`, {
         name: dto.name,
         description: dto.description,
-        category: dto.category ? categoryToApiValue(dto.category) : undefined,
+        category: dto.category ? categoryToApiValue(dto.category as MenuCategory) : undefined,
         base_price: dto.price,
         preparation_time: dto.preparationTime,
         is_vegetarian: dto.isVegetarian,
         is_spicy: dto.isSpicy,
+        ...(dto.imageUrl !== undefined ? { image_url: dto.imageUrl.trim() } : {}),
       });
       return this.mapToMenuItem(response.data.data);
     } catch (error) {
@@ -174,11 +252,16 @@ export class MenuRepository {
   }
 
   private mapToMenuItem(data: any): MenuItem {
-    // Lấy ảnh primary từ images array
+    // Lấy ảnh primary từ images array (hoặc image_url trên document food)
     let imageUrl = '';
     if (data.images && data.images.length > 0) {
       const primaryImage = data.images.find((img: any) => img.is_primary) || data.images[0];
       imageUrl = resolveImageUrl(primaryImage.image_url);
+    } else if (typeof data.image_url === 'string' && data.image_url.trim()) {
+      imageUrl = resolveImageUrl(data.image_url);
+    }
+    if (!imageUrl) {
+      imageUrl = MENU_IMAGE_FALLBACK;
     }
 
     return {

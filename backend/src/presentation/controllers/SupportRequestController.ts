@@ -71,16 +71,42 @@ export class SupportRequestController {
         },
         priority: this.mapPriority(supportRequest.priority),
       };
-      await Promise.all(
-        (['staff', 'manager', 'admin', 'chef'] as const).map((role) =>
-          this.notificationService.sendToRole(role, notifyPayload)
-        )
+      await this.notificationService.sendToRolesDeduped(
+        ['staff', 'manager', 'admin', 'chef', 'cashier'],
+        notifyPayload
       );
 
       res.status(201).json({
         success: true,
         message: 'Support request created successfully',
         data: supportRequest,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * GET /api/v1/support-requests/table/:tableId
+   * Khách (app/web bàn) xem yêu cầu của bàn — không cần đăng nhập.
+   */
+  listByTablePublic = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { tableId } = req.params;
+      if (!tableId || !String(tableId).trim()) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid table id',
+        });
+        return;
+      }
+
+      const supportRequests = await this.supportRequestRepository.findRecentByTableId(tableId, 50);
+
+      res.status(200).json({
+        success: true,
+        data: supportRequests,
+        total: supportRequests.length,
       });
     } catch (error) {
       next(error);

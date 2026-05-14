@@ -1,123 +1,26 @@
 {
   "collectionName": "users",
-  "description": "Collection quản lý người dùng (nhân viên và admin)",
+  "description": "Người dùng — khớp userSeeder.ts + User entity + UserRepository",
   "fields": {
-    "id": {
-      "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
-      "required": true,
-      "indexed": true
-    },
-    "displayName": {
-      "type": "string",
-      "description": "Tên hiển thị",
-      "required": true,
-      "indexed": false
-    },
-    "userName": {
-      "type": "string",
-      "description": "Tên đăng nhập (unique)",
-      "required": true,
-      "indexed": true,
-      "unique": true
-    },
-    "passwordHash": {
-      "type": "string",
-      "description": "Mật khẩu đã hash (Firebase Auth)",
-      "required": true,
-      "indexed": false
-    },
-    "email": {
-      "type": "string",
-      "description": "Email (unique)",
-      "required": true,
-      "indexed": true,
-      "unique": true
-    },
-    "sex": {
-      "type": "string",
-      "description": "Giới tính",
-      "required": false,
-      "indexed": false,
-      "enum": ["male", "female", "other"]
-    },
-    "birthday": {
-      "type": "timestamp",
-      "description": "Ngày sinh",
-      "required": false,
-      "indexed": false
-    },
-    "phone": {
-      "type": "string",
-      "description": "Số điện thoại",
-      "required": true,
-      "indexed": false
-    },
-    "address": {
-      "type": "string",
-      "description": "Địa chỉ",
-      "required": false,
-      "indexed": false
-    },
-    "status": {
-      "type": "string",
-      "description": "Trạng thái tài khoản",
-      "required": true,
-      "indexed": true,
-      "enum": ["active", "inactive", "suspended"],
-      "default": "active"
-    },
-    "avatar": {
-      "type": "string",
-      "description": "URL ảnh đại diện",
-      "required": false,
-      "indexed": false
-    },
-    "position": {
-      "type": "string",
-      "description": "Chức vụ (từ project)",
-      "required": false,
-      "indexed": false
-    },
-    "salary": {
-      "type": "number",
-      "description": "Lương (từ project)",
-      "required": false,
-      "indexed": false
-    },
-    "emergencyContact": {
-      "type": "string",
-      "description": "Liên hệ khẩn cấp (từ project)",
-      "required": false,
-      "indexed": false
-    },
-    "createdAt": {
-      "type": "timestamp",
-      "description": "Thời gian tạo",
-      "required": true,
-      "indexed": true
-    },
-    "updatedAt": {
-      "type": "timestamp",
-      "description": "Thời gian cập nhật",
-      "required": true,
-      "indexed": false
-    }
+    "id": { "type": "string", "required": true, "indexed": true },
+    "email": { "type": "string", "required": true, "indexed": true, "unique": true },
+    "password": { "type": "string", "description": "bcrypt hash", "required": true, "indexed": false },
+    "full_name": { "type": "string", "required": true },
+    "phone_number": { "type": "string", "required": false },
+    "avatar_url": { "type": "string", "required": false },
+    "is_active": { "type": "boolean", "required": true, "indexed": true, "default": true },
+    "email_verified": { "type": "boolean", "required": true, "default": false },
+    "last_login": { "type": "timestamp", "required": false },
+    "fcm_token": { "type": "string", "required": false },
+    "created_at": { "type": "timestamp", "required": true, "indexed": true },
+    "updated_at": { "type": "timestamp", "required": true }
   },
   "indexes": [
-    {
-      "fields": ["userName"],
-      "queryScope": "COLLECTION",
-      "unique": true
-    },
-    {
-      "fields": ["email"],
-      "queryScope": "COLLECTION",
-      "unique": true
-    },
-    {
-      "fields": ["status", "createdAt"],
-      "queryScope": "COLLECTION"
-    }
+    { "fields": ["email"], "queryScope": "COLLECTION", "unique": true },
+    { "fields": ["is_active", "created_at"], "queryScope": "COLLECTION" }
+  ],
+  "notes": [
+    "Vai trò không lưu role_id trên user — dùng collection user_role.",
+    "Không dùng: displayName, userName, passwordHash, status (active/inactive) như spec cũ."
   ]
 }

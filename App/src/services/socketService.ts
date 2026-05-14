@@ -20,14 +20,19 @@ class SocketService {
   private tableSessionId: string | null = null;
 
   connect(tableSessionId?: string): Socket {
+    if (tableSessionId) {
+      this.tableSessionId = tableSessionId;
+    }
+
     if (this.socket?.connected) {
+      if (tableSessionId) {
+        this.socket.emit('join:table', tableSessionId);
+      }
       return this.socket;
     }
 
     const socketUrl = getSocketUrl();
     console.log('🔌 Connecting to WebSocket:', socketUrl);
-
-    this.tableSessionId = tableSessionId || this.tableSessionId;
 
     this.socket = io(socketUrl, {
       transports: ['websocket', 'polling'],

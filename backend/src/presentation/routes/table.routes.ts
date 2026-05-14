@@ -23,6 +23,8 @@ export default function createTableRoutes(socketManager: SocketManager): Router 
   // Public routes (không cần auth)
   router.get('/', tableController.getAll);
   router.get('/by-number/:number', tableController.getByNumber); // NEW: Get table by number
+  router.get('/session/:sessionId/cart-draft', tableController.getCartDraft);
+  router.put('/session/:sessionId/cart-draft', tableController.putCartDraft);
   router.get('/:id', tableController.getById);
   router.post('/:id/session', tableController.createSession);
   router.patch('/session/:sessionId/end', tableController.endSession);

@@ -1,51 +1,16 @@
 {
   "collectionName": "user_role",
-  "description": "Collection liên kết người dùng với vai trò (many-to-many relationship)",
+  "description": "user ↔ role — khớp userSeeder (user_id, role_id, assigned_at, assigned_by)",
   "fields": {
-    "id": {
-      "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
-      "required": true,
-      "indexed": true
-    },
-    "userId": {
-      "type": "string",
-      "description": "ID người dùng (reference to users)",
-      "required": true,
-      "indexed": true
-    },
-    "roleId": {
-      "type": "string",
-      "description": "ID vai trò (reference to role)",
-      "required": true,
-      "indexed": true
-    },
-    "assignedAt": {
-      "type": "timestamp",
-      "description": "Thời gian gán vai trò",
-      "required": true,
-      "indexed": true
-    },
-    "assignedBy": {
-      "type": "string",
-      "description": "ID người gán vai trò",
-      "required": false,
-      "indexed": false
-    }
+    "id": { "type": "string", "required": true, "indexed": true },
+    "user_id": { "type": "string", "description": "FK → users.id", "required": true, "indexed": true },
+    "role_id": { "type": "string", "description": "FK → role.id", "required": true, "indexed": true },
+    "assigned_at": { "type": "timestamp", "required": true, "indexed": true },
+    "assigned_by": { "type": "string", "description": "users.id hoặc 'system'", "required": false }
   },
   "indexes": [
-    {
-      "fields": ["userId", "roleId"],
-      "queryScope": "COLLECTION",
-      "unique": true
-    },
-    {
-      "fields": ["userId"],
-      "queryScope": "COLLECTION"
-    },
-    {
-      "fields": ["roleId"],
-      "queryScope": "COLLECTION"
-    }
+    { "fields": ["user_id", "role_id"], "queryScope": "COLLECTION", "unique": true },
+    { "fields": ["user_id"], "queryScope": "COLLECTION" },
+    { "fields": ["role_id"], "queryScope": "COLLECTION" }
   ]
 }

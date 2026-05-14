@@ -2,7 +2,13 @@
  * Table Repository Interface - Domain Layer
  */
 
-import { DiningTable, TableWithSession, TableStatus, TableSession } from '../entities/Table';
+import {
+  DiningTable,
+  TableWithSession,
+  TableStatus,
+  TableSession,
+  TableSessionCustomerCartDraft,
+} from '../entities/Table';
 
 export interface ITableRepository {
   findById(id: string): Promise<DiningTable | null>;
@@ -23,4 +29,8 @@ export interface ITableRepository {
   findSessionById(sessionId: string): Promise<TableSession | null>;
   findActiveSessionByTableId(tableId: string): Promise<TableSession | null>;
   endSession(sessionId: string): Promise<TableSession>;
+  updateSessionCustomerDraft(
+    sessionId: string,
+    draft: TableSessionCustomerCartDraft | null
+  ): Promise<void>;
 }

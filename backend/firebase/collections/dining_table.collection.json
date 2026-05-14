@@ -1,78 +1,69 @@
 {
   "collectionName": "dining_table",
-  "description": "Collection quản lý bàn ăn trong nhà hàng",
+  "description": "Bàn ăn — khớp tableSeeder.ts + TableRepository (snake_case)",
   "fields": {
     "id": {
       "type": "string",
-      "description": "ID tự động tạo bởi Firestore",
+      "description": "Document ID Firestore",
       "required": true,
       "indexed": true
     },
-    "tableNumber": {
-      "type": "number",
-      "description": "Số bàn (unique)",
+    "table_number": {
+      "type": "string",
+      "description": "Mã bàn hiển thị & QR (T01, G03, V02, …) — luôn string trong DB",
       "required": true,
       "indexed": true,
       "unique": true
     },
     "capacity": {
       "type": "number",
-      "description": "Số lượng chỗ ngồi",
+      "description": "Số chỗ",
       "required": true,
       "indexed": false
     },
     "status": {
       "type": "string",
-      "description": "Trạng thái bàn",
+      "description": "TableStatus enum",
       "required": true,
       "indexed": true,
-      "enum": ["available", "occupied", "reserved", "cleaning"],
+      "enum": ["available", "occupied", "reserved", "cleaning", "out_of_service"],
       "default": "available"
     },
     "location": {
       "type": "string",
-      "description": "Vị trí bàn trong nhà hàng",
+      "description": "Khu vực",
       "required": false,
       "indexed": false
     },
-    "qrCode": {
+    "qr_code": {
       "type": "string",
-      "description": "URL mã QR của bàn",
+      "description": "Tham chiếu/placeholder QR (URL đầy đủ thường build từ API)",
       "required": false,
       "indexed": false
     },
-    "currentSessionId": {
-      "type": "string",
-      "description": "ID phiên hiện tại (reference to table_session)",
-      "required": false,
-      "indexed": true
-    },
-    "createdAt": {
+    "created_at": {
       "type": "timestamp",
-      "description": "Thời gian tạo",
       "required": true,
       "indexed": false
     },
-    "updatedAt": {
+    "updated_at": {
       "type": "timestamp",
-      "description": "Thời gian cập nhật",
       "required": true,
       "indexed": false
     }
   },
   "indexes": [
     {
-      "fields": ["status", "tableNumber"],
+      "fields": ["status", "table_number"],
       "queryScope": "COLLECTION"
     },
     {
-      "fields": ["tableNumber"],
+      "fields": ["table_number"],
       "queryScope": "COLLECTION",
       "unique": true
-    },
-    {
-      "fields": ["status"],
-      "queryScope": "COLLECTION"
     }
+  ],
+  "notes": [
+    "Không lưu currentSessionId trên document bàn — phiên active resolve qua table_session (where table_id + is_active)."
   ]
 }

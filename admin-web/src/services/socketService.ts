@@ -27,14 +27,15 @@ class SocketService {
     console.log('🔌 Connecting to WebSocket:', SOCKET_URL);
 
     this.socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'], // Force WebSocket only for lowest latency
       auth: {
         token: token || localStorage.getItem('token'),
       },
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelay: 500, // Faster reconnection
+      reconnectionDelayMax: 2000, // Lower max delay
       reconnectionAttempts: this.maxReconnectAttempts,
+      timeout: 5000, // Lower timeout for faster failure detection
     });
 
     this.setupEventHandlers();

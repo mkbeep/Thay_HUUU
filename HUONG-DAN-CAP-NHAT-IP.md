@@ -32,22 +32,22 @@ ipconfig | Select-String -Pattern "IPv4"
 
 **App/.env:**
 ```env
-REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.7
-API_URL=http://192.168.1.7:3000/api/v1
-CUSTOMER_WEB_BASE_URL=http://192.168.1.7:8081
+REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.2
+API_URL=http://192.168.1.2:3000/api/v1
+CUSTOMER_WEB_BASE_URL=http://192.168.1.2:8081
 ```
 
 **admin-web/.env:**
 ```env
-VITE_API_URL=http://192.168.1.7:3000/api/v1
-VITE_CUSTOMER_WEB_URL=http://192.168.1.7:8081
+VITE_API_URL=http://192.168.1.2:3000/api/v1
+VITE_CUSTOMER_WEB_URL=http://192.168.1.2:8081
 ```
 
 **backend/.env:**
 ```env
-BACKEND_URL=http://192.168.1.7:3000
-CORS_ORIGIN=http://localhost:5173,http://192.168.1.7:5173,http://localhost:8081,http://192.168.1.7:8081,http://localhost:19006,http://192.168.1.7:19006
-CUSTOMER_WEB_BASE_URL=http://192.168.1.7:8081
+BACKEND_URL=http://192.168.1.2:3000
+CORS_ORIGIN=http://localhost:5173,http://192.168.1.2:5173,http://localhost:8081,http://192.168.1.2:8081,http://localhost:19006,http://192.168.1.2:19006
+CUSTOMER_WEB_BASE_URL=http://192.168.1.2:8081
 ```
 
 3. **Khởi động lại các service:**
@@ -110,12 +110,12 @@ const handleAddTable = async () => {
 
 ### Định dạng URL trong mã QR:
 ```
-http://192.168.1.7:8081/table/{số_bàn}?tid={id_bàn}
+http://192.168.1.2:8081/table/{số_bàn}?tid={id_bàn}
 ```
 
 Ví dụ:
-- Bàn 1: `http://192.168.1.7:8081/table/1?tid=table1`
-- Bàn G01: `http://192.168.1.7:8081/table/G01?tid=tableG01`
+- Bàn 1: `http://192.168.1.2:8081/table/1?tid=table1`
+- Bàn G01: `http://192.168.1.2:8081/table/G01?tid=tableG01`
 
 ### Khi khách quét mã QR:
 
@@ -147,14 +147,14 @@ Mã QR sẽ được tạo trong thư mục `backend/qr-codes/`:
 
 ### 1. Kiểm tra Backend:
 ```bash
-curl http://192.168.1.7:3000/api/v1/health
+curl http://192.168.1.2:3000/api/v1/health
 ```
 
 ### 2. Kiểm tra Admin Web:
-Mở trình duyệt: `http://192.168.1.7:5173`
+Mở trình duyệt: `http://192.168.1.2:5173`
 
 ### 3. Kiểm tra Customer Web:
-Mở trình duyệt: `http://192.168.1.7:8081`
+Mở trình duyệt: `http://192.168.1.2:8081`
 
 ### 4. Kiểm tra từ điện thoại:
 - Đảm bảo điện thoại và máy tính cùng mạng WiFi
@@ -204,6 +204,6 @@ npm run generate-qr
 
 Nếu gặp vấn đề:
 1. Kiểm tra IP: `ipconfig`
-2. Kiểm tra kết nối: `ping 192.168.1.7`
-3. Kiểm tra backend: `curl http://192.168.1.7:3000/api/v1/health`
+2. Kiểm tra kết nối: `ping 192.168.1.2`
+3. Kiểm tra backend: `curl http://192.168.1.2:3000/api/v1/health`
 4. Xem log backend để biết lỗi chi tiết

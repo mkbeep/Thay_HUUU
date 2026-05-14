@@ -2,6 +2,7 @@ import { MenuItem, MenuCategory } from '../../domain/models/MenuItem';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../../utils/apiBaseUrl';
+import { resolveMenuImageUrl } from '../../utils/cloudinaryMenuImageFixes';
 
 const resolvedBase = getApiBaseUrl();
 
@@ -48,36 +49,19 @@ const categoryToApiValue = (category: MenuCategory): string => {
   return 'special';
 };
 
-const resolveImageUrl = (rawUrl?: string): string => {
-  if (!rawUrl) {
-    return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800';
-  }
-
-  const url = rawUrl.trim();
-  if (!url) {
-    return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800';
-  }
-
-  if (/^https?:\/\//i.test(url) || url.startsWith('//')) {
-    return url;
-  }
-
-  if (url.startsWith('/images/')) {
-    return `${API_ORIGIN}${url}`;
-  }
-
-  if (url.startsWith('menu/')) {
-    return `${API_ORIGIN}/images/${url}`;
-  }
-
-  return `${API_ORIGIN}/images/menu/${url.replace(/^\/+/, '')}`;
-};
-
 const CACHE_KEY = '@menu_items_cache';
 const CACHE_TIMESTAMP_KEY = '@menu_items_cache_timestamp';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 phút
 
 export class MenuRepository {
+  private hydrateMenuImage = (item: MenuItem): MenuItem => {
+    const raw =
+      item.imageUrl ||
+      (typeof item.image?.uri === 'string' ? (item.image.uri as string) : undefined);
+    const url = resolveMenuImageUrl(raw, API_ORIGIN);
+    return { ...item, imageUrl: url, image: { uri: url } };
+  };
+
   async getAllMenuItems(): Promise<MenuItem[]> {
     try {
       // Kiểm tra cache trước
@@ -105,7 +89,8 @@ export class MenuRepository {
       const oldCache = await AsyncStorage.getItem(CACHE_KEY);
       if (oldCache) {
         console.log('⚠️ Load menu từ cache cũ do lỗi API');
-        return JSON.parse(oldCache);
+        const parsed = JSON.parse(oldCache) as MenuItem[];
+        return Array.isArray(parsed) ? parsed.map(this.hydrateMenuImage) : [];
       }
       
       return [];
@@ -126,7 +111,8 @@ export class MenuRepository {
       
       // Kiểm tra cache còn hạn không
       if (now - timestamp < CACHE_DURATION) {
-        return JSON.parse(cachedData);
+        const parsed = JSON.parse(cachedData) as MenuItem[];
+        return Array.isArray(parsed) ? parsed.map(this.hydrateMenuImage) : [];
       }
       
       return null;
@@ -196,7 +182,10 @@ export class MenuRepository {
   private mapToMenuItem = (data: any): MenuItem => {
     // Chấp nhận cả URL cloud và path tương đối từ backend scripts cũ
     let imageSource: any;
-    const imageUrl = resolveImageUrl(data.images?.[0]?.image_url);
+    const rawImage =
+      data.images?.[0]?.image_url ??
+      (typeof data.image_url === 'string' ? data.image_url : undefined);
+    const imageUrl = resolveMenuImageUrl(rawImage, API_ORIGIN);
     
     if (imageUrl) {
       imageSource = { uri: imageUrl };
@@ -212,6 +201,7 @@ export class MenuRepository {
       price: data.base_price,
       category: normalizeCategoryToVi(data.category),
       available: data.is_available,
+      imageUrl,
       image: imageSource,
       // Đồ uống không hiển thị badge "Chay" để tránh gây hiểu nhầm
       badge: normalizeCategoryToVi(data.category) === MenuCategory.BEVERAGE

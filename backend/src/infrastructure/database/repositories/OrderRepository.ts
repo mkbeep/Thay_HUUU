@@ -128,6 +128,17 @@ export class OrderRepository implements IOrderRepository {
     } as Order));
   }
 
+  /** Đơn + chi tiết món (cho API public khách đồng bộ sau khi reload trình duyệt) */
+  async findByTableSessionWithItems(tableSessionId: string): Promise<OrderWithItems[]> {
+    const orders = await this.findByTableSession(tableSessionId);
+    const out: OrderWithItems[] = [];
+    for (const o of orders) {
+      const full = await this.findByIdWithItems(o.id);
+      if (full) out.push(full);
+    }
+    return out;
+  }
+
   async create(orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'>): Promise<Order> {
     const now = new Date();
     const data = {

@@ -1,6 +1,6 @@
 /**
  * Script seed 50 món ăn với ảnh từ Cloudinary
- * Cloud Name: dqnnwl8h8
+ * Ảnh: `https://res.cloudinary.com/<CLOUD_NAME>/...` (mặc định cloud name dqnnwl8h8, ghi đè bằng biến CLOUDINARY_CLOUD_NAME trong .env)
  * 
  * Chạy: npm run seed:foods-cloudinary
  */
@@ -10,6 +10,10 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
+
+// URL đã upload (manifest) — tránh public_id .jpg chưa tồn tại trên Cloudinary
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const menuImageUrlByPath: Record<string, string> = require('./menu-image-urls.flat.json');
 
 // Initialize Firebase Admin
 const serviceAccount = {
@@ -25,7 +29,7 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
-const CLOUDINARY_CLOUD_NAME = 'dqnnwl8h8';
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME?.trim() || 'dqnnwl8h8';
 const CLOUDINARY_BASE_URL = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
 // Mapping category chuẩn
@@ -105,7 +109,10 @@ const FOODS = [
  */
 function getCloudinaryUrl(category: string, filename: string): string {
   const folder = CATEGORY_MAP[category];
-  return `${CLOUDINARY_BASE_URL}/menu/${folder}/${filename}`;
+  const key = `menu/${folder}/${filename}`;
+  const mapped = menuImageUrlByPath[key];
+  if (mapped) return mapped;
+  return `${CLOUDINARY_BASE_URL}/${key.replace(/\.jpg$/, '.png')}`;
 }
 
 /**
@@ -147,6 +154,8 @@ async function seedData() {
       base_price: food.price,
       category: food.category,
       is_available: true,
+      is_vegetarian: false,
+      is_spicy: false,
       preparation_time: 15,
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -161,6 +170,7 @@ async function seedData() {
       image_url: imageUrl,
       is_primary: true,
       display_order: 0,
+      uploaded_at: admin.firestore.FieldValue.serverTimestamp(),
       created_at: admin.firestore.FieldValue.serverTimestamp(),
     });
     imageCount++;
@@ -177,8 +187,8 @@ async function seedData() {
   console.log(`   - Ảnh: ${imageCount}`);
   console.log(`\n💡 Bước tiếp theo:`);
   console.log(`   1. Kiểm tra: npm run check:food`);
-  console.log(`   2. Test API: curl http://192.168.1.7:3000/api/v1/foods`);
-  console.log(`   3. Mở Admin Web: http://192.168.1.7:5173`);
+  console.log(`   2. Test API: curl http://192.168.1.2:3000/api/v1/foods`);
+  console.log(`   3. Mở Admin Web: http://192.168.1.2:5173`);
   console.log(`   4. Mở Mobile App và kiểm tra menu`);
 }
 

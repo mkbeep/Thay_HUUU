@@ -70,6 +70,17 @@ export class SupportRequestRepository implements ISupportRequestRepository {
     return snapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot) => this.mapToEntity(doc.id, doc.data()));
   }
 
+  /** Khách xem yêu cầu của bàn mình — chỉ filter theo table_id, sort trong bộ nhớ (tránh index composite). */
+  async findRecentByTableId(tableId: string, max = 50): Promise<SupportRequest[]> {
+    const snapshot = await this.collection.where('table_id', '==', tableId).get();
+    const rows = snapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot) =>
+      this.mapToEntity(doc.id, doc.data())
+    );
+    return rows
+      .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+      .slice(0, max);
+  }
+
   async update(id: string, dto: UpdateSupportRequestDTO): Promise<SupportRequest> {
     const updateData: any = {
       ...dto,

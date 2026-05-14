@@ -177,15 +177,21 @@ export default function TablesPage() {
       void loadTablesFromApi({ silent: true });
     };
 
+    const handleOrderUpdated = () => {
+      void loadTablesFromApi({ silent: true });
+    };
+
     // Lắng nghe cả 2 events
     socket.on('table:status_changed', handleTableStatusChanged);
     socket.on('table:updated', handleTableUpdated);
+    socket.on('order:updated', handleOrderUpdated);
     
     console.log('✅ TablesPage WebSocket listeners registered');
 
     return () => {
       socket.off('table:status_changed', handleTableStatusChanged);
       socket.off('table:updated', handleTableUpdated);
+      socket.off('order:updated', handleOrderUpdated);
       console.log('🔌 TablesPage WebSocket listeners removed');
     };
   }, [loadTablesFromApi]);

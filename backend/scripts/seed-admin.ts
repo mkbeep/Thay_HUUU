@@ -10,8 +10,8 @@ async function seedAdmin() {
   try {
     console.log('🌱 Seeding admin user...');
 
-    // 1. Tạo hoặc lấy roles
-    const roles = ['admin', 'manager', 'staff'];
+    // 1. Tạo hoặc lấy roles (đủ vai trò theo schema + API confirm-payment cần cashier)
+    const roles = ['admin', 'manager', 'staff', 'chef', 'cashier', 'customer'];
     const roleIds: { [key: string]: string } = {};
 
     for (const roleName of roles) {
@@ -188,11 +188,81 @@ async function seedAdmin() {
       console.log('✅ Staff role assigned to user');
     }
 
+    // 8. Chef user
+    const chefEmail = 'chef@gourmet.com';
+    const existingChef = await db.collection('users').where('email', '==', chefEmail).limit(1).get();
+    let chefUserId: string;
+    if (existingChef.empty) {
+      const chefPassword = await bcrypt.hash('chef123', 10);
+      const chefRef = await db.collection('users').add({
+        email: chefEmail,
+        password: chefPassword,
+        full_name: 'Chef User',
+        phone_number: '0901111222',
+        is_active: true,
+        email_verified: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+      chefUserId = chefRef.id;
+      console.log('✅ Chef user created! chef@gourmet.com / chef123');
+    } else {
+      chefUserId = existingChef.docs[0].id;
+      console.log('⚠️  Chef user already exists');
+    }
+    const chefRoleRow = await db.collection('user_role')
+      .where('user_id', '==', chefUserId).where('role_id', '==', roleIds['chef']).limit(1).get();
+    if (chefRoleRow.empty) {
+      await db.collection('user_role').add({
+        user_id: chefUserId,
+        role_id: roleIds['chef'],
+        assigned_at: new Date(),
+        assigned_by: 'system',
+      });
+      console.log('✅ Chef role assigned');
+    }
+
+    // 9. Cashier user (xác nhận thanh toán API)
+    const cashierEmail = 'cashier@gourmet.com';
+    const existingCashier = await db.collection('users').where('email', '==', cashierEmail).limit(1).get();
+    let cashierUserId: string;
+    if (existingCashier.empty) {
+      const cashierPassword = await bcrypt.hash('cashier123', 10);
+      const cashierRef = await db.collection('users').add({
+        email: cashierEmail,
+        password: cashierPassword,
+        full_name: 'Cashier User',
+        phone_number: '0903333444',
+        is_active: true,
+        email_verified: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+      cashierUserId = cashierRef.id;
+      console.log('✅ Cashier user created! cashier@gourmet.com / cashier123');
+    } else {
+      cashierUserId = existingCashier.docs[0].id;
+      console.log('⚠️  Cashier user already exists');
+    }
+    const cashierRoleRow = await db.collection('user_role')
+      .where('user_id', '==', cashierUserId).where('role_id', '==', roleIds['cashier']).limit(1).get();
+    if (cashierRoleRow.empty) {
+      await db.collection('user_role').add({
+        user_id: cashierUserId,
+        role_id: roleIds['cashier'],
+        assigned_at: new Date(),
+        assigned_by: 'system',
+      });
+      console.log('✅ Cashier role assigned');
+    }
+
     console.log('\n🎉 All users seeded successfully!');
     console.log('\n📝 Login credentials:');
     console.log('Admin: admin@gourmet.com / admin123');
     console.log('Manager: manager@gourmet.com / manager123');
     console.log('Staff: staff@gourmet.com / staff123');
+    console.log('Chef: chef@gourmet.com / chef123');
+    console.log('Cashier: cashier@gourmet.com / cashier123');
 
   } catch (error) {
     console.error('❌ Error seeding admin:', error);

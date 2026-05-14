@@ -6,6 +6,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { FoodRepository } from '../../infrastructure/database/repositories/FoodRepository';
 import { NotFoundError } from '../../application/errors/AppError';
+import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 
 const normalizeCategory = (category?: string): string => {
   const value = (category || '').toString().trim().toLowerCase();
@@ -97,6 +98,14 @@ export class FoodController {
     try {
       const food = await this.foodRepository.create(req.body);
 
+      // 🔥 Emit WebSocket event
+      try {
+        const socketManager = SocketManager.getInstance();
+        socketManager.notifyFoodCreated(food);
+      } catch (error) {
+        console.error('WebSocket emit error (food:created):', error);
+      }
+
       res.status(201).json({
         success: true,
         message: 'Tạo món ăn thành công',
@@ -115,6 +124,14 @@ export class FoodController {
     try {
       const { id } = req.params;
       const food = await this.foodRepository.update(id, req.body);
+
+      // 🔥 Emit WebSocket event
+      try {
+        const socketManager = SocketManager.getInstance();
+        socketManager.notifyFoodUpdated(food);
+      } catch (error) {
+        console.error('WebSocket emit error (food:updated):', error);
+      }
 
       res.status(200).json({
         success: true,
@@ -135,6 +152,14 @@ export class FoodController {
       const { id } = req.params;
       await this.foodRepository.delete(id);
 
+      // 🔥 Emit WebSocket event
+      try {
+        const socketManager = SocketManager.getInstance();
+        socketManager.notifyFoodDeleted(id);
+      } catch (error) {
+        console.error('WebSocket emit error (food:deleted):', error);
+      }
+
       res.status(200).json({
         success: true,
         message: 'Xóa món ăn thành công',
@@ -153,7 +178,28 @@ export class FoodController {
       const { id } = req.params;
       const { is_available } = req.body;
 
+      // Update availability
       const food = await this.foodRepository.updateAvailability(id, is_available);
+
+      // 🔥 Emit WebSocket event IMMEDIATELY with minimal data for speed
+      try {
+        const socketManager = SocketManager.getInstance();
+        // Send lightweight update for instant UI response
+        // Note: Food entity doesn't have image_url, images are in separate collection
+        socketManager.notifyFoodUpdated({
+          id: food.id,
+          name: food.name,
+          category: food.category,
+          base_price: food.base_price,
+          description: food.description,
+          is_available: food.is_available,
+          is_vegetarian: food.is_vegetarian,
+          is_spicy: food.is_spicy,
+          preparation_time: food.preparation_time,
+        });
+      } catch (error) {
+        console.error('WebSocket emit error (food:availability):', error);
+      }
 
       res.status(200).json({
         success: true,
