@@ -11,6 +11,8 @@ import orderRoutes from './order.routes';
 import createTableRoutes from './table.routes';
 import inventoryRoutes from './inventory.routes';
 import supportRequestRoutes from './support-request.routes';
+import staffRoutes from './staff.routes';
+import reportRoutes from './report.routes';
 import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 
 // Export function để nhận socketManager từ server.ts
@@ -34,6 +36,8 @@ export default function createRoutes(socketManager: SocketManager): Router {
   router.use('/tables', createTableRoutes(socketManager)); // ✅ Truyền socketManager
   router.use('/inventory', inventoryRoutes);
   router.use('/support-requests', supportRequestRoutes);
+  router.use('/staff', staffRoutes);
+  router.use('/reports', reportRoutes);
 
   return router;
 }

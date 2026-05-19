@@ -3,6 +3,7 @@ import { Eye, EyeOff, Mail, Lock, HelpCircle } from 'lucide-react'
 import { useAuthStore } from '../../../stores/authStore'
 import { useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { DEFAULT_AUTHENTICATED_HOME } from '../../../utils/permissions'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('admin@gourmet.com')
@@ -34,7 +35,7 @@ export default function LoginPage() {
     try {
       await login(email, password)
       toast.success('Đăng nhập thành công!')
-      navigate('/')
+      navigate(DEFAULT_AUTHENTICATED_HOME)
     } catch (error) {
       toast.error('Email hoặc mật khẩu không đúng')
     } finally {

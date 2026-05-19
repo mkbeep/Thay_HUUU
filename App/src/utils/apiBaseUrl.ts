@@ -8,7 +8,7 @@ import { API_URL } from '@env';
  * Đổi hostname API theo hostname của trang (giữ port và path từ API_URL).
  */
 export function getApiBaseUrl(): string {
-  const raw = (API_URL || '').trim() || 'http://192.168.1.12:3000/api/v1';
+  const raw = (API_URL || '').trim() || 'http://192.168.1.3:3000/api/v1';
   const base = raw.replace(/\/+$/, '');
   if (Platform.OS !== 'web' || typeof window === 'undefined') {
     return base;

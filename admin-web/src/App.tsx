@@ -11,6 +11,13 @@ import InventoryPage from './features/inventory/pages/InventoryPage'
 import PromotionsPage from './features/promotions/pages/PromotionsPage'
 import ReportsPage from './features/reports/pages/ReportsPage'
 import StaffPage from './features/staff/pages/StaffPage'
+import { RoleProtectedRoute } from './components/auth/RoleProtectedRoute'
+import {
+  canAccessAdminManagerPages,
+  DASHBOARD_ENABLED,
+  DEFAULT_AUTHENTICATED_HOME,
+  PROMOTIONS_ENABLED,
+} from './utils/permissions'
 import SettingsPage from './features/settings/pages/SettingsPage'
 import ProfilePage from './features/settings/pages/ProfilePage'
 import AccountPage from './features/settings/pages/AccountPage'
@@ -57,18 +64,62 @@ function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<DashboardPage />} />
+        {DASHBOARD_ENABLED ? (
+          <Route path="/" element={<DashboardPage />} />
+        ) : (
+          <>
+            <Route
+              path="/"
+              element={<Navigate to={DEFAULT_AUTHENTICATED_HOME} replace />}
+            />
+            <Route
+              path="/dashboard"
+              element={<Navigate to={DEFAULT_AUTHENTICATED_HOME} replace />}
+            />
+          </>
+        )}
         <Route path="/menu" element={<MenuPage />} />
         <Route path="/orders" element={<OrdersPageWebSocket />} />
         <Route path="/tables" element={<TablesPage />} />
-        <Route path="/inventory" element={<InventoryPage />} />
-        <Route path="/promotions" element={<PromotionsPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/staff" element={<StaffPage />} />
+        <Route
+          path="/inventory"
+          element={
+            <RoleProtectedRoute allow={canAccessAdminManagerPages}>
+              <InventoryPage />
+            </RoleProtectedRoute>
+          }
+        />
+        {PROMOTIONS_ENABLED ? (
+          <Route path="/promotions" element={<PromotionsPage />} />
+        ) : (
+          <Route
+            path="/promotions"
+            element={<Navigate to={DEFAULT_AUTHENTICATED_HOME} replace />}
+          />
+        )}
+        <Route
+          path="/reports"
+          element={
+            <RoleProtectedRoute allow={canAccessAdminManagerPages}>
+              <ReportsPage />
+            </RoleProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff"
+          element={
+            <RoleProtectedRoute allow={canAccessAdminManagerPages}>
+              <StaffPage />
+            </RoleProtectedRoute>
+          }
+        />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/account" element={<AccountPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route
+          path="*"
+          element={<Navigate to={DEFAULT_AUTHENTICATED_HOME} replace />}
+        />
       </Routes>
     </Layout>
   )

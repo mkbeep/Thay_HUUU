@@ -151,8 +151,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🌍 Environment: ${config.server.env}`);
   console.log(`📝 API Version: ${config.server.apiVersion}`);
   console.log(`🔗 Local: http://localhost:${PORT}`);
-  console.log(`🔗 Network: http://192.168.1.7:${PORT}`);
-  console.log(`🏥 Health check: http://192.168.1.7:${PORT}/api/${config.server.apiVersion}/health`);
+  console.log(`🔗 Network: http://192.168.1.3:${PORT}`);
+  console.log(`🏥 Health check: http://192.168.1.3:${PORT}/api/${config.server.apiVersion}/health`);
   console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   console.log('='.repeat(50));
 });

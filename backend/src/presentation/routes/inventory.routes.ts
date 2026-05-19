@@ -1,5 +1,5 @@
 /**
- * Inventory Routes
+ * Inventory (Material) Routes
  */
 
 import { Router } from 'express';
@@ -11,26 +11,43 @@ import { validate } from '../middlewares/validationMiddleware';
 const router = Router();
 const inventoryController = new InventoryController();
 
-// Validation rules
-const createInventoryValidation = [
-  body('item_name').notEmpty().withMessage('Tên nguyên liệu không được để trống'),
+const createMaterialValidation = [
+  body('name').notEmpty().withMessage('Tên nguyên liệu không được để trống'),
   body('category').notEmpty().withMessage('Danh mục không được để trống'),
-  body('current_quantity').isNumeric().withMessage('Số lượng phải là số'),
-  body('unit').notEmpty().withMessage('Đơn vị không được để trống'),
+  body('minimum').isNumeric().withMessage('Mức tối thiểu phải là số'),
+  body('import.price').isNumeric().withMessage('Giá nhập phải là số'),
+  body('import.quantity').isNumeric().withMessage('Số lượng nhập phải là số'),
+  body('import.supplier').notEmpty().withMessage('Nhà cung cấp không được để trống'),
 ];
 
-// All routes require authentication and staff role
+const addImportValidation = [
+  body('price').isNumeric().withMessage('Giá nhập phải là số'),
+  body('quantity').isNumeric().withMessage('Số lượng nhập phải là số'),
+  body('supplier').notEmpty().withMessage('Nhà cung cấp không được để trống'),
+];
+
+const addExportValidation = [
+  body('quantity').isNumeric().withMessage('Số lượng xuất phải là số'),
+];
+
 router.use(authMiddleware);
 router.use(requireRole('staff', 'manager', 'admin'));
 
-// Routes
+router.get('/stats', inventoryController.getStats);
+router.get('/alerts', inventoryController.getAlerts);
 router.get('/', inventoryController.getAll);
-router.get('/low-stock', inventoryController.getLowStock);
+router.get('/:id/history', inventoryController.getHistory);
 router.get('/:id', inventoryController.getById);
-router.get('/:id/transactions', inventoryController.getTransactions);
-router.post('/', validate(createInventoryValidation), inventoryController.create);
-router.put('/:id', inventoryController.update);
-router.delete('/:id', requireRole('admin', 'manager'), inventoryController.delete);
-router.patch('/:id/quantity', inventoryController.updateQuantity);
+router.post('/', validate(createMaterialValidation), inventoryController.create);
+router.post(
+  '/:id/import',
+  validate(addImportValidation),
+  inventoryController.addImport
+);
+router.post(
+  '/:id/export',
+  validate(addExportValidation),
+  inventoryController.addExport
+);
 
 export default router;

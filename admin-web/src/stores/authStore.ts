@@ -5,7 +5,10 @@ interface User {
   id: string
   email: string
   name: string
+  /** Role chính (hiển thị UI) */
   role: 'admin' | 'manager' | 'staff'
+  /** Toàn bộ role từ backend — dùng phân quyền */
+  roles?: string[]
   avatar?: string
   phone?: string
   position?: string
@@ -58,12 +61,18 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json()
           console.log('✅ Login response:', data)
           
-          // Map backend response to User type
+          const backendRoles: string[] = data.data.user.roles || []
+          const primaryRole =
+            (['admin', 'manager', 'staff'] as const).find((r) =>
+              backendRoles.includes(r)
+            ) || backendRoles[0] || 'staff'
+
           const user: User = {
             id: data.data.user.id,
             email: data.data.user.email,
             name: data.data.user.full_name || data.data.user.email,
-            role: data.data.user.roles?.[0] || 'staff', // ✅ Lấy role đầu tiên từ array
+            role: primaryRole as User['role'],
+            roles: backendRoles,
             phone: data.data.user.phone_number,
             avatar: data.data.user.avatar_url,
           }

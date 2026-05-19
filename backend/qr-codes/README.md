@@ -2,8 +2,8 @@
 
 ## Thông tin
 - **Tổng số bàn**: 20
-- **Web Base URL**: http://192.168.1.12:8081
-- **Ngày tạo**: 20:04:50 13/5/2026
+- **Web Base URL**: http://192.168.1.3:8081
+- **Ngày tạo**: 22:05:00 14/5/2026
 
 ## Danh sách bàn
 - **1** - Tầng 1 - Khu A (2 chỗ)

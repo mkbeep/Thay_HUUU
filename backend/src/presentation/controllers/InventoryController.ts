@@ -1,31 +1,60 @@
 /**
- * Inventory Controller - Presentation Layer
+ * Inventory (Material) Controller - Presentation Layer
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { InventoryRepository } from '../../infrastructure/database/repositories/InventoryRepository';
-import { NotFoundError } from '../../application/errors/AppError';
+import { MaterialRepository } from '../../infrastructure/database/repositories/MaterialRepository';
+import {
+  AddMaterialExportUseCase,
+  AddMaterialImportUseCase,
+  CreateMaterialUseCase,
+  GetMaterialAlertsUseCase,
+  GetMaterialByIdUseCase,
+  GetMaterialHistoryUseCase,
+  GetMaterialKpiUseCase,
+  GetMaterialsUseCase,
+} from '../../application/use-cases/material/MaterialUseCases';
 
 export class InventoryController {
-  private inventoryRepository: InventoryRepository;
+  private getKpiUseCase: GetMaterialKpiUseCase;
+  private getMaterialsUseCase: GetMaterialsUseCase;
+  private getAlertsUseCase: GetMaterialAlertsUseCase;
+  private getByIdUseCase: GetMaterialByIdUseCase;
+  private getHistoryUseCase: GetMaterialHistoryUseCase;
+  private createMaterialUseCase: CreateMaterialUseCase;
+  private addImportUseCase: AddMaterialImportUseCase;
+  private addExportUseCase: AddMaterialExportUseCase;
 
   constructor() {
-    this.inventoryRepository = new InventoryRepository();
+    const materialRepository = new MaterialRepository();
+    this.getKpiUseCase = new GetMaterialKpiUseCase(materialRepository);
+    this.getMaterialsUseCase = new GetMaterialsUseCase(materialRepository);
+    this.getAlertsUseCase = new GetMaterialAlertsUseCase(materialRepository);
+    this.getByIdUseCase = new GetMaterialByIdUseCase(materialRepository);
+    this.getHistoryUseCase = new GetMaterialHistoryUseCase(materialRepository);
+    this.createMaterialUseCase = new CreateMaterialUseCase(materialRepository);
+    this.addImportUseCase = new AddMaterialImportUseCase(materialRepository);
+    this.addExportUseCase = new AddMaterialExportUseCase(materialRepository);
   }
 
   /**
-   * GET /api/v1/inventory
+   * GET /api/v1/inventory/stats
    */
-  getAll = async (req: Request, res: Response, next: NextFunction) => {
+  getStats = async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const { category, low_stock, search } = req.query;
+      const kpi = await this.getKpiUseCase.execute();
+      res.status(200).json({ success: true, data: kpi });
+    } catch (error) {
+      next(error);
+    }
+  };
 
-      const items = await this.inventoryRepository.findAll({
-        category: category as string,
-        low_stock: low_stock === 'true',
-        search: search as string,
-      });
-
+  /**
+   * GET /api/v1/inventory/alerts
+   */
+  getAlerts = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const items = await this.getAlertsUseCase.execute();
       res.status(200).json({
         success: true,
         data: items,
@@ -37,11 +66,17 @@ export class InventoryController {
   };
 
   /**
-   * GET /api/v1/inventory/low-stock
+   * GET /api/v1/inventory
    */
-  getLowStock = async (_req: Request, res: Response, next: NextFunction) => {
+  getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const items = await this.inventoryRepository.findLowStockItems();
+      const { category, status, search } = req.query;
+
+      const items = await this.getMaterialsUseCase.execute({
+        category: category as string | undefined,
+        status: status as string | undefined,
+        search: search as string | undefined,
+      });
 
       res.status(200).json({
         success: true,
@@ -58,39 +93,23 @@ export class InventoryController {
    */
   getById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
-      const item = await this.inventoryRepository.findById(id);
-
-      if (!item) {
-        throw new NotFoundError('Nguyên liệu không tồn tại');
-      }
-
-      res.status(200).json({
-        success: true,
-        data: item,
-      });
+      const item = await this.getByIdUseCase.execute(req.params.id);
+      res.status(200).json({ success: true, data: item });
     } catch (error) {
       next(error);
     }
   };
 
   /**
-   * GET /api/v1/inventory/:id/transactions
+   * GET /api/v1/inventory/:id/history
    */
-  getTransactions = async (req: Request, res: Response, next: NextFunction) => {
+  getHistory = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
-      const { limit } = req.query;
-
-      const transactions = await this.inventoryRepository.findTransactionsByInventoryId(
-        id,
-        limit ? parseInt(limit as string) : undefined
-      );
-
+      const history = await this.getHistoryUseCase.execute(req.params.id);
       res.status(200).json({
         success: true,
-        data: transactions,
-        total: transactions.length,
+        data: history,
+        total: history.length,
       });
     } catch (error) {
       next(error);
@@ -99,11 +118,11 @@ export class InventoryController {
 
   /**
    * POST /api/v1/inventory
+   * Tạo nguyên liệu mới kèm import đầu tiên
    */
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const item = await this.inventoryRepository.create(req.body);
-
+      const item = await this.createMaterialUseCase.execute(req.body);
       res.status(201).json({
         success: true,
         message: 'Tạo nguyên liệu thành công',
@@ -115,16 +134,14 @@ export class InventoryController {
   };
 
   /**
-   * PUT /api/v1/inventory/:id
+   * POST /api/v1/inventory/:id/import
    */
-  update = async (req: Request, res: Response, next: NextFunction) => {
+  addImport = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
-      const item = await this.inventoryRepository.update(id, req.body);
-
+      const item = await this.addImportUseCase.execute(req.params.id, req.body);
       res.status(200).json({
         success: true,
-        message: 'Cập nhật nguyên liệu thành công',
+        message: 'Nhập hàng thành công',
         data: item,
       });
     } catch (error) {
@@ -133,45 +150,14 @@ export class InventoryController {
   };
 
   /**
-   * DELETE /api/v1/inventory/:id
+   * POST /api/v1/inventory/:id/export
    */
-  delete = async (req: Request, res: Response, next: NextFunction) => {
+  addExport = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
-      await this.inventoryRepository.delete(id);
-
+      const item = await this.addExportUseCase.execute(req.params.id, req.body);
       res.status(200).json({
         success: true,
-        message: 'Xóa nguyên liệu thành công',
-      });
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  /**
-   * PATCH /api/v1/inventory/:id/quantity
-   */
-  updateQuantity = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      const { quantity, transaction_type, notes } = req.body;
-
-      // Update quantity
-      const item = await this.inventoryRepository.updateQuantity(id, quantity);
-
-      // Create transaction record
-      await this.inventoryRepository.createTransaction({
-        inventory_id: id,
-        transaction_type,
-        quantity,
-        notes,
-        created_by: req.user!.userId,
-      });
-
-      res.status(200).json({
-        success: true,
-        message: 'Cập nhật số lượng thành công',
+        message: 'Xuất hàng thành công',
         data: item,
       });
     } catch (error) {
