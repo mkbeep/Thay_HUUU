@@ -57,23 +57,31 @@ export class TableRepository implements ITableRepository {
     status?: TableStatus;
     capacity?: number;
   }): Promise<DiningTable[]> {
-    let query: FirebaseFirestore.Query = this.collection;
+    const snapshot = await this.collection.get();
+
+    let tables = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() } as DiningTable))
+      .filter((table) => {
+        const num = table.table_number;
+        return num !== undefined && num !== null && String(num).trim() !== '';
+      });
 
     if (filters?.status) {
-      query = query.where('status', '==', filters.status);
+      tables = tables.filter((table) => table.status === filters.status);
     }
 
     if (filters?.capacity) {
-      query = query.where('capacity', '>=', filters.capacity);
+      tables = tables.filter((table) => table.capacity >= filters.capacity!);
     }
 
-    query = query.orderBy('table_number', 'asc');
+    tables.sort((a, b) =>
+      String(a.table_number).localeCompare(String(b.table_number), 'vi', {
+        numeric: true,
+        sensitivity: 'base',
+      })
+    );
 
-    const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as DiningTable));
+    return tables;
   }
 
   async findAllWithSessions(): Promise<TableWithSession[]> {

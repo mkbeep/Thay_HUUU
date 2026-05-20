@@ -1,341 +1,243 @@
 # 🍽️ Restaurant Management System
 
-Hệ thống quản lý nhà hàng toàn diện với 2 ứng dụng:
-- **Mobile App** (React Native + Expo) - Dành cho khách hàng
-- **Admin Web** (React + Vite) - Dành cho quản lý nhà hàng
+> Hệ thống quản lý nhà hàng toàn diện với QR Code ordering, real-time updates, và quản lý tập trung.
 
-Được xây dựng theo **Kiến trúc Đa tầng (Layered Architecture)** với TypeScript.
-
----
-
-## 🎯 Tính năng
-
-### Mobile App (Khách hàng)
-- ✅ Xem thực đơn theo danh mục
-- ✅ Xem chi tiết món ăn
-- ✅ Thêm món vào giỏ hàng
-- ✅ Đặt món và theo dõi đơn hàng
-- ✅ Xem lịch sử đơn hàng
-- ✅ Yêu cầu hỗ trợ nhân viên
-- ✅ Xem thông tin bàn ăn
-- ✅ Thanh toán
-
-### Admin Web (Quản lý)
-- ✅ Dashboard với thống kê tổng quan
-- ✅ Quản lý thực đơn (CRUD)
-- ✅ Quản lý đơn hàng
-- ✅ Quản lý bàn ăn
-- ✅ Quản lý nhân viên
-- ✅ Quản lý kho
-- ✅ Quản lý khuyến mãi
-- ✅ Báo cáo và thống kê
-- ✅ Cài đặt hệ thống
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)](https://www.typescriptlang.org/)
+[![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange.svg)](https://firebase.google.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 ---
 
-## 🏗️ Kiến trúc
+## 🎯 Tổng Quan
 
-Dự án được xây dựng theo **Kiến trúc Đa tầng (Layered Architecture)** với 4 tầng:
-
-```
-┌─────────────────────────────────────┐
-│   Presentation Layer (UI)           │  ← React Components, Screens
-├─────────────────────────────────────┤
-│   Business Logic Layer (Services)   │  ← Business Rules, Validation
-├─────────────────────────────────────┤
-│   Data Access Layer (Repositories)  │  ← CRUD Operations, API Calls
-├─────────────────────────────────────┤
-│   Domain Layer (Models)             │  ← Entities, Interfaces, Types
-└─────────────────────────────────────┘
-```
-
-**Đọc thêm**: [ARCHITECTURE.md](./ARCHITECTURE.md)
+Hệ thống quản lý nhà hàng hiện đại với 3 components chính:
+- **Admin Web:** Dashboard quản lý toàn diện
+- **Customer App:** Web-app cho khách hàng (QR code ordering)
+- **Backend API:** RESTful API + WebSocket real-time
 
 ---
 
-## 🚀 Bắt đầu nhanh
+## ✨ Tính Năng Chính
 
-### Yêu cầu
-- Node.js v16+ (khuyến nghị v18 hoặc v20)
-- npm v8+ hoặc yarn v1.22+
+### 👨‍💼 Admin Dashboard
+- 📋 Quản lý thực đơn (CRUD menu items)
+- 📦 Quản lý đơn hàng (Real-time với WebSocket)
+- 🪑 Quản lý bàn ăn (Tạo QR codes)
+- 👥 Quản lý nhân viên (Role-based access)
+- 📊 Báo cáo & Analytics
+- 🎁 Khuyến mãi & Promotions
+- 📦 Quản lý kho (Inventory)
 
-### Cài đặt và Chạy
+### 📱 Customer Web-App
+- 📷 Quét QR code để vào bàn
+- 🍕 Xem menu theo danh mục
+- 🛒 Giỏ hàng & đặt món
+- 🔔 Gọi nhân viên hỗ trợ
+- 📜 Lịch sử đơn hàng
+- 💳 Thanh toán
 
-#### 1. Mobile App
-```bash
-cd App
-npm install
-npm start
-```
-
-Sau đó quét QR code bằng Expo Go app trên điện thoại.
-
-#### 2. Admin Web
-```bash
-cd admin-web
-npm install
-npm run dev
-```
-
-Mở trình duyệt: http://localhost:5173
-
-**Đăng nhập**:
-- Email: `admin@gourmet.com`
-- Password: `admin123`
-
-**Hướng dẫn chi tiết**: [SETUP_AND_RUN.md](./SETUP_AND_RUN.md)
+### 🔧 Backend Features
+- RESTful API (Express.js)
+- WebSocket real-time updates
+- JWT Authentication
+- Role-based Authorization
+- Firebase Firestore
+- Clean Architecture
 
 ---
 
-## 📂 Cấu trúc Dự án
+## 🚀 Quick Start
+
+### 🏠 Chạy Local (Development)
+
+```powershell
+# Clone repository
+git clone https://github.com/YOUR_USERNAME/restaurant-management-system.git
+cd restaurant-management-system
+
+# Chạy tất cả services
+.\START-ALL-LOCAL.ps1
+```
+
+**Truy cập:**
+- Backend: http://localhost:3000
+- Admin: http://localhost:5173 (admin@restaurant.com / Admin@123456)
+- App: http://localhost:8081?tableId=1
+
+📖 **Chi tiết:** [HUONG-DAN-LOCAL.md](./HUONG-DAN-LOCAL.md)
+
+---
+
+### 🌐 Deploy Production (Internet)
+
+```powershell
+# Push to GitHub
+.\DEPLOY-QUICK-START.ps1
+
+# Deploy services (xem hướng dẫn chi tiết)
+# - Backend → Render.com (Free)
+# - Admin-web → Vercel (Free)
+# - App → Vercel (Free)
+```
+
+📖 **Chi tiết:** [HUONG-DAN-DEPLOY.md](./HUONG-DAN-DEPLOY.md)
+
+---
+
+## 🏗️ Kiến Trúc
+
+```
+┌─────────────────────────────────────────┐
+│  Frontend (React + Vite)                │
+│  ┌──────────────┐  ┌──────────────┐    │
+│  │ Admin Web    │  │ Customer App │    │
+│  │ (Vercel)     │  │ (Vercel)     │    │
+│  └──────┬───────┘  └──────┬───────┘    │
+│         │                  │            │
+│         └────────┬─────────┘            │
+└──────────────────┼──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│  Backend (Node.js + Express)            │
+│  ┌──────────────────────────────────┐   │
+│  │  RESTful API + WebSocket         │   │
+│  │  (Render.com)                    │   │
+│  └──────────────┬───────────────────┘   │
+└─────────────────┼───────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────┐
+│  Database (Firebase Firestore)          │
+│  ┌──────────────────────────────────┐   │
+│  │  Collections: foods, orders,     │   │
+│  │  tables, users, inventory        │   │
+│  └──────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technologies |
+|-------|-------------|
+| **Frontend** | React 18, TypeScript, Vite, TailwindCSS, React Router |
+| **Backend** | Node.js, Express.js, TypeScript, Socket.io |
+| **Database** | Firebase Firestore |
+| **Auth** | JWT (JSON Web Tokens) |
+| **Deployment** | Render.com (Backend), Vercel (Frontend) |
+
+---
+
+## 📚 Documentation
+
+| File | Mô tả |
+|------|-------|
+| [BAT-DAU-O-DAY.md](./BAT-DAU-O-DAY.md) | 🎯 Điểm khởi đầu |
+| [HUONG-DAN-LOCAL.md](./HUONG-DAN-LOCAL.md) | 💻 Chạy local |
+| [HUONG-DAN-DEPLOY.md](./HUONG-DAN-DEPLOY.md) | 🚀 Deploy production |
+| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | 🔧 Giải quyết vấn đề |
+| [DOCS-INDEX.md](./DOCS-INDEX.md) | 📚 Index tất cả docs |
+| [SUMMARY.md](./SUMMARY.md) | 📊 Tóm tắt dự án |
+
+---
+
+## 💰 Chi Phí
+
+### FREE Tier (Khuyến nghị)
+- Backend: Render.com (Free - 750h/month)
+- Frontend: Vercel (Free - 100GB bandwidth)
+- Database: Firebase (Free - 50K reads/day)
+- **Total: $0/month** ✅
+
+### Paid Tier (Nếu cần)
+- Backend: Render.com ($7/month - no sleep)
+- Database: Firebase (~$25/month - more quota)
+- **Total: ~$32/month**
+
+---
+
+## 📦 Project Structure
 
 ```
 restaurant-management-system/
-├── App/                          # Mobile App (React Native)
+├── backend/              # Node.js + Express API
 │   ├── src/
-│   │   ├── domain/              # Models & Constants
-│   │   │   ├── models/
-│   │   │   └── constants/
-│   │   ├── data/                # Repositories
-│   │   │   ├── repositories/
-│   │   │   └── mockData/
-│   │   ├── business/            # Services
-│   │   │   └── services/
-│   │   └── presentation/        # UI
-│   │       ├── screens/
-│   │       └── context/
-│   └── App.tsx
+│   │   ├── application/  # Business logic
+│   │   ├── domain/       # Models
+│   │   ├── infrastructure/ # Database, config
+│   │   └── presentation/ # Controllers, routes
+│   ├── scripts/          # Seed data
+│   └── .env.example
 │
-├── admin-web/                    # Admin Web (React)
+├── admin-web/            # React Admin Dashboard
 │   ├── src/
-│   │   ├── domain/              # Models
-│   │   │   └── models/
-│   │   ├── data/                # Repositories
-│   │   │   └── repositories/
-│   │   ├── business/            # Services
-│   │   │   └── services/
-│   │   ├── features/            # Feature Modules
-│   │   │   ├── auth/
-│   │   │   ├── dashboard/
-│   │   │   ├── menu/
-│   │   │   ├── orders/
-│   │   │   └── ...
-│   │   ├── components/          # Shared Components
-│   │   └── stores/              # State Management
-│   └── index.html
+│   │   ├── components/   # UI components
+│   │   ├── features/     # Feature modules
+│   │   ├── business/     # Services
+│   │   └── data/         # Repositories
+│   └── .env.example
 │
-├── backend/                      # Backend (Coming soon)
+├── App/                  # React Customer Web-App
+│   ├── src/
+│   │   ├── presentation/ # Screens, components
+│   │   ├── business/     # Services
+│   │   ├── data/         # Repositories
+│   │   └── domain/       # Models
+│   └── .env.example
 │
-├── ARCHITECTURE.md               # Tài liệu kiến trúc
-├── SETUP_AND_RUN.md             # Hướng dẫn cài đặt
-├── FIXES_AND_IMPROVEMENTS.md    # Lỗi đã sửa & cải tiến
-└── README.md                     # File này
+└── docs/                 # Documentation
+    ├── *.md              # Guides
+    └── scripts/          # Helper scripts
 ```
 
 ---
 
-## 🛠️ Công nghệ
+## 🔐 Default Credentials
 
-### Mobile App
-- **Framework**: React Native 0.74 + Expo 51
-- **Language**: TypeScript 5.3
-- **Navigation**: React Navigation 6
-- **State**: React Context API
-- **UI**: React Native Components
-
-### Admin Web
-- **Framework**: React 18 + Vite 5
-- **Language**: TypeScript 5.2
-- **Routing**: React Router v6
-- **State**: Zustand 4
-- **UI**: Tailwind CSS 3
-- **Data Fetching**: TanStack Query (React Query)
-- **HTTP**: Axios
-- **Charts**: Recharts
-
----
-
-## 📚 Tài liệu
-
-- 📖 [ARCHITECTURE.md](./ARCHITECTURE.md) - Chi tiết về kiến trúc đa tầng
-- 🚀 [SETUP_AND_RUN.md](./SETUP_AND_RUN.md) - Hướng dẫn cài đặt và chạy
-- 🔧 [FIXES_AND_IMPROVEMENTS.md](./FIXES_AND_IMPROVEMENTS.md) - Lỗi đã sửa và cải tiến
-- 📱 [START_APP.md](./START_APP.md) - Hướng dẫn khởi động app
-- 🎯 [SUPPORT_FEATURE_COMPLETE.md](./SUPPORT_FEATURE_COMPLETE.md) - Tính năng hỗ trợ
-
----
-
-## 🔄 Luồng dữ liệu
-
-```
-User Action
-    ↓
-Presentation Layer (UI Component)
-    ↓
-Business Logic Layer (Service)
-    ↓ (validate, transform)
-Data Access Layer (Repository)
-    ↓ (API call / local storage)
-Data Source
-    ↓ (response)
-Repository (transform)
-    ↓
-Service (apply business rules)
-    ↓
-UI Component (update state)
-```
-
----
-
-## ✅ Lỗi Đã Sửa
-
-### 1. TypeScript Configuration Error
-- ❌ **Lỗi**: `File 'expo/tsconfig.base' not found`
-- ✅ **Đã sửa**: Cập nhật `App/tsconfig.json` với cấu hình đầy đủ
-
-### 2. Thiếu Kiến trúc Đa tầng cho Admin Web
-- ❌ **Trước**: Chỉ có UI components
-- ✅ **Sau**: Đầy đủ 4 tầng (Domain, Data, Business, Presentation)
-
-**Chi tiết**: [FIXES_AND_IMPROVEMENTS.md](./FIXES_AND_IMPROVEMENTS.md)
-
----
-
-## 🎓 Best Practices
-
-### 1. Separation of Concerns
-- Mỗi tầng có trách nhiệm riêng biệt
-- UI không chứa business logic
-- Business logic không biết về UI
-
-### 2. Type Safety
-- TypeScript strict mode
-- Đầy đủ type definitions
-- DTOs cho data transfer
-
-### 3. Dependency Flow
-- Tầng trên phụ thuộc tầng dưới
-- Tầng dưới không biết về tầng trên
-- Domain layer độc lập hoàn toàn
-
-### 4. Testability
-- Mỗi tầng có thể test riêng
-- Mock data dễ dàng
-- Business logic tách biệt
-
----
-
-## 🚧 Roadmap
-
-### Phase 1: ✅ Hoàn thành
-- [x] Setup project structure
-- [x] Implement layered architecture
-- [x] Create domain models
-- [x] Implement repositories with mock data
-- [x] Implement services with business logic
-- [x] Build UI for both apps
-- [x] Write documentation
-
-### Phase 2: 🚧 Đang thực hiện
-- [ ] Connect to real backend API
-- [ ] Implement authentication & authorization
-- [ ] Add error handling
-- [ ] Add loading states
-- [ ] Add notifications
-
-### Phase 3: 📋 Kế hoạch
-- [ ] Write unit tests
-- [ ] Write integration tests
-- [ ] Implement caching
-- [ ] Add offline support
-- [ ] Performance optimization
-
-### Phase 4: 🚀 Production
-- [ ] CI/CD pipeline
-- [ ] Environment configs
-- [ ] Security audit
-- [ ] Deploy to production
-- [ ] Monitoring & logging
-
----
-
-## 🧪 Testing
-
-```bash
-# Mobile App
-cd App
-npm test
-
-# Admin Web
-cd admin-web
-npm test
-```
-
----
-
-## 📦 Build Production
-
-### Mobile App
-```bash
-cd App
-eas build --platform android
-eas build --platform ios
-```
-
-### Admin Web
-```bash
-cd admin-web
-npm run build
-# Output: dist/
-```
+**Admin Account:**
+- Email: `admin@restaurant.com`
+- Password: `Admin@123456`
 
 ---
 
 ## 🤝 Contributing
 
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
 5. Open a Pull Request
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
 
 ---
 
-## 👥 Team
+## 🆘 Support
 
-- **Developer**: Your Name
-- **Architecture**: Layered Architecture Pattern
-- **Version**: 2.0.0
-- **Last Updated**: 2026-05-04
-
----
-
-## 📞 Support
-
-Nếu gặp vấn đề:
-1. Xem [SETUP_AND_RUN.md](./SETUP_AND_RUN.md) - Phần "Xử lý Lỗi"
-2. Xem [FIXES_AND_IMPROVEMENTS.md](./FIXES_AND_IMPROVEMENTS.md)
-3. Tạo issue trên GitHub
+- 📧 Email: support@example.com
+- 🐛 Issues: [GitHub Issues](https://github.com/YOUR_USERNAME/restaurant-management-system/issues)
+- 📚 Docs: See [DOCS-INDEX.md](./DOCS-INDEX.md)
 
 ---
 
-## 🌟 Features Highlight
+## 🎉 Acknowledgments
 
-- ✨ **Kiến trúc Đa tầng** - Dễ maintain và scale
-- 🔒 **Type Safety** - TypeScript strict mode
-- 📱 **Cross-platform** - iOS, Android, Web
-- 🎨 **Modern UI** - Tailwind CSS, React Native
-- 🚀 **Fast Development** - Expo, Vite, Hot Reload
-- 📊 **Rich Features** - Dashboard, Reports, Analytics
-- 🔄 **Real-time Ready** - Sẵn sàng cho WebSocket
-- 🧪 **Testable** - Layered architecture
+- Firebase for database
+- Render.com for backend hosting
+- Vercel for frontend hosting
+- All open-source libraries used
 
 ---
 
-**Happy Coding! 🎉**       
+**Made with ❤️ for Restaurant Management**
+
+**Last Updated:** 20/05/2026

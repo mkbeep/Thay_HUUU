@@ -5,15 +5,33 @@
 import { db } from '../../config/firebase.config';
 import { IFoodRepository } from '../../../domain/repositories/IFoodRepository';
 import { Food, FoodWithImages, FoodCategory, FoodImage } from '../../../domain/entities/Food';
+import fs from 'fs';
+import path from 'path';
 
 export class FoodRepository implements IFoodRepository {
   private readonly collection = db.collection('food');
   private readonly imagesCollection = db.collection('food_image');
+  private readonly uploadMenuPath = path.resolve(process.cwd(), 'uploads', 'menu');
 
   async findById(id: string): Promise<Food | null> {
     const doc = await this.collection.doc(id).get();
     if (!doc.exists) return null;
     return { id: doc.id, ...doc.data() } as Food;
+  }
+
+  async getPrimaryImageUrl(foodId: string): Promise<string | undefined> {
+    const imagesSnapshot = await this.imagesCollection
+      .where('food_id', '==', foodId)
+      .limit(5)
+      .get();
+
+    if (imagesSnapshot.empty) return undefined;
+
+    const primaryDoc =
+      imagesSnapshot.docs.find((doc) => Boolean(doc.data().is_primary)) ||
+      imagesSnapshot.docs[0];
+
+    return String(primaryDoc.data().image_url || '') || undefined;
   }
 
   private mapToMenuItem(data: any): FoodImage {
@@ -134,6 +152,62 @@ export class FoodRepository implements IFoodRepository {
     return updated;
   }
 
+  async replacePrimaryImage(foodId: string, imageUrl: string): Promise<FoodImage> {
+    const now = new Date();
+    const imagesSnapshot = await this.imagesCollection
+      .where('food_id', '==', foodId)
+      .get();
+
+    let primaryDoc = imagesSnapshot.docs.find(doc => Boolean(doc.data().is_primary));
+    if (!primaryDoc && imagesSnapshot.docs.length > 0) {
+      primaryDoc = imagesSnapshot.docs[0];
+    }
+
+    const imageData = {
+      food_id: foodId,
+      image_url: imageUrl,
+      is_primary: true,
+      display_order: 0,
+      uploaded_at: now,
+    };
+
+    if (primaryDoc) {
+      const oldImageUrl = String(primaryDoc.data().image_url || '');
+      await primaryDoc.ref.update(imageData);
+
+      const batch = db.batch();
+      imagesSnapshot.docs
+        .filter(doc => doc.id !== primaryDoc!.id)
+        .forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+
+      this.deleteUploadedImageIfUnused(oldImageUrl, imageUrl);
+      return { id: primaryDoc.id, ...imageData };
+    }
+
+    const docRef = await this.imagesCollection.add(imageData);
+    return { id: docRef.id, ...imageData };
+  }
+
+  private deleteUploadedImageIfUnused(oldImageUrl: string, newImageUrl: string): void {
+    if (!oldImageUrl || oldImageUrl === newImageUrl || !oldImageUrl.startsWith('/uploads/menu/')) {
+      return;
+    }
+
+    const fileName = path.basename(oldImageUrl);
+    const filePath = path.resolve(this.uploadMenuPath, fileName);
+
+    if (!filePath.startsWith(this.uploadMenuPath + path.sep)) {
+      return;
+    }
+
+    fs.promises.unlink(filePath).catch((error) => {
+      if (error?.code !== 'ENOENT') {
+        console.warn(`Could not delete old menu image ${filePath}:`, error);
+      }
+    });
+  }
+
   async delete(id: string): Promise<void> {
     await this.collection.doc(id).delete();
     
@@ -144,6 +218,7 @@ export class FoodRepository implements IFoodRepository {
     
     const batch = db.batch();
     imagesSnapshot.docs.forEach(doc => {
+      this.deleteUploadedImageIfUnused(String(doc.data().image_url || ''), '');
       batch.delete(doc.ref);
     });
     await batch.commit();

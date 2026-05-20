@@ -1,8 +1,10 @@
 import { Bell, Settings, Search, User, LogOut, Camera, Shield, HelpCircle } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import toast from 'react-hot-toast'
+import { socketService } from '../../services/socketService'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
 
@@ -27,8 +29,14 @@ export default function Header() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notificationPanelRef = useRef<HTMLDivElement>(null)
 
+  const handleUnauthorized = () => {
+    logout()
+    socketService.disconnect()
+    navigate('/login', { replace: true })
+  }
+
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token')
     return {
       Authorization: token ? `Bearer ${token}` : '',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -37,25 +45,76 @@ export default function Header() {
     }
   }
 
-  const fetchNotifications = async () => {
+  const normalizeNotification = (item: any): NotificationItem => ({
+    id: String(item?.id || `local_${Date.now()}`),
+    title: String(item?.title || 'Thông báo'),
+    message: String(item?.message || ''),
+    created_at: item?.created_at || item?.createdAt || new Date().toISOString(),
+    is_read: Boolean(item?.is_read ?? item?.isRead ?? item?.read ?? false),
+    data: item?.data || {},
+  })
+
+  const fetchNotifications = useCallback(async () => {
     try {
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      if (!token) return
+
       const response = await axios.get(`${API_URL}/notifications?limit=10`, {
         headers: getAuthHeaders(),
       })
-      const list = response.data?.data || []
-      setNotifications(list)
-      setUnreadCount(response.data?.unread_count || list.filter((n: NotificationItem) => !n.is_read).length)
+      const serverList = (response.data?.data || []).map(normalizeNotification)
+      setNotifications((prev) => {
+        const localList = prev.filter((n) => n.id.startsWith('local_'))
+        const merged = [...localList, ...serverList].slice(0, 10)
+        setUnreadCount(
+          response.data?.unread_count !== undefined
+            ? Number(response.data.unread_count) + localList.filter((n) => !n.is_read).length
+            : merged.filter((n) => !n.is_read).length
+        )
+        return merged
+      })
     } catch (error) {
       console.error('Error fetching notifications:', error)
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        handleUnauthorized()
+      }
     }
-  }
+  }, [])
+
+  const addLocalNotification = useCallback((notif: NotificationItem | any) => {
+    const normalized = normalizeNotification(notif)
+    setNotifications((prev) => {
+      if (prev.some((item) => item.id === normalized.id)) return prev
+      if (
+        normalized.data?.order_id &&
+        prev.some(
+          (item) => item.data?.order_id === normalized.data?.order_id && item.title === normalized.title
+        )
+      ) {
+        return prev
+      }
+      return [normalized, ...prev].slice(0, 10)
+    })
+    setUnreadCount((prev) => prev + 1)
+    toast(`${normalized.title}: ${normalized.message}`, { duration: 5000 })
+  }, [])
 
   const markAsRead = async (id: string) => {
     try {
+      if (id.startsWith('local_')) {
+        setNotifications((prev) =>
+          prev.map((notif) => (notif.id === id ? { ...notif, is_read: true } : notif))
+        )
+        setUnreadCount((prev) => Math.max(0, prev - 1))
+        return
+      }
       await axios.patch(`${API_URL}/notifications/${id}/read`, {}, { headers: getAuthHeaders() })
       await fetchNotifications()
     } catch (error) {
       console.error('Error marking notification as read:', error)
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        handleUnauthorized()
+      }
     }
   }
 
@@ -72,11 +131,9 @@ export default function Header() {
   }, [showNotifications])
 
   useEffect(() => {
-    void fetchNotifications()
-    
     // Chỉ poll khi tab đang active
     const handleVisibilityChange = () => {
-      if (!document.hidden) {
+      if (!document.hidden && showNotifications) {
         void fetchNotifications()
       }
     }
@@ -85,16 +142,102 @@ export default function Header() {
     
     // Tăng interval lên 15 giây để giảm tải
     const timer = setInterval(() => {
-      if (!document.hidden) {
+      if (!document.hidden && showNotifications) {
         void fetchNotifications()
       }
-    }, 15000)
+    }, 60000)
     
     return () => {
       clearInterval(timer)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
+  }, [showNotifications])
+
+  useEffect(() => {
+    void fetchNotifications()
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) void fetchNotifications()
+    }
+
+    const timer = setInterval(() => {
+      if (!document.hidden) void fetchNotifications()
+    }, 60000)
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [fetchNotifications])
+
+  useEffect(() => {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+    if (!token) return
+
+    try {
+      socketService.connect(token)
+    } catch (error) {
+      console.error('Error connecting notification socket:', error)
+      return
+    }
+
+    const buildOrderNotification = (order: any): NotificationItem => {
+      const orderNo = order?.order_number || order?.id || 'order'
+      const tableNumber = order?.table_number || order?.tableNumber
+      const tableText = tableNumber ? ` bàn ${tableNumber}` : ''
+      return {
+        id: `local_order_${order?.id || orderNo}`,
+        title: 'Đơn hàng mới',
+        message: `Có đơn hàng mới${tableText}: ${orderNo}`,
+        created_at: new Date().toISOString(),
+        is_read: false,
+        data: { order_id: order?.id },
+      }
+    }
+
+    const handleOrderCreated = (order: any) => addLocalNotification(buildOrderNotification(order))
+
+    const handleOrderUpdated = (order: any) => {
+      if (order?.payment_status === 'payment_pending_confirmation') {
+        const orderNo = order?.order_number || order?.id || ''
+        const tableNumber = order?.table_number
+        const tableText = tableNumber ? ` bàn ${tableNumber}` : ''
+        addLocalNotification({
+          id: `local_payment_${order?.id || orderNo}`,
+          title: 'Yêu cầu thanh toán',
+          message: `Đơn ${orderNo}${tableText} yêu cầu thanh toán`,
+          created_at: new Date().toISOString(),
+          is_read: false,
+          data: { order_id: order?.id },
+        })
+      }
+    }
+
+    const handleSupportRequest = (payload: any) => {
+      const id = payload?.id || Date.now()
+      addLocalNotification({
+        id: `local_support_${id}`,
+        title: payload?.title || 'Yêu cầu hỗ trợ',
+        message: payload?.message || payload?.note || 'Có yêu cầu hỗ trợ mới từ khách hàng',
+        created_at: new Date().toISOString(),
+        is_read: false,
+        data: payload?.data || payload || {},
+      })
+    }
+
+    socketService.on('order:created', handleOrderCreated)
+    socketService.on('order:updated', handleOrderUpdated)
+    socketService.on('support:created', handleSupportRequest)
+    socketService.on('notification:new', addLocalNotification)
+
+    return () => {
+      socketService.off('order:created', handleOrderCreated)
+      socketService.off('order:updated', handleOrderUpdated)
+      socketService.off('support:created', handleSupportRequest)
+      socketService.off('notification:new', addLocalNotification)
+    }
+  }, [addLocalNotification])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -108,9 +251,11 @@ export default function Header() {
   }
 
   const handleNotificationClick = () => {
-    setShowNotifications(!showNotifications)
+    const nextVisible = !showNotifications
+    setShowNotifications(nextVisible)
     setShowUserMenu(false)
     setShowSettings(false)
+    if (nextVisible) void fetchNotifications()
   }
 
   const handleSettingsClick = () => {

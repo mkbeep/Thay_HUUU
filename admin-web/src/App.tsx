@@ -25,13 +25,31 @@ import { useEffect } from 'react'
 import { socketService } from './services/socketService'
 
 function App() {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, token, logout } = useAuthStore()
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const storedToken = localStorage.getItem('token') || localStorage.getItem('access_token')
+    const activeToken = token || storedToken
+
+    if (!activeToken) {
+      logout()
+      socketService.disconnect()
+      return
+    }
+
+    localStorage.setItem('token', activeToken)
+    localStorage.setItem('access_token', activeToken)
+  }, [isAuthenticated, token, logout])
 
   // Initialize WebSocket connection when authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      const token = localStorage.getItem('token')
-      const socket = socketService.connect(token || undefined)
+      const activeToken = token || localStorage.getItem('token') || localStorage.getItem('access_token')
+      if (!activeToken) return
+
+      const socket = socketService.connect(activeToken)
       
       // ✅ Đảm bảo join admin room
       if (socket && socket.connected) {
@@ -49,7 +67,7 @@ function App() {
         // Don't disconnect on unmount, keep connection alive
       }
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, token])
 
   if (!isAuthenticated) {
     return (

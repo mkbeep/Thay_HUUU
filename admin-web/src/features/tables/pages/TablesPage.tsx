@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { Plus } from 'lucide-react';
+import { socketService } from '../../../services/socketService';
 
 type TableStatus = 'available' | 'occupied' | 'billing';
-type ZoneType = 'main' | 'terrace' | 'private';
+type ZoneType = 'all' | 'main' | 'terrace' | 'private';
 
 interface Table {
   id: string;
@@ -14,13 +15,14 @@ interface Table {
   location: string;
   status: TableStatus;
   qrCode: string;
+  sessionId?: string;
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 const api = axios.create({ baseURL: API_URL })
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('token') || localStorage.getItem('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -34,6 +36,7 @@ interface ApiDiningTable {
   location?: string;
   /** Do backend tính từ CUSTOMER_WEB_BASE_URL — luôn là link http(s) mở web khách */
   customer_menu_url?: string;
+  current_session?: { id: string; table_id: string; is_active?: boolean };
 }
 
 function fallbackMenuUrl(t: Pick<ApiDiningTable, 'id' | 'table_number'>): string {
@@ -87,15 +90,17 @@ function mapApiStatus(s: string): TableStatus {
 
 function mapApiTableToUi(t: ApiDiningTable): Table {
   const cap = typeof t.capacity === 'number' ? t.capacity : Number(t.capacity) || 0;
+  const tableNumber = String(t.table_number ?? '').trim() || t.id;
   return {
     id: t.id,
-    number: t.table_number,
+    number: tableNumber,
     name: `Bàn ${t.table_number}`,
     zone: inferZone(t.location),
     capacity: cap > 0 ? `${cap} khách` : '—',
     location: t.location || '—',
     status: mapApiStatus(t.status),
     qrCode: resolveQrCodeUrl(t),
+    sessionId: t.current_session?.id,
   };
 }
 
@@ -105,7 +110,7 @@ function formatVnd(n: number): string {
 }
 
 export default function TablesPage() {
-  const [selectedZone, setSelectedZone] = useState<ZoneType>('main');
+  const [selectedZone, setSelectedZone] = useState<ZoneType>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
@@ -159,9 +164,16 @@ export default function TablesPage() {
 
   // WebSocket listener for table status changes
   useEffect(() => {
-    const socket = (window as any).socket;
-    if (!socket) {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+    if (!token) {
       console.warn('⚠️ WebSocket not available for TablesPage');
+      return;
+    }
+
+    try {
+      socketService.connect(token);
+    } catch (error) {
+      console.error('TablesPage WebSocket connect failed:', error);
       return;
     }
 
@@ -178,21 +190,21 @@ export default function TablesPage() {
     };
 
     // Lắng nghe cả 2 events
-    socket.on('table:status_changed', handleTableStatusChanged);
-    socket.on('table:updated', handleTableUpdated);
+    socketService.on('table:status_changed', handleTableStatusChanged);
+    socketService.on('table:updated', handleTableUpdated);
     
     console.log('✅ TablesPage WebSocket listeners registered');
 
     return () => {
-      socket.off('table:status_changed', handleTableStatusChanged);
-      socket.off('table:updated', handleTableUpdated);
+      socketService.off('table:status_changed', handleTableStatusChanged);
+      socketService.off('table:updated', handleTableUpdated);
       console.log('🔌 TablesPage WebSocket listeners removed');
     };
   }, [loadTablesFromApi]);
 
   useEffect(() => {
     // Polling mỗi 5 giây để đồng bộ (giảm từ 90 giây)
-    const t = setInterval(() => void loadTablesFromApi({ silent: true }), 5_000);
+    const t = setInterval(() => void loadTablesFromApi({ silent: true }), 15_000);
     return () => clearInterval(t);
   }, [loadTablesFromApi]);
 
@@ -213,7 +225,7 @@ export default function TablesPage() {
         targets.map(async (t) => {
           try {
             const res = await api.get('/orders', {
-              params: { table_session_id: t.number },
+              params: { table_session_id: t.sessionId || t.number },
             });
             const list = res.data?.data || [];
             const sum = list.reduce((s: number, o: { total_amount?: number }) => s + (Number(o.total_amount) || 0), 0);
@@ -270,7 +282,10 @@ export default function TablesPage() {
     }
   };
 
-  const filteredTables = tables.filter(table => table.zone === selectedZone);
+  const filteredTables =
+    selectedZone === 'all'
+      ? tables
+      : tables.filter((table) => table.zone === selectedZone);
 
   const handleAddTable = async () => {
     if (!newTable.number || !newTable.name) return;
@@ -404,7 +419,17 @@ export default function TablesPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+        <div className="flex bg-gray-50 p-1.5 rounded-xl border border-gray-200 flex-wrap gap-1">
+          <button
+            onClick={() => setSelectedZone('all')}
+            className={`px-6 py-2.5 text-sm font-semibold rounded-lg transition-all ${
+              selectedZone === 'all'
+                ? 'bg-white text-[#AD2C00] shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Tất cả ({tables.length})
+          </button>
           <button
             onClick={() => setSelectedZone('main')}
             className={`px-6 py-2.5 text-sm font-semibold rounded-lg transition-all ${

@@ -67,9 +67,6 @@ function formatQuantity(value: number) {
 const INPUT_CLASS =
   'w-full px-4 py-3 border-2 border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#AD2C00] text-gray-900 bg-white placeholder:text-gray-500'
 
-const SELECT_CLASS =
-  'w-full px-4 py-3 border-2 border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#AD2C00] text-gray-900 bg-white'
-
 export default function InventoryPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -121,8 +118,14 @@ export default function InventoryPage() {
     [selectedCategory, selectedStatus, searchQuery, showOnlyProblems]
   )
 
-  const { data: stats, isLoading: statsLoading } = useInventoryStats()
-  const { data: materials = [], isLoading: listLoading, refetch } = useMaterials(listFilters)
+  const { data: stats, isLoading: statsLoading, isError: statsError, error: statsErrorObj } = useInventoryStats()
+  const {
+    data: materials = [],
+    isLoading: listLoading,
+    isError: listError,
+    error: listErrorObj,
+    refetch,
+  } = useMaterials(listFilters)
   const { data: alerts = [] } = useInventoryAlerts()
   const { data: history = [], isLoading: historyLoading } = useMaterialHistory(
     showHistoryModal ? selectedItem?.id ?? null : null
@@ -382,6 +385,23 @@ export default function InventoryPage() {
           </button>
         </div>
       </div>
+
+      {(statsError || listError) && (
+        <div className="mb-4 bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-center justify-between gap-4">
+          <p className="text-red-800 text-sm font-medium">
+            {(listErrorObj as Error)?.message ||
+              (statsErrorObj as Error)?.message ||
+              'Không thể tải dữ liệu kho. Vui lòng đăng nhập lại.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
 
       {/* KPI */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

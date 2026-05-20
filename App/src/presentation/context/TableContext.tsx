@@ -28,6 +28,21 @@ const TableContext = createContext<TableContextType | undefined>(undefined);
 
 const TABLE_STORAGE_KEY = '@restaurant_table_info';
 
+/** Tạo hoặc tái sử dụng phiên bàn — backend luôn đánh dấu occupied + WebSocket cho admin. */
+async function ensureTableSession(
+  tableId: string,
+  tableNumber: string | number
+): Promise<string | null> {
+  const repo = new TableRepository();
+  try {
+    const session = await repo.createTableSession(tableId, 1);
+    return session?.id ?? null;
+  } catch (error) {
+    console.error(`ensureTableSession failed for table ${tableNumber}:`, error);
+    return null;
+  }
+}
+
 export const TableProvider = ({ children }: { children: ReactNode }) => {
   const [tableNumber, setTableNumber] = useState<string | number | null>(null);
   const [tableId, setTableId] = useState<string | null>(null);
@@ -60,15 +75,16 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
           t = await repo.getTableByNumber(parsed.tableNumber);
         }
         if (cancelled || !t) return false;
+        const sessionId = await ensureTableSession(t.id, t.number);
         const info: TableInfo = {
           tableNumber: t.number,
           tableId: t.id,
-          sessionId: null,
+          sessionId,
         };
         await AsyncStorage.setItem(TABLE_STORAGE_KEY, JSON.stringify(info));
         setTableNumber(t.number);
         setTableId(t.id);
-        setSessionId(null);
+        setSessionId(sessionId);
         return true;
       } catch (error) {
         console.error('Web table URL bootstrap failed:', error);
@@ -80,9 +96,17 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
       const stored = await AsyncStorage.getItem(TABLE_STORAGE_KEY);
       if (stored && !cancelled) {
         const info: TableInfo = JSON.parse(stored);
+        let sessionId = info.sessionId;
+        if (info.tableId) {
+          sessionId = await ensureTableSession(info.tableId, info.tableNumber);
+          await AsyncStorage.setItem(
+            TABLE_STORAGE_KEY,
+            JSON.stringify({ ...info, sessionId })
+          );
+        }
         setTableNumber(info.tableNumber);
         setTableId(info.tableId);
-        setSessionId(info.sessionId);
+        setSessionId(sessionId);
       }
     };
 
@@ -159,8 +183,10 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
       // XÓA localStorage và sessionStorage (chỉ trên Web)
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         try {
-          localStorage.clear();
-          sessionStorage.clear();
+          localStorage.removeItem('orders');
+          localStorage.removeItem('cart');
+          sessionStorage.removeItem('orders');
+          sessionStorage.removeItem('cart');
           console.log('✅ Web storage cleared');
         } catch (e) {
           console.error('Error clearing web storage:', e);
@@ -170,7 +196,7 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
       // Xóa AsyncStorage (React Native) - TRỪ TABLE_STORAGE_KEY để tránh xóa mất thông tin đang set
       try {
         const allKeys = await AsyncStorage.getAllKeys();
-        const keysToRemove = allKeys.filter(key => key !== TABLE_STORAGE_KEY);
+        const keysToRemove = allKeys.filter((key) => key === 'orders' || key === 'cart');
         if (keysToRemove.length > 0) {
           await AsyncStorage.multiRemove(keysToRemove);
           console.log(`✅ Cleared ${keysToRemove.length} keys from AsyncStorage`);
@@ -180,7 +206,8 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
       }
       
       // Kết thúc session cũ nếu có VÀ đang đổi bàn
-      if (isDifferentTable && oldTableId && oldSessionId) {
+      const shouldEndPreviousSessionOnDeviceSwitch = false;
+      if (shouldEndPreviousSessionOnDeviceSwitch && isDifferentTable && oldTableId && oldSessionId) {
         try {
           const tableRepo = new TableRepository();
           await tableRepo.endTableSession(oldSessionId);
@@ -192,21 +219,13 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
       }
       
       // ✅ TẠO TABLE SESSION VÀ CẬP NHẬT TRẠNG THÁI BÀN
-      let sessionIdToSave = newSessionId;
+      let sessionIdToSave: string | null = newSessionId || null;
       
       if (!sessionIdToSave) {
         try {
           console.log(`📡 Creating table session for table ${newTableId}...`);
-          const tableRepo = new TableRepository();
-          const session = await tableRepo.createTableSession(newTableId, 1); // Default 1 customer
-          sessionIdToSave = session.id;
-          console.log(`✅ Table session created: ${sessionIdToSave}`);
-          
-          // Cập nhật trạng thái bàn thành "occupied"
-          await tableRepo.updateTableStatus(newTableId, TableStatus.OCCUPIED);
-          console.log(`✅ Table status updated to "occupied"`);
-          
-          // ✅ WebSocket sẽ được trigger từ backend khi updateTableStatus
+          sessionIdToSave = await ensureTableSession(newTableId, newTableNumber);
+          console.log(`✅ Table session created: ${sessionIdToSave} (backend đã đánh dấu bàn occupied)`);
         } catch (error) {
           console.error('❌ Error creating table session:', error);
           // Vẫn tiếp tục dù không tạo được session

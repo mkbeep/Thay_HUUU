@@ -20,7 +20,7 @@ export class MenuService {
     return await this.menuRepository.getMenuItemsByCategory(category);
   }
 
-  async createMenuItem(dto: CreateMenuItemDto): Promise<MenuItem> {
+  async createMenuItem(dto: CreateMenuItemDto, image?: File): Promise<MenuItem> {
     // Validate input
     if (!dto.name || dto.name.trim().length === 0) {
       throw new Error('Tên món ăn không được để trống');
@@ -29,16 +29,20 @@ export class MenuService {
       throw new Error('Giá phải lớn hơn 0');
     }
 
-    return await this.menuRepository.createMenuItem(dto);
+    return await this.menuRepository.createMenuItem(dto, image);
   }
 
-  async updateMenuItem(id: string, dto: UpdateMenuItemDto): Promise<MenuItem | undefined> {
+  async updateMenuItem(id: string, dto: UpdateMenuItemDto, image?: File): Promise<MenuItem | undefined> {
     // Validate input
     if (dto.price !== undefined && dto.price <= 0) {
       throw new Error('Giá phải lớn hơn 0');
     }
 
-    return await this.menuRepository.updateMenuItem(id, dto);
+    return await this.menuRepository.updateMenuItem(id, dto, image);
+  }
+
+  async uploadMenuItemImage(id: string, image: File): Promise<MenuItem | undefined> {
+    return await this.menuRepository.uploadMenuItemImage(id, image);
   }
 
   async deleteMenuItem(id: string): Promise<boolean> {

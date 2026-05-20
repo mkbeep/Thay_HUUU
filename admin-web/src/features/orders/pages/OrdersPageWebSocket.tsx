@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle, ChefHat, Clock, MessageSquare, Wifi, WifiOff, XCircle } from 'lucide-react'
 import { useWebSocket } from '../../../hooks/useWebSocket'
+import { useAuthStore } from '../../../stores/authStore'
+import { socketService } from '../../../services/socketService'
 
 type KitchenStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served' | 'cancelled'
 type PaymentStatus = 'unpaid' | 'payment_pending_confirmation' | 'paid'
+const ACTIVE_STATUSES = new Set<KitchenStatus>(['pending', 'confirmed', 'preparing', 'ready', 'served'])
 
 interface ApiOrderItem {
   id: string
@@ -19,6 +22,7 @@ interface ApiOrder {
   id: string
   order_number: string
   table_session_id?: string
+  table_number?: string | number
   status: KitchenStatus
   payment_status?: PaymentStatus
   notes?: string
@@ -31,7 +35,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
 const client = axios.create({ baseURL: API_URL })
 
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('token') || localStorage.getItem('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   if (config.method?.toLowerCase() === 'get') {
     config.params = { ...(config.params || {}), _t: Date.now() }
@@ -86,8 +90,20 @@ function mergeOrder(prev: ApiOrder, incoming: ApiOrder): ApiOrder {
     notes: incoming.notes ?? prev.notes,
     order_number: incoming.order_number || prev.order_number,
     table_session_id: incoming.table_session_id ?? prev.table_session_id,
+    table_number: incoming.table_number ?? prev.table_number,
     created_at: (incoming.created_at as any) ?? prev.created_at,
   }
+}
+
+function getTableDisplay(order: ApiOrder): string {
+  const tableNumber = order.table_number
+  if (tableNumber !== undefined && tableNumber !== null && String(tableNumber).trim() !== '') {
+    return String(tableNumber)
+  }
+
+  const fallback = order.table_session_id
+  if (fallback && /^[A-Za-z]?\d{1,4}$/i.test(fallback.trim())) return fallback.trim()
+  return '—'
 }
 
 function itemNoteText(item: ApiOrderItem): string | undefined {
@@ -96,6 +112,7 @@ function itemNoteText(item: ApiOrderItem): string | undefined {
 }
 
 export default function OrdersPageWebSocket() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const focusOrderId = searchParams.get('orderId') || searchParams.get('focus')
   const focusOrderNo = searchParams.get('orderNo')
@@ -104,14 +121,31 @@ export default function OrdersPageWebSocket() {
   const [loading, setLoading] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const { isConnected, on, off } = useWebSocket()
+  const logout = useAuthStore((state) => state.logout)
+  const authFailedRef = useRef(false)
+
+  const handleUnauthorized = useCallback(() => {
+    if (authFailedRef.current) return
+    authFailedRef.current = true
+    logout()
+    socketService.disconnect()
+    navigate('/login', { replace: true })
+  }, [logout, navigate])
 
   const loadOrders = useCallback(async (showLoading = false) => {
+    if (authFailedRef.current) return
     try {
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      if (!token) {
+        handleUnauthorized()
+        return
+      }
+
       if (showLoading) setLoading(true)
-      const statuses: KitchenStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'served']
-      const results = await Promise.all(statuses.map((status) => client.get('/orders', { params: { status } })))
-      const merged = results.flatMap((res) => res.data?.data || [])
-      const uniqueById = Array.from(new Map(merged.map((o: ApiOrder) => [o.id, o])).values())
+      const response = await client.get('/orders')
+      const allOrders = (response.data?.data || []) as ApiOrder[]
+      const uniqueById = Array.from(new Map(allOrders.map((o: ApiOrder) => [o.id, o])).values())
+        .filter((o): o is ApiOrder => ACTIVE_STATUSES.has(o.status))
       
       // ✅ TỰ ĐỘNG XÓA CÁC ĐƠN ĐÃ THANH TOÁN
       const unpaidOrders = uniqueById.filter((o: ApiOrder) => o.payment_status !== 'paid')
@@ -125,14 +159,12 @@ export default function OrdersPageWebSocket() {
     } catch (error) {
       console.error('Error loading orders:', error)
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('access_token')
-        window.location.href = '/login'
+        handleUnauthorized()
       }
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [])
+  }, [handleUnauthorized])
 
   const updateOrderOptimistic = useCallback((orderId: string, updates: Partial<ApiOrder>) => {
     setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, ...updates } : order)))
@@ -378,7 +410,7 @@ export default function OrdersPageWebSocket() {
             <div className="text-xs font-bold text-[#AD2C00] mb-1 truncate">{order.order_number || order.id}</div>
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1">
               <span className="text-xs font-medium text-indigo-600">Bàn</span>
-              <span className="text-sm font-bold text-indigo-800">{order.table_session_id || '—'}</span>
+              <span className="text-sm font-bold text-indigo-800">{getTableDisplay(order)}</span>
             </div>
           </div>
           <div className="text-right shrink-0">

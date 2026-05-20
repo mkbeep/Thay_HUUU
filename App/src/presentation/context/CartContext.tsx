@@ -1,12 +1,12 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { MenuItem } from '../../domain/models/MenuItem';
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTable } from './TableContext';
 
-// CartItem extends MenuItem và thêm các thuộc tính cho giỏ hàng
 export interface CartItem {
   id: string;
   name: string;
-  price: number; // Giá dạng số để tính toán (đơn vị: đồng)
-  priceDisplay: string; // Giá hiển thị "145k"
+  price: number;
+  priceDisplay: string;
   image: any;
   quantity: number;
   options?: string;
@@ -29,61 +29,75 @@ interface CartContextType {
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
+const CART_STORAGE_PREFIX = '@cart:';
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
-  // ✅ KHÔNG tự động restore từ localStorage - Luôn bắt đầu với giỏ hàng trống
   const [items, setItems] = useState<CartItem[]>([]);
+  const [storageScope, setStorageScope] = useState<string | null>(null);
+  const [hasLoadedScope, setHasLoadedScope] = useState(false);
+  const { tableId, sessionId } = useTable();
+  const lastTableScopeRef = useRef<string | null>(null);
 
-  // ✅ Không cần lắng nghe storage event nữa vì không dùng localStorage
-  // useEffect(() => {
-  //   const handleStorageChange = (e: StorageEvent) => {
-  //     if (e.key === 'cart' && e.newValue === null) {
-  //       console.log('🧹 Cart cleared by table change');
-  //       setItems([]);
-  //     }
-  //   };
-  //   
-  //   window.addEventListener('storage', handleStorageChange);
-  //   return () => window.removeEventListener('storage', handleStorageChange);
-  // }, []);
+  useEffect(() => {
+    const scope = sessionId || tableId;
+    if (!scope) {
+      setItems([]);
+      setStorageScope(null);
+      setHasLoadedScope(false);
+      lastTableScopeRef.current = null;
+      return;
+    }
 
-  // ✅ KHÔNG lưu vào localStorage nữa - Chỉ lưu trong memory
-  // Khi đổi bàn, TableContext sẽ clear tất cả và component sẽ unmount/remount
-  // useEffect(() => {
-  //   try {
-  //     if (items.length === 0) {
-  //       localStorage.removeItem('cart');
-  //       console.log('💾 Removed empty cart from localStorage');
-  //     } else {
-  //       localStorage.setItem('cart', JSON.stringify(items));
-  //       console.log('💾 Saved cart to localStorage:', items.length, 'items');
-  //     }
-  //   } catch (error) {
-  //     console.error('Error saving cart to localStorage:', error);
-  //   }
-  // }, [items]);
+    lastTableScopeRef.current = scope;
+    setStorageScope(scope);
+    setHasLoadedScope(false);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(`${CART_STORAGE_PREFIX}${scope}`);
+        if (cancelled) return;
+        setItems(stored ? JSON.parse(stored) : []);
+      } catch (error) {
+        console.error('Error loading scoped cart:', error);
+        if (!cancelled) setItems([]);
+      } finally {
+        if (!cancelled) setHasLoadedScope(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, tableId]);
+
+  useEffect(() => {
+    if (!storageScope || !hasLoadedScope) return;
+    void (async () => {
+      try {
+        const key = `${CART_STORAGE_PREFIX}${storageScope}`;
+        if (items.length === 0) {
+          await AsyncStorage.removeItem(key);
+        } else {
+          await AsyncStorage.setItem(key, JSON.stringify(items));
+        }
+      } catch (error) {
+        console.error('Error saving scoped cart:', error);
+      }
+    })();
+  }, [items, storageScope, hasLoadedScope]);
 
   const addItem = (item: Omit<CartItem, 'quantity'>) => {
-    console.log('🛒 CartContext.addItem called:', item);
-    
     setItems((prevItems) => {
-      console.log('📦 Current cart items:', prevItems.length);
-      
-      // Kiểm tra xem món đã có trong giỏ chưa
       const existingItemIndex = prevItems.findIndex((i) => i.id === item.id);
-      
+
       if (existingItemIndex > -1) {
-        // Nếu đã có, tăng số lượng
         const newItems = [...prevItems];
         newItems[existingItemIndex].quantity += 1;
-        console.log(`✅ Increased quantity for "${item.name}" to ${newItems[existingItemIndex].quantity}`);
         return newItems;
-      } else {
-        // Nếu chưa có, thêm mới với quantity = 1
-        const newItem = { ...item, quantity: 1 };
-        console.log(`✅ Added new item "${item.name}" to cart`);
-        return [...prevItems, newItem];
       }
+
+      return [...prevItems, { ...item, quantity: 1 }];
     });
   };
 
@@ -96,19 +110,15 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       removeItem(id);
       return;
     }
-    
+
     setItems((prevItems) =>
-      prevItems.map((item) =>
-        item.id === id ? { ...item, quantity } : item
-      )
+      prevItems.map((item) => (item.id === id ? { ...item, quantity } : item))
     );
   };
 
   const updateNote = (id: string, note: string) => {
     setItems((prevItems) =>
-      prevItems.map((item) =>
-        item.id === id ? { ...item, note } : item
-      )
+      prevItems.map((item) => (item.id === id ? { ...item, note } : item))
     );
   };
 
@@ -116,25 +126,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setItems([]);
   };
 
-  const getTotal = () => {
-    return items.reduce((total, item) => total + item.price * item.quantity, 0);
-  };
-
-  const getTax = () => {
-    return getTotal() * 0.08; // 8% thuế
-  };
-
-  const getServiceFee = () => {
-    return 0; // Phí dịch vụ = 0
-  };
-
-  const getGrandTotal = () => {
-    return getTotal() + getTax() + getServiceFee();
-  };
-
-  const getItemCount = () => {
-    return items.reduce((count, item) => count + item.quantity, 0);
-  };
+  const getTotal = () => items.reduce((total, item) => total + item.price * item.quantity, 0);
+  const getTax = () => getTotal() * 0.08;
+  const getServiceFee = () => 0;
+  const getGrandTotal = () => getTotal() + getTax() + getServiceFee();
+  const getItemCount = () => items.reduce((count, item) => count + item.quantity, 0);
 
   return (
     <CartContext.Provider

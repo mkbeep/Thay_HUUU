@@ -32,10 +32,14 @@ function getErrorMessage(error: unknown): string {
 
 export const inventoryApi = {
   async getStats(): Promise<MaterialKpi> {
-    const response = await axios.get(`${API_URL}/inventory/stats`, {
-      headers: getAuthHeaders(),
-    });
-    return response.data.data as MaterialKpi;
+    try {
+      const response = await axios.get(`${API_URL}/inventory/stats`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data.data as MaterialKpi;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
   },
 
   async getMaterials(params?: {
@@ -43,18 +47,26 @@ export const inventoryApi = {
     status?: string;
     search?: string;
   }): Promise<Material[]> {
-    const response = await axios.get(`${API_URL}/inventory`, {
-      headers: getAuthHeaders(),
-      params,
-    });
-    return response.data.data as Material[];
+    try {
+      const response = await axios.get(`${API_URL}/inventory`, {
+        headers: getAuthHeaders(),
+        params,
+      });
+      return response.data.data as Material[];
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
   },
 
   async getAlerts(): Promise<Material[]> {
-    const response = await axios.get(`${API_URL}/inventory/alerts`, {
-      headers: getAuthHeaders(),
-    });
-    return response.data.data as Material[];
+    try {
+      const response = await axios.get(`${API_URL}/inventory/alerts`, {
+        headers: getAuthHeaders(),
+      });
+      return response.data.data as Material[];
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
   },
 
   async getHistory(materialId: string): Promise<MaterialHistoryEntry[]> {

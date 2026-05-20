@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Gift, Plus, Edit, Trash2, Search, Filter, Calendar, Percent, DollarSign, Clock, Users, Copy, Eye, EyeOff, X } from 'lucide-react'
+import { Gift, Plus, Edit, Trash2, Search, Filter, Percent, DollarSign, Clock, Users, Copy, Eye, X } from 'lucide-react'
 
 type PromotionType = 'percentage' | 'fixed' | 'buy-get' | 'combo'
 type PromotionStatus = 'active' | 'inactive' | 'expired' | 'scheduled'

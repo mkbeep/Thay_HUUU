@@ -164,26 +164,28 @@ export class TableController {
       const { id } = req.params;
       const { customer_count } = req.body;
 
-      // Generate session code
-      const sessionCode = uuidv4().substring(0, 8).toUpperCase();
+      const existing = await this.tableRepository.findActiveSessionByTableId(id);
+      let session = existing;
+      let created = false;
 
-      const session = await this.tableRepository.createSession({
-        table_id: id,
-        session_code: sessionCode,
-        customer_count,
-        is_active: true,
-        created_by: req.user?.userId,
-      });
+      if (!session) {
+        const sessionCode = uuidv4().substring(0, 8).toUpperCase();
+        session = await this.tableRepository.createSession({
+          table_id: id,
+          session_code: sessionCode,
+          customer_count: customer_count ?? 1,
+          is_active: true,
+          created_by: req.user?.userId,
+        });
+        created = true;
+      }
 
-      // Update table status to occupied
       await this.tableRepository.updateStatus(id, TableStatus.OCCUPIED);
-
-      // ✅ NOTIFY ADMIN VỀ TRẠNG THÁI BÀN MỚI
       this.socketManager.notifyTableUpdated(id);
 
-      res.status(201).json({
+      res.status(created ? 201 : 200).json({
         success: true,
-        message: 'Tạo phiên bàn thành công',
+        message: created ? 'Tạo phiên bàn thành công' : 'Phiên bàn đang hoạt động',
         data: session,
       });
     } catch (error) {

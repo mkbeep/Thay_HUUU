@@ -5,10 +5,11 @@
 
 import { io, Socket } from 'socket.io-client';
 
-// Lấy base URL từ VITE_API_URL và loại bỏ /api/v1
+// VITE_SOCKET_URL (ngrok) hoặc suy ra từ VITE_API_URL
 const getSocketUrl = () => {
+  const explicit = (import.meta.env.VITE_SOCKET_URL || '').trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
-  // Remove /api/v1 suffix
   return apiUrl.replace(/\/api\/v1\/?$/, '');
 };
 
@@ -20,6 +21,12 @@ class SocketService {
   private maxReconnectAttempts = 5;
 
   connect(token?: string): Socket {
+    const authToken = token || localStorage.getItem('token') || localStorage.getItem('access_token') || undefined;
+    if (!authToken) {
+      this.disconnect();
+      throw new Error('Missing auth token for WebSocket connection');
+    }
+
     if (this.socket?.connected) {
       return this.socket;
     }
@@ -29,7 +36,7 @@ class SocketService {
     this.socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       auth: {
-        token: token || localStorage.getItem('token'),
+        token: authToken,
       },
       reconnection: true,
       reconnectionDelay: 1000,

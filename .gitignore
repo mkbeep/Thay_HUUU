@@ -1,19 +1,55 @@
+# Dependencies
 node_modules/
-.expo/
-.expo-shared/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production builds
 dist/
-npm-debug.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
-web-build/
-App/web-app/
+build/
 
-# macOS
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+*.log
+
+# OS
 .DS_Store
+Thumbs.db
 
-# Temporary files created by Metro to check the health of the file watcher
-.metro-health-check*
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Build info
+.vercel
+.render
+
+# Local scripts (nếu có thông tin nhạy cảm)
+# update-ip.ps1
+# START-WITH-NGROK.ps1

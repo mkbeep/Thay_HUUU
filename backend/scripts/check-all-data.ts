@@ -127,10 +127,10 @@ async function checkAllData() {
     console.log(`   Tổng số thông báo: ${notificationsSnapshot.size}`);
     console.log('');
 
-    // 7. Kiểm tra Inventory
-    console.log('📦 INVENTORY COLLECTION:');
-    const inventorySnapshot = await db.collection('inventory').get();
-    console.log(`   Tổng số items: ${inventorySnapshot.size}`);
+    // 7. Kiểm tra Material (kho nguyên liệu)
+    console.log('📦 MATERIAL COLLECTION:');
+    const materialSnapshot = await db.collection('material').get();
+    console.log(`   Tổng số nguyên liệu: ${materialSnapshot.size}`);
     console.log('');
 
     // Tổng kết
@@ -142,7 +142,7 @@ async function checkAllData() {
     console.log(`   ✅ Support Requests: ${supportSnapshot.size} yêu cầu`);
     console.log(`   ✅ Users: ${usersSnapshot.size} users`);
     console.log(`   ✅ Notifications: ${notificationsSnapshot.size} thông báo`);
-    console.log(`   ✅ Inventory: ${inventorySnapshot.size} items`);
+    console.log(`   ✅ Material: ${materialSnapshot.size} nguyên liệu`);
     console.log('=' .repeat(50));
 
     // Đề xuất

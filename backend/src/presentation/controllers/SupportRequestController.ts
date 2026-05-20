@@ -8,6 +8,7 @@ import { NotificationService } from '../../application/services/NotificationServ
 import { NotificationRepository } from '../../infrastructure/database/repositories/NotificationRepository';
 import { UserRepository } from '../../infrastructure/database/repositories/UserRepository';
 import { NotificationType, NotificationPriority } from '../../domain/entities/Notification';
+import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 import {
   SupportRequestStatus,
   SupportRequestPriority,
@@ -76,6 +77,22 @@ export class SupportRequestController {
           this.notificationService.sendToRole(role, notifyPayload)
         )
       );
+
+      try {
+        const socketManager = SocketManager.getInstance();
+        const realtimePayload = {
+          id: supportRequest.id,
+          title: notifyPayload.title,
+          message: notifyPayload.message,
+          created_at: new Date(),
+          is_read: false,
+          data: notifyPayload.data,
+        };
+        socketManager.emitToAdmin('support:created', realtimePayload);
+        socketManager.notifyNewNotification(realtimePayload);
+      } catch (error) {
+        console.error('WebSocket emit error (support request):', error);
+      }
 
       res.status(201).json({
         success: true,

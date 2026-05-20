@@ -10,7 +10,6 @@ import { seedRoles } from './roleSeeder';
 import { seedUsers } from './userSeeder';
 import { seedFoods } from './foodSeeder';
 import { seedTables } from './tableSeeder';
-import { seedInventory } from './inventorySeeder';
 import { seedPromotions } from './promotionSeeder';
 
 async function clearDatabase() {
@@ -28,8 +27,7 @@ async function clearDatabase() {
     'orders',
     'order_item',
     'order_item_topping',
-    'inventory',
-    'inventory_transaction',
+    'material',
     'notification',
     'promotion',
     'payment',
@@ -73,12 +71,7 @@ async function runSeeders() {
     const tables = await seedTables();
     console.log(`  ✓ Created ${tables.length} tables\n`);
 
-    // 5. Seed Inventory
-    console.log('📦 Seeding inventory...');
-    const inventory = await seedInventory();
-    console.log(`  ✓ Created ${inventory.length} inventory items\n`);
-
-    // 6. Seed Promotions
+    // 5. Seed Promotions
     console.log('🎁 Seeding promotions...');
     const promotions = await seedPromotions();
     console.log(`  ✓ Created ${promotions.length} promotions\n`);
@@ -89,7 +82,6 @@ async function runSeeders() {
     console.log(`  - Users: ${users.length}`);
     console.log(`  - Foods: ${foods.length}`);
     console.log(`  - Tables: ${tables.length}`);
-    console.log(`  - Inventory: ${inventory.length}`);
     console.log(`  - Promotions: ${promotions.length}`);
     
   } catch (error) {

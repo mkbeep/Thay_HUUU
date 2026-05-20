@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
+import { useNavigate } from 'react-router-dom'
 import { CheckCircle, ChefHat, Clock } from 'lucide-react'
+import { useAuthStore } from '../../../stores/authStore'
+import { socketService } from '../../../services/socketService'
 
 type KitchenStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served'
 type PaymentStatus = 'unpaid' | 'payment_pending_confirmation' | 'paid'
+const ACTIVE_STATUSES = new Set<KitchenStatus>(['pending', 'confirmed', 'preparing', 'ready', 'served'])
 
 interface ApiOrderItem {
   id: string
@@ -15,6 +19,7 @@ interface ApiOrder {
   id: string
   order_number: string
   table_session_id?: string
+  table_number?: string | number
   status: KitchenStatus
   payment_status?: PaymentStatus
   created_at: string
@@ -25,7 +30,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
 const client = axios.create({ baseURL: API_URL })
 
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token') // ✅ Fix: đổi từ 'access_token' thành 'token'
+  const token = localStorage.getItem('token') || localStorage.getItem('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   if (config.method?.toLowerCase() === 'get') {
     config.params = { ...(config.params || {}), _t: Date.now() }
@@ -36,18 +41,47 @@ client.interceptors.request.use((config) => {
   return config
 })
 
+function getTableDisplay(order: ApiOrder): string {
+  const tableNumber = order.table_number
+  if (tableNumber !== undefined && tableNumber !== null && String(tableNumber).trim() !== '') {
+    return String(tableNumber)
+  }
+
+  const fallback = order.table_session_id
+  if (fallback && /^[A-Za-z]?\d{1,4}$/i.test(fallback.trim())) return fallback.trim()
+  return 'N/A'
+}
+
 export default function OrdersPage() {
+  const navigate = useNavigate()
   const [orders, setOrders] = useState<ApiOrder[]>([])
   const [loading, setLoading] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const logout = useAuthStore((state) => state.logout)
+  const authFailedRef = useRef(false)
+
+  const handleUnauthorized = useCallback(() => {
+    if (authFailedRef.current) return
+    authFailedRef.current = true
+    logout()
+    socketService.disconnect()
+    navigate('/login', { replace: true })
+  }, [logout, navigate])
 
   const loadOrders = useCallback(async (showLoading = false) => {
+    if (authFailedRef.current) return
     try {
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      if (!token) {
+        handleUnauthorized()
+        return
+      }
+
       if (showLoading) setLoading(true)
-      const statuses: KitchenStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'served']
-      const results = await Promise.all(statuses.map((status) => client.get('/orders', { params: { status } })))
-      const merged = results.flatMap((res) => res.data?.data || [])
-      const uniqueById = Array.from(new Map(merged.map((o: ApiOrder) => [o.id, o])).values())
+      const response = await client.get('/orders')
+      const allOrders = (response.data?.data || []) as ApiOrder[]
+      const uniqueById = Array.from(new Map(allOrders.map((o: ApiOrder) => [o.id, o])).values())
+        .filter((o): o is ApiOrder => ACTIVE_STATUSES.has(o.status))
       
       // ✅ TỰ ĐỘNG XÓA CÁC ĐƠN ĐÃ THANH TOÁN
       const unpaidOrders = uniqueById.filter((o: ApiOrder) => o.payment_status !== 'paid')
@@ -61,14 +95,12 @@ export default function OrdersPage() {
     } catch (error) {
       console.error('Error loading orders:', error)
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('access_token')
-        window.location.href = '/login'
+        handleUnauthorized()
       }
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [isInitialLoad])
+  }, [handleUnauthorized, isInitialLoad])
 
   useEffect(() => {
     void loadOrders(true)
@@ -202,7 +234,7 @@ export default function OrdersPage() {
             {/* Số bàn với badge nổi bật */}
             <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-full">
               <span className="text-xs font-medium text-indigo-600">🪑 Bàn</span>
-              <span className="text-sm font-bold text-indigo-700">{order.table_session_id || 'N/A'}</span>
+              <span className="text-sm font-bold text-indigo-700">{getTableDisplay(order)}</span>
             </div>
           </div>
           <div className="text-xs text-gray-500">{new Date(order.created_at).toLocaleTimeString('vi-VN')}</div>

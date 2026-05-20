@@ -19,9 +19,12 @@ import { computeMaterialKpi, getStockStatus } from '../../../domain/utils/stockS
 
 const FieldValue = firebaseAdmin.firestore.FieldValue;
 const Timestamp = firebaseAdmin.firestore.Timestamp;
+const MATERIAL_COLLECTION = (process.env.MATERIAL_COLLECTION || 'material').trim();
 
 export class MaterialRepository {
-  private readonly collection = db.collection('material');
+  private collection() {
+    return db.collection(MATERIAL_COLLECTION);
+  }
 
   private timestampToIso(value: unknown): string {
     if (!value) return new Date().toISOString();
@@ -40,24 +43,28 @@ export class MaterialRepository {
     data: FirebaseFirestore.DocumentData
   ): MaterialDTO {
     const quantity = Number(data.quantity ?? 0);
-    const minimum = Number(data.minimum ?? 0);
+    const legacyQuantity = Number(data.current_quantity ?? 0);
+    const minimum = Number(data.minimum ?? data.minimum_quantity ?? 0);
+    const resolvedQuantity = Number.isFinite(quantity) && data.quantity !== undefined ? quantity : legacyQuantity;
     return {
       id,
-      name: String(data.name ?? ''),
-      quantity,
+      name: String(data.name ?? data.item_name ?? ''),
+      quantity: resolvedQuantity,
       minimum,
       category: String(data.category ?? ''),
-      status: getStockStatus(quantity, minimum),
+      status: getStockStatus(resolvedQuantity, minimum),
     };
   }
 
   async getKpi(): Promise<MaterialKpiDTO> {
-    const snapshot = await this.collection.get();
+    const snapshot = await this.collection().get();
     const materials = snapshot.docs.map((doc) => {
       const data = doc.data();
+      const quantity = data.quantity !== undefined ? data.quantity : data.current_quantity;
+      const minimum = data.minimum !== undefined ? data.minimum : data.minimum_quantity;
       return {
-        quantity: Number(data.quantity ?? 0),
-        minimum: Number(data.minimum ?? 0),
+        quantity: Number(quantity ?? 0),
+        minimum: Number(minimum ?? 0),
       };
     });
     return computeMaterialKpi(materials);
@@ -68,16 +75,14 @@ export class MaterialRepository {
     status?: string;
     search?: string;
   }): Promise<MaterialDTO[]> {
-    let query: FirebaseFirestore.Query = this.collection;
-
-    if (filters?.category) {
-      query = query.where('category', '==', filters.category);
-    }
-
-    const snapshot = await query.get();
+    const snapshot = await this.collection().get();
     let items = snapshot.docs.map((doc) =>
       this.mapMaterialDoc(doc.id, doc.data())
     );
+
+    if (filters?.category) {
+      items = items.filter((item) => item.category === filters.category);
+    }
 
     if (filters?.status && filters.status !== 'all') {
       items = items.filter((item) => item.status === filters.status);
@@ -95,7 +100,7 @@ export class MaterialRepository {
   }
 
   async findById(id: string): Promise<MaterialDTO | null> {
-    const doc = await this.collection.doc(id).get();
+    const doc = await this.collection().doc(id).get();
     if (!doc.exists) return null;
     return this.mapMaterialDoc(doc.id, doc.data()!);
   }
@@ -108,7 +113,7 @@ export class MaterialRepository {
   }
 
   async createWithInitialImport(dto: CreateMaterialDTO): Promise<MaterialDTO> {
-    const materialRef = this.collection.doc();
+    const materialRef = this.collection().doc();
     const importRef = materialRef.collection('import').doc();
     const now = FieldValue.serverTimestamp();
     const importQuantity = Number(dto.import.quantity);
@@ -116,9 +121,12 @@ export class MaterialRepository {
     await db.runTransaction(async (transaction) => {
       transaction.set(materialRef, {
         name: dto.name.trim(),
+        item_name: dto.name.trim(),
         minimum: Number(dto.minimum),
+        minimum_quantity: Number(dto.minimum),
         category: dto.category,
         quantity: importQuantity,
+        current_quantity: importQuantity,
       });
 
       transaction.set(importRef, {
@@ -135,7 +143,7 @@ export class MaterialRepository {
   }
 
   async addImport(materialId: string, dto: AddImportDTO): Promise<MaterialDTO> {
-    const materialRef = this.collection.doc(materialId);
+    const materialRef = this.collection().doc(materialId);
     const importRef = materialRef.collection('import').doc();
     const importQuantity = Number(dto.quantity);
     const now = FieldValue.serverTimestamp();
@@ -146,10 +154,12 @@ export class MaterialRepository {
         throw new Error('MATERIAL_NOT_FOUND');
       }
 
-      const currentQty = Number(materialSnap.data()?.quantity ?? 0);
+      const snapData = materialSnap.data();
+      const currentQty = Number(snapData?.quantity ?? snapData?.current_quantity ?? 0);
 
       transaction.update(materialRef, {
         quantity: currentQty + importQuantity,
+        current_quantity: currentQty + importQuantity,
       });
 
       transaction.set(importRef, {
@@ -166,7 +176,7 @@ export class MaterialRepository {
   }
 
   async addExport(materialId: string, dto: AddExportDTO): Promise<MaterialDTO> {
-    const materialRef = this.collection.doc(materialId);
+    const materialRef = this.collection().doc(materialId);
     const exportRef = materialRef.collection('export').doc();
     const exportQuantity = Number(dto.quantity);
     const now = FieldValue.serverTimestamp();
@@ -177,7 +187,8 @@ export class MaterialRepository {
         throw new Error('MATERIAL_NOT_FOUND');
       }
 
-      const currentQty = Number(materialSnap.data()?.quantity ?? 0);
+      const snapData = materialSnap.data();
+      const currentQty = Number(snapData?.quantity ?? snapData?.current_quantity ?? 0);
       if (exportQuantity <= 0) {
         throw new Error('INVALID_EXPORT_QUANTITY');
       }
@@ -187,6 +198,7 @@ export class MaterialRepository {
 
       transaction.update(materialRef, {
         quantity: currentQty - exportQuantity,
+        current_quantity: currentQty - exportQuantity,
       });
 
       transaction.set(exportRef, {
@@ -201,7 +213,7 @@ export class MaterialRepository {
   }
 
   async getHistory(materialId: string): Promise<MaterialHistoryEntryDTO[]> {
-    const materialRef = this.collection.doc(materialId);
+    const materialRef = this.collection().doc(materialId);
     const [importSnap, exportSnap] = await Promise.all([
       materialRef.collection('import').get(),
       materialRef.collection('export').get(),
@@ -235,7 +247,7 @@ export class MaterialRepository {
   }
 
   async getImports(materialId: string): Promise<MaterialImportDTO[]> {
-    const snapshot = await this.collection
+    const snapshot = await this.collection()
       .doc(materialId)
       .collection('import')
       .get();
@@ -257,7 +269,7 @@ export class MaterialRepository {
   }
 
   async getExports(materialId: string): Promise<MaterialExportDTO[]> {
-    const snapshot = await this.collection
+    const snapshot = await this.collection()
       .doc(materialId)
       .collection('export')
       .get();

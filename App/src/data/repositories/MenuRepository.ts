@@ -1,17 +1,9 @@
 import { MenuItem, MenuCategory } from '../../domain/models/MenuItem';
-import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../../utils/apiBaseUrl';
+import { apiClient } from '../../utils/apiClient';
 
-const resolvedBase = getApiBaseUrl();
-
-const apiClient = axios.create({
-  baseURL: resolvedBase,
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 30000,
-});
-
-const API_ORIGIN = resolvedBase.replace(/\/api\/v\d+\/?$/, '');
+const API_ORIGIN = getApiBaseUrl().replace(/\/api\/v\d+\/?$/, '');
 
 const normalizeCategoryToVi = (category?: string): MenuCategory => {
   const value = (category || '').toString().trim().toLowerCase();
@@ -62,8 +54,16 @@ const resolveImageUrl = (rawUrl?: string): string => {
     return url;
   }
 
+  if (url.startsWith('/uploads/')) {
+    return `${API_ORIGIN}${url}`;
+  }
+
   if (url.startsWith('/images/')) {
     return `${API_ORIGIN}${url}`;
+  }
+
+  if (url.startsWith('uploads/')) {
+    return `${API_ORIGIN}/${url}`;
   }
 
   if (url.startsWith('menu/')) {

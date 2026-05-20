@@ -98,15 +98,31 @@ export default function QRScannerScreen({ onCancel }: QRScannerScreenProps) {
             return;
           }
           await setTableInfo(table.number, table.id);
+          
+          console.log('📱 Opening web URL:', data);
+          const canOpen = await Linking.canOpenURL(data);
+          if (!canOpen) {
+            throw new Error('Cannot open URL');
+          }
           await Linking.openURL(data);
+          
+          // Success - close scanner after a short delay
+          setTimeout(() => {
+            setProcessing(false);
+            onCancel();
+          }, 500);
+          
+        } catch (linkError) {
+          console.error('❌ Failed to open web URL:', linkError);
           setProcessing(false);
-          onCancel();
-        } catch {
-          setProcessing(false);
-          Alert.alert('Không mở được liên kết', 'Hãy quét lại hoặc mở liên kết bằng camera điện thoại.', [
-            { text: 'Thử lại', onPress: () => { setScanned(false); setProcessing(false); } },
-            { text: 'Hủy', onPress: onCancel, style: 'cancel' },
-          ]);
+          Alert.alert(
+            '❌ Không Mở Được Liên Kết',
+            'Không thể mở trang web thực đơn.\n\nVui lòng kiểm tra:\n• Kết nối internet\n• Trình duyệt mặc định\n\nHoặc thử quét lại.',
+            [
+              { text: 'Thử lại', onPress: () => { setScanned(false); setProcessing(false); } },
+              { text: 'Hủy', onPress: onCancel, style: 'cancel' },
+            ]
+          );
         }
         return;
       }
@@ -229,19 +245,35 @@ export default function QRScannerScreen({ onCancel }: QRScannerScreenProps) {
 
       await setTableInfo(table.number, table.id);
 
+      const webUrl = buildCustomerTableWebUrl(table.number, table.id);
+      console.log('📱 Opening URL:', webUrl);
+
       try {
-        await Linking.openURL(buildCustomerTableWebUrl(table.number, table.id));
-      } catch {
+        const canOpen = await Linking.canOpenURL(webUrl);
+        if (!canOpen) {
+          throw new Error('Cannot open URL');
+        }
+        await Linking.openURL(webUrl);
+        
+        // Success - close scanner after a short delay
+        setTimeout(() => {
+          setProcessing(false);
+          onCancel();
+        }, 500);
+        
+      } catch (linkError) {
+        console.error('❌ Failed to open URL:', linkError);
         setProcessing(false);
-        Alert.alert('Không mở được liên kết', 'Hãy quét lại hoặc mở liên kết bằng camera điện thoại.', [
-          { text: 'Thử lại', onPress: () => { setScanned(false); setProcessing(false); } },
-          { text: 'Hủy', onPress: onCancel, style: 'cancel' },
-        ]);
+        Alert.alert(
+          '❌ Không Mở Được Liên Kết',
+          'Không thể mở trang web thực đơn.\n\nVui lòng kiểm tra:\n• Kết nối internet\n• Trình duyệt mặc định\n\nHoặc thử quét lại.',
+          [
+            { text: 'Thử lại', onPress: () => { setScanned(false); setProcessing(false); } },
+            { text: 'Hủy', onPress: onCancel, style: 'cancel' },
+          ]
+        );
         return;
       }
-
-      setProcessing(false);
-      onCancel();
       
     } catch (error) {
       console.error('Error scanning QR code:', error);

@@ -19,14 +19,11 @@ interface PaymentScreenProps {
 }
 
 type SplitMethod = 'equal' | 'byItem';
-type PaymentMethod = 'momo' | 'zalopay' | 'vnpay' | 'card' | 'cash';
+type PaymentMethod = 'qr' | 'cash';
 
 const PAYMENT_METHODS = [
-  { id: 'momo', name: 'Momo', icon: 'wallet', color: '#A50064' },
-  { id: 'zalopay', name: 'ZaloPay', icon: 'card', color: '#0068FF' },
-  { id: 'vnpay', name: 'VNPAY', icon: 'card', color: '#0B5FA5' },
-  { id: 'card', name: 'Thẻ', icon: 'card-outline', color: '#5F5E5E' },
-  { id: 'cash', name: 'Tiền mặt', icon: 'cash', color: '#5F5E5E' },
+  { id: 'qr', name: 'Quét mã', icon: 'qr-code', color: '#AD2C00' },
+  { id: 'cash', name: 'Tiền mặt', icon: 'cash', color: '#006A35' },
 ];
 
 export default function PaymentScreen({
@@ -37,7 +34,7 @@ export default function PaymentScreen({
   const { orders, requestPaymentForServedOrders, hasPendingPaymentConfirmation } = useOrder();
   const [splitMethod, setSplitMethod] = useState<SplitMethod>('equal');
   const [numberOfPeople, setNumberOfPeople] = useState(2);
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('momo');
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('qr');
   const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Thêm loading state
 
   // Lấy tất cả đơn hàng đã phục vụ (served) VÀ CHƯA THANH TOÁN để tính tổng bill
@@ -118,7 +115,7 @@ export default function PaymentScreen({
       
       // Gửi yêu cầu thanh toán
       console.log('📤 Sending payment request...');
-      const requested = requestPaymentForServedOrders();
+      const requested = requestPaymentForServedOrders(selectedPayment);
       
       if (!requested) {
         window.alert('Không có đơn cần thanh toán\n\nVui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
@@ -333,6 +330,14 @@ export default function PaymentScreen({
                       selectedPayment === method.id ? method.color : '#A8A29E'
                     }
                   />
+                  <Text
+                    style={[
+                      styles.paymentMethodLabel,
+                      selectedPayment === method.id && styles.paymentMethodLabelActive,
+                    ]}
+                  >
+                    {method.name}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -359,6 +364,16 @@ export default function PaymentScreen({
             <Text style={styles.qrTitle}>Quét để thanh toán</Text>
             <Text style={styles.qrOrderNumber}>
               Mã đơn hàng: #GT-{Math.floor(Math.random() * 900000) + 100000}
+            </Text>
+          </View>
+        )}
+
+        {allItems.length > 0 && selectedPayment === 'cash' && (
+          <View style={styles.cashSection}>
+            <Ionicons name="cash" size={40} color="#006A35" />
+            <Text style={styles.cashTitle}>Thanh toán tiền mặt</Text>
+            <Text style={styles.cashDescription}>
+              Sau khi gửi yêu cầu, nhân viên sẽ nhận thông báo trên admin và xác nhận khi đã thu tiền.
             </Text>
           </View>
         )}
@@ -676,12 +691,13 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   paymentMethod: {
-    width: 64,
-    height: 64,
+    width: 112,
+    height: 72,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
     borderWidth: 1,
     borderColor: 'rgba(145, 111, 103, 0.2)',
     shadowColor: '#000',
@@ -693,6 +709,14 @@ const styles = StyleSheet.create({
   paymentMethodActive: {
     borderWidth: 2,
     borderColor: '#AD2C00',
+  },
+  paymentMethodLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  paymentMethodLabelActive: {
+    color: '#1C1B1B',
   },
   qrSection: {
     alignItems: 'center',
@@ -779,6 +803,28 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginTop: 4,
+  },
+  cashSection: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 106, 53, 0.25)',
+  },
+  cashTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#1C1B1B',
+    marginTop: 12,
+  },
+  cashDescription: {
+    fontSize: 13,
+    color: '#5F5E5E',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 8,
   },
   bottomAction: {
     position: 'absolute',

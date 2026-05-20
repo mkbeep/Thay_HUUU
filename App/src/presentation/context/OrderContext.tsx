@@ -5,13 +5,16 @@ import React, {
   ReactNode,
   useEffect,
   useMemo,
+  useRef,
 } from 'react';
 import { Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Order as DomainOrder, OrderStatus as DomainOrderStatus } from '../../domain/models/Order';
 import { OrderService } from '../../business/services/OrderService';
 import axios from 'axios';
 import { getApiBaseUrl } from '../../utils/apiBaseUrl';
 import { socketService } from '../../services/socketService';
+import { useTable } from './TableContext';
 
 // Presentation layer status mapping
 export type OrderStatus = 'pending' | 'confirmed' | 'cooking' | 'ready' | 'served' | 'cancelled';
@@ -40,6 +43,7 @@ export interface Order {
   createdAt: Date;
   updatedAt: Date;
   tableNumber: string | number;
+  tableSessionId?: string | null;
 }
 
 interface OrderContextType {
@@ -47,7 +51,7 @@ interface OrderContextType {
   currentOrder: Order | null;
   createOrder: (items: OrderItem[], total: number, tableNumber: string | number) => Promise<{ success: boolean; error?: any }>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  requestPaymentForServedOrders: () => boolean;
+  requestPaymentForServedOrders: (paymentMethod?: 'qr' | 'cash') => boolean;
   markPaymentConfirmed: () => void;
   hasPendingPaymentConfirmation: () => boolean;
   isTableFullyPaid: () => boolean;
@@ -57,6 +61,7 @@ interface OrderContextType {
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
+const ORDERS_STORAGE_PREFIX = '@orders:';
 
 // Helper: Map domain OrderStatus to presentation OrderStatus
 const mapDomainStatusToPresentation = (domainStatus: DomainOrderStatus): OrderStatus => {
@@ -97,9 +102,14 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   // ✅ KHÔNG tự động restore từ localStorage - Luôn bắt đầu với danh sách đơn trống
   const [orders, setOrders] = useState<Order[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [storageScope, setStorageScope] = useState<string | null>(null);
+  const [hasLoadedScope, setHasLoadedScope] = useState(false);
   
   const orderService = new OrderService();
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const { tableNumber: activeTableNumber, sessionId } = useTable();
+  const activeTableSessionId = sessionId || (activeTableNumber != null ? String(activeTableNumber) : null);
+  const lastTableSessionRef = useRef<string | null>(null);
 
   // ✅ Không cần lắng nghe storage event nữa vì không dùng localStorage
   // useEffect(() => {
@@ -148,6 +158,82 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     return `GT-${random}`;
   };
 
+  const resolveRemoteImage = (food: any) => {
+    const raw = food?.images?.[0]?.image_url || food?.image_url;
+    if (!raw || typeof raw !== 'string') {
+      return { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800' };
+    }
+    if (/^https?:\/\//i.test(raw) || raw.startsWith('//')) return { uri: raw };
+    const apiOrigin = apiBaseUrl.replace(/\/api\/v\d+\/?$/, '');
+    return { uri: `${apiOrigin}/${raw.replace(/^\/+/, '')}` };
+  };
+
+  const parseRemoteDate = (value: any): Date => {
+    if (!value) return new Date();
+    if (typeof value === 'string' || typeof value === 'number') return new Date(value);
+    if (typeof value._seconds === 'number') return new Date(value._seconds * 1000);
+    if (typeof value.seconds === 'number') return new Date(value.seconds * 1000);
+    return new Date();
+  };
+
+  const serializeOrder = (order: Order) => ({
+    ...order,
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString(),
+  });
+
+  const deserializeOrder = (order: any): Order => ({
+    ...order,
+    createdAt: parseRemoteDate(order.createdAt),
+    updatedAt: parseRemoteDate(order.updatedAt),
+  });
+
+  const mapServerOrder = (remote: any): Order => {
+    const statusMap: Record<string, OrderStatus> = {
+      pending: 'pending',
+      confirmed: 'confirmed',
+      preparing: 'cooking',
+      ready: 'ready',
+      served: 'served',
+      completed: 'served',
+      cancelled: 'cancelled',
+    };
+    const paymentMap: Record<string, PaymentStatus> = {
+      unpaid: 'unpaid',
+      pending_confirmation: 'pending_confirmation',
+      payment_pending_confirmation: 'pending_confirmation',
+      paid: 'paid',
+    };
+
+    const remoteItems = Array.isArray(remote.items) ? remote.items : [];
+    const items = remoteItems.map((item: any): OrderItem => {
+      const food = item.food || {};
+      const price = Number(item.unit_price ?? item.unitPrice ?? food.base_price ?? 0);
+      return {
+        id: item.food_id || food.id || item.id,
+        name: food.name || item.name || 'Món đã gọi',
+        price,
+        priceDisplay: `${Math.round(price / 1000)}k`,
+        image: resolveRemoteImage(food),
+        quantity: Number(item.quantity || 1),
+        note: item.special_instructions || item.notes,
+      };
+    });
+
+    return {
+      id: remote.id,
+      orderNumber: remote.order_number || remote.orderNumber || remote.id,
+      items,
+      total: Number(remote.total_amount ?? remote.total ?? 0),
+      status: statusMap[remote.status] || 'pending',
+      paymentStatus: paymentMap[remote.payment_status] || 'unpaid',
+      createdAt: parseRemoteDate(remote.created_at),
+      updatedAt: parseRemoteDate(remote.updated_at),
+      tableNumber: activeTableNumber ?? remote.table_number ?? remote.table_session_id,
+      tableSessionId: remote.table_session_id,
+    };
+  };
+
   const createOrder = async (items: OrderItem[], total: number, tableNumber: string | number): Promise<{ success: boolean; error?: any }> => {
     console.log('📝 Creating order:', { 
       itemsCount: items.length, 
@@ -158,7 +244,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
 
     // ✅ CHỈ XÉT CÁC ĐƠN CHƯA THANH TOÁN (bỏ qua đơn đã paid)
     const existingOrders = orders.filter(
-      (order) => order.tableNumber === tableNumber && order.paymentStatus !== 'paid'
+      (order) => String(order.tableNumber) === String(tableNumber) && order.paymentStatus !== 'paid'
     );
     
     console.log('📊 Existing unpaid orders:', existingOrders.length);
@@ -203,6 +289,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       createdAt: new Date(),
       updatedAt: new Date(),
       tableNumber,
+      tableSessionId: activeTableSessionId,
     };
 
     setOrders((prev) => [newOrder, ...prev]);
@@ -213,7 +300,8 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       .map((item) => `${item.name}: ${item.note!.trim()}`);
 
     const payload = {
-      table_session_id: String(tableNumber),
+      table_session_id: activeTableSessionId || String(tableNumber),
+      table_number: String(tableNumber),
       order_type: 'dine_in',
       items: itemsToOrder.map((item) => ({
         food_id: item.id,
@@ -270,7 +358,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
-  const requestPaymentForServedOrders = (): boolean => {
+  const requestPaymentForServedOrders = (paymentMethod: 'qr' | 'cash' = 'qr'): boolean => {
     const eligibleOrderIds = orders
       .filter((order) => order.status === 'served' && order.paymentStatus === 'unpaid')
       .map((order) => order.id);
@@ -295,7 +383,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     // Gửi yêu cầu thanh toán lên backend (best effort)
     eligibleOrderIds.forEach((orderId) => {
       axios.patch(`${apiBaseUrl}/orders/${orderId}/request-payment`, {
-        payment_method: 'qr',
+        payment_method: paymentMethod,
       })
       .then(() => {
         console.log(`✅ Payment request sent for order ${orderId}`);
@@ -323,7 +411,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     }
     try {
       await axios.patch(`${apiBaseUrl}/orders/${orderId}/cancel`, {
-        table_session_id: String(order.tableNumber),
+        table_session_id: order.tableSessionId || activeTableSessionId || String(order.tableNumber),
       });
       setOrders((prev) =>
         prev.map((o) =>
@@ -356,10 +444,69 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     return servedOrders.every((order) => order.paymentStatus === 'paid');
   };
 
+  useEffect(() => {
+    const scope = activeTableSessionId;
+    if (!scope) {
+      setOrders([]);
+      setStorageScope(null);
+      setHasLoadedScope(false);
+      return;
+    }
+
+    setStorageScope(scope);
+    setHasLoadedScope(false);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(`${ORDERS_STORAGE_PREFIX}${scope}`);
+        if (cancelled) return;
+        const parsed = stored ? JSON.parse(stored).map(deserializeOrder) : [];
+        setOrders(parsed);
+      } catch (error) {
+        console.error('Error loading scoped orders:', error);
+        if (!cancelled) setOrders([]);
+      } finally {
+        if (!cancelled) setHasLoadedScope(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTableSessionId]);
+
+  useEffect(() => {
+    if (!storageScope || !hasLoadedScope) return;
+    void (async () => {
+      try {
+        const key = `${ORDERS_STORAGE_PREFIX}${storageScope}`;
+        const unpaidOrders = orders.filter((order) => order.paymentStatus !== 'paid');
+        if (unpaidOrders.length === 0) {
+          await AsyncStorage.removeItem(key);
+        } else {
+          await AsyncStorage.setItem(key, JSON.stringify(unpaidOrders.map(serializeOrder)));
+        }
+      } catch (error) {
+        console.error('Error saving scoped orders:', error);
+      }
+    })();
+  }, [orders, storageScope, hasLoadedScope]);
+
   // WebSocket real-time updates
   useEffect(() => {
-    if (orders.length === 0) return;
-    const tableSessionId = String(orders[0].tableNumber);
+    if (!activeTableSessionId) {
+      setOrders([]);
+      lastTableSessionRef.current = null;
+      return;
+    }
+
+    if (lastTableSessionRef.current !== activeTableSessionId) {
+      setOrders([]);
+      lastTableSessionRef.current = activeTableSessionId;
+    }
+
+    const tableSessionId = activeTableSessionId;
 
     // Initial sync
     const syncOrders = async () => {
@@ -369,33 +516,11 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
         });
         const serverOrders = response?.data?.data || [];
 
+        const mappedOrders = serverOrders.map(mapServerOrder);
         setOrders((prev) =>
-          prev.map((local) => {
-            const remote = serverOrders.find((item: any) => item.id === local.id);
-            if (!remote) return local;
-
-            const statusMap: Record<string, OrderStatus> = {
-              pending: 'pending',
-              confirmed: 'confirmed',
-              preparing: 'cooking',
-              ready: 'ready',
-              served: 'served',
-              completed: 'served',
-              cancelled: 'cancelled',
-            };
-            const paymentMap: Record<string, PaymentStatus> = {
-              unpaid: 'unpaid',
-              payment_pending_confirmation: 'pending_confirmation',
-              paid: 'paid',
-            };
-
-            return {
-              ...local,
-              status: statusMap[remote.status] || local.status,
-              paymentStatus: paymentMap[remote.payment_status] || local.paymentStatus,
-              updatedAt: remote.updated_at ? new Date(remote.updated_at) : local.updatedAt,
-            };
-          })
+          mappedOrders.length > 0
+            ? mappedOrders
+            : prev.filter((order) => order.id.startsWith('order_'))
         );
       } catch (error) {
         console.error('Error syncing order statuses:', error);
@@ -429,7 +554,10 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
 
       setOrders((prev) => {
         const existingOrder = prev.find((o) => o.id === updatedOrder.id);
-        if (!existingOrder) return prev;
+        if (!existingOrder) {
+          if (updatedOrder.table_session_id !== tableSessionId) return prev;
+          return [mapServerOrder(updatedOrder), ...prev];
+        }
 
         const newStatus = statusMap[updatedOrder.status] || existingOrder.status;
         const newPaymentStatus = paymentMap[updatedOrder.payment_status] || existingOrder.paymentStatus;
@@ -496,6 +624,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     };
 
     socketService.on('order:updated', handleOrderUpdated);
+    socketService.on('order:created', handleOrderUpdated);
     socketService.on('order:status_changed', handleOrderStatusChanged);
 
     // Fallback polling every 30 seconds (reduced from 5 seconds)
@@ -504,10 +633,11 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       clearInterval(timer);
       socketService.off('order:updated', handleOrderUpdated);
+      socketService.off('order:created', handleOrderUpdated);
       socketService.off('order:status_changed', handleOrderStatusChanged);
       socketService.leaveTable();
     };
-  }, [orders.length, orders[0]?.tableNumber, apiBaseUrl]);
+  }, [activeTableSessionId, activeTableNumber, apiBaseUrl]);
 
   const getOrderHistory = () => {
     return orders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

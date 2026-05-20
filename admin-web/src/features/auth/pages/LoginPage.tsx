@@ -37,7 +37,8 @@ export default function LoginPage() {
       toast.success('Đăng nhập thành công!')
       navigate(DEFAULT_AUTHENTICATED_HOME)
     } catch (error) {
-      toast.error('Email hoặc mật khẩu không đúng')
+      const message = error instanceof Error ? error.message : 'Email hoac mat khau khong dung'
+      toast.error(message)
     } finally {
       setLoading(false)
     }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, ChangeEvent } from 'react'
 import axios from 'axios'
 import { 
   Plus, 
@@ -83,7 +83,10 @@ export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showDrawer, setShowDrawer] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [formData, setFormData] = useState<Partial<MenuItem>>({
     name: '',
     category: 'Khai vị',
@@ -95,6 +98,30 @@ export default function MenuPage() {
   })
 
   const menuService = new MenuService()
+
+  const normalizeVndPrice = (price?: number): number => {
+    const value = Number(price || 0)
+    return value > 0 && value < 1000 ? value * 1000 : value
+  }
+
+  const formatVnd = (price: number): string => {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND',
+      maximumFractionDigits: 0,
+    }).format(price)
+  }
+
+  const mapDomainItem = (item: MenuItemModel): MenuItem => ({
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    price: item.price,
+    description: item.description,
+    imageUrl: item.imageUrl || '',
+    inStock: item.available,
+    toppings: []
+  })
 
   // Load menu items from API
   useEffect(() => {
@@ -139,11 +166,15 @@ export default function MenuPage() {
   const handleEdit = (item: MenuItem) => {
     setEditingItem(item)
     setFormData(item)
+    setSelectedImageFile(null)
+    setImagePreviewUrl(item.imageUrl || '')
     setShowDrawer(true)
   }
 
   const handleAdd = () => {
     setEditingItem(null)
+    setSelectedImageFile(null)
+    setImagePreviewUrl('')
     setFormData({
       name: '',
       category: 'Khai vị',
@@ -156,9 +187,14 @@ export default function MenuPage() {
     setShowDrawer(true)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc muốn xóa món này?')) {
-      setMenuItems(menuItems.filter(item => item.id !== id))
+      const deleted = await menuService.deleteMenuItem(id)
+      if (deleted) {
+        setMenuItems(menuItems.filter(item => item.id !== id))
+      } else {
+        alert('Không thể xóa món ăn')
+      }
     }
   }
 
@@ -175,21 +211,110 @@ export default function MenuPage() {
     }
   }
 
-  const handleSave = () => {
-    if (editingItem) {
-      // Update existing item
-      setMenuItems(menuItems.map(item => 
-        item.id === editingItem.id ? { ...item, ...formData } : item
-      ))
-    } else {
-      // Add new item
-      const newItem: MenuItem = {
-        ...formData as MenuItem,
-        id: Date.now().toString()
-      }
-      setMenuItems([...menuItems, newItem])
+  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setSelectedImageFile(file)
+    setImagePreviewUrl(URL.createObjectURL(file))
+  }
+
+  const handleSave = async () => {
+    if (isSaving) return
+
+    const name = formData.name || ''
+    if (!name.trim()) {
+      alert('Vui lòng nhập tên món')
+      return
     }
-    setShowDrawer(false)
+
+    const isImageOnlyUpdate =
+      !!editingItem &&
+      !!selectedImageFile &&
+      name === editingItem.name &&
+      (formData.description || '') === editingItem.description &&
+      formData.category === editingItem.category &&
+      normalizeVndPrice(formData.price) === editingItem.price
+
+    const payload = isImageOnlyUpdate
+      ? {}
+      : {
+          name,
+          description: formData.description || '',
+          category: formData.category as any,
+          price: normalizeVndPrice(formData.price),
+          imageUrl: selectedImageFile ? undefined : formData.imageUrl,
+        }
+
+    const applySavedItem = (savedItem: MenuItemModel) => {
+      const mappedItem = mapDomainItem(savedItem)
+      setMenuItems((current) =>
+        editingItem
+          ? current.map((item) => (item.id === mappedItem.id ? mappedItem : item))
+          : [...current, mappedItem]
+      )
+    }
+
+    if (isImageOnlyUpdate && editingItem && imagePreviewUrl) {
+      const optimisticItem: MenuItem = {
+        ...editingItem,
+        imageUrl: imagePreviewUrl,
+      }
+      setMenuItems((current) =>
+        current.map((item) => (item.id === optimisticItem.id ? optimisticItem : item))
+      )
+      setShowDrawer(false)
+      setSelectedImageFile(null)
+      setImagePreviewUrl('')
+
+      setIsSaving(true)
+      try {
+        const savedItem = await menuService.updateMenuItem(
+          editingItem.id,
+          payload,
+          selectedImageFile
+        )
+        if (!savedItem) throw new Error('Không thể lưu ảnh món ăn')
+        applySavedItem(savedItem)
+      } catch (error) {
+        console.error('Error saving menu image:', error)
+        setMenuItems((current) =>
+          current.map((item) => (item.id === editingItem.id ? editingItem : item))
+        )
+        alert('Không thể cập nhật ảnh. Vui lòng thử lại.')
+      } finally {
+        setIsSaving(false)
+      }
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      let savedItem: MenuItemModel | undefined
+      if (editingItem) {
+        savedItem = await menuService.updateMenuItem(
+          editingItem.id,
+          payload,
+          selectedImageFile || undefined
+        )
+      } else {
+        savedItem = await menuService.createMenuItem(payload as any, selectedImageFile || undefined)
+      }
+
+      if (!savedItem) {
+        alert('Không thể lưu món ăn')
+        return
+      }
+
+      applySavedItem(savedItem)
+      setSelectedImageFile(null)
+      setImagePreviewUrl('')
+      setShowDrawer(false)
+    } catch (error) {
+      console.error('Error saving menu item:', error)
+      alert('Không thể lưu món ăn')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleAddTopping = () => {
@@ -285,10 +410,10 @@ export default function MenuPage() {
                     <img
                       alt={item.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      src={item.imageUrl}
+                      src={item.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800'}
                     />
                     <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 backdrop-blur text-[#AD2C00] font-bold rounded-full text-sm">
-                      {item.price.toLocaleString('vi-VN')}₫
+                      {formatVnd(item.price)}
                     </div>
                   </div>
 
@@ -368,15 +493,31 @@ export default function MenuPage() {
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-8 space-y-8 pb-10 pt-8">
               {/* Image Upload */}
-              <div className="w-full aspect-video bg-[#E5E2E1] rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-[#916F67]/50 group cursor-pointer hover:bg-orange-50/30 hover:border-[#AD2C00]/50 transition-all">
-                <Upload className="w-10 h-10 text-gray-600 mb-2 group-hover:text-[#AD2C00]" />
-                <p className="text-sm font-bold text-gray-700 group-hover:text-[#AD2C00]">
-                  Click để tải ảnh món ăn
-                </p>
-                <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
-                  JPG, PNG tối đa 5MB
-                </p>
-              </div>
+              <label className="relative w-full aspect-video bg-[#E5E2E1] rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-[#916F67]/50 group cursor-pointer hover:bg-orange-50/30 hover:border-[#AD2C00]/50 transition-all overflow-hidden">
+                {imagePreviewUrl ? (
+                  <img
+                    src={imagePreviewUrl}
+                    alt="Preview"
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <>
+                    <Upload className="w-10 h-10 text-gray-600 mb-2 group-hover:text-[#AD2C00]" />
+                    <p className="text-sm font-bold text-gray-700 group-hover:text-[#AD2C00]">
+                      Click để tải ảnh món ăn
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
+                      JPG, PNG tối đa 5MB
+                    </p>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageChange}
+                />
+              </label>
 
               {/* Basic Fields */}
               <div className="grid grid-cols-2 gap-6">
@@ -501,9 +642,10 @@ export default function MenuPage() {
               </button>
               <button
                 onClick={handleSave}
-                className="flex-[2] bg-gradient-to-r from-[#AD2C00] to-[#D83900] text-white py-4 rounded-xl font-bold shadow-lg shadow-[#AD2C00]/30 transition-all active:scale-98 hover:brightness-110"
+                disabled={isSaving}
+                className="flex-[2] bg-gradient-to-r from-[#AD2C00] to-[#D83900] text-white py-4 rounded-xl font-bold shadow-lg shadow-[#AD2C00]/30 transition-all active:scale-98 hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Lưu Thay Đổi
+                {isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
               </button>
             </div>
           </div>

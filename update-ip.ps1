@@ -28,7 +28,11 @@ Write-Host "📝 Đang cập nhật các file cấu hình..." -ForegroundColor C
 $files = @(
     "App\.env",
     "admin-web\.env",
-    "backend\.env"
+    "backend\.env",
+    "App\package.json",
+    "backend\src\server.ts",
+    "backend\qr-codes\README.md",
+    "backend\qr-codes\index.html"
 )
 
 $oldIpPattern = "192\.168\.\d+\.\d+"

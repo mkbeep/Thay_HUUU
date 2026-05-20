@@ -12,9 +12,13 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { config, validateEnv } from './infrastructure/config/env.config';
+import { isAllowedCorsOrigin } from './infrastructure/config/corsOrigins';
 import createRoutes from './presentation/routes';
 import { errorMiddleware } from './presentation/middlewares/errorMiddleware';
 import { SocketManager } from './infrastructure/websocket/SocketManager';
+import { firestoreQuotaMiddleware } from './presentation/middlewares/firestoreQuotaMiddleware';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import fs from 'fs';
 
 // Validate environment variables
 try {
@@ -41,33 +45,11 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 
-// CORS — cho phép LAN (192.168.x / 10.x) khi dev để điện thoại mở http://IP:8081 vẫn gọi được API
-const corsStaticOrigins = Array.isArray(config.cors.origin)
-  ? config.cors.origin
-  : [config.cors.origin].filter(Boolean) as string[];
-
-function isLanHttpOrigin(origin: string): boolean {
-  return /^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(
-    origin
-  );
-}
-
+// CORS — LAN + ngrok khi dev (khách quét QR từ điện thoại / admin web)
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      if (corsStaticOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-      if (config.server.env !== 'production' && isLanHttpOrigin(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(null, false);
+      callback(null, isAllowedCorsOrigin(origin));
     },
     credentials: true,
   })
@@ -96,6 +78,9 @@ app.use('/api', (_req, res, next) => {
   next();
 });
 
+// Stop hammering Firestore for a short window after quota is exhausted.
+app.use('/api', firestoreQuotaMiddleware);
+
 // Logging
 if (config.server.env === 'development') {
   app.use(morgan('dev'));
@@ -113,14 +98,57 @@ app.use('/images/menu', express.static(menuImagesPath, {
   lastModified: true,
 }));
 
+const uploadedImagesPath = path.join(process.cwd(), 'uploads');
+app.use('/uploads', express.static(uploadedImagesPath, {
+  maxAge: '1d',
+  etag: true,
+  lastModified: true,
+}));
+
 console.log(`📸 Serving menu images from: ${menuImagesPath}`);
+console.log(`📸 Serving uploaded images from: ${uploadedImagesPath}`);
 console.log(`🔗 Image URL format: http://localhost:${config.server.port}/images/menu/{category}/{filename}`);
 
 // API routes - Truyền socketManager vào routes
 app.use(`/api/${config.server.apiVersion}`, createRoutes(socketManager));
 
-// Root endpoint
-app.get('/', (_req, res) => {
+// Static web khách (sau khi `cd App && npm run build:web-app`)
+const customerWebAppPath = path.join(__dirname, '../../App/web-app');
+if (fs.existsSync(path.join(customerWebAppPath, 'index.html'))) {
+  app.use(express.static(customerWebAppPath, { index: 'index.html' }));
+  console.log(`🌐 Serving customer web-app from: ${customerWebAppPath}`);
+}
+
+// Dev: proxy trang khách (Expo :8081) qua cùng cổng API — 1 URL ngrok cho QR + API
+if (config.customerWeb.proxyEnabled) {
+  const expoProxy = createProxyMiddleware({
+    target: config.customerWeb.proxyTarget,
+    changeOrigin: true,
+    ws: true,
+  });
+
+  app.use((req, res, next) => {
+    const p = req.path;
+    if (
+      p.startsWith('/api') ||
+      p.startsWith('/images') ||
+      p.startsWith('/uploads') ||
+      p.startsWith('/socket.io')
+    ) {
+      return next();
+    }
+    return expoProxy(req, res, next);
+  });
+  console.log(
+    `🔀 Customer web proxy: ${config.customerWeb.proxyTarget} (Expo phải đang chạy :8081)`
+  );
+}
+
+// Root endpoint (chỉ khi không proxy / không có web-app)
+app.get('/', (_req, res, next) => {
+  if (config.customerWeb.proxyEnabled || fs.existsSync(path.join(customerWebAppPath, 'index.html'))) {
+    return next();
+  }
   res.json({
     success: true,
     message: 'Restaurant Management System API',
@@ -151,8 +179,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🌍 Environment: ${config.server.env}`);
   console.log(`📝 API Version: ${config.server.apiVersion}`);
   console.log(`🔗 Local: http://localhost:${PORT}`);
-  console.log(`🔗 Network: http://192.168.1.3:${PORT}`);
-  console.log(`🏥 Health check: http://192.168.1.3:${PORT}/api/${config.server.apiVersion}/health`);
+  console.log(`🔗 Network: http://192.168.1.8:${PORT}`);
+  console.log(`🏥 Health check: http://192.168.1.8:${PORT}/api/${config.server.apiVersion}/health`);
   console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   console.log('='.repeat(50));
 });

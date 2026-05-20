@@ -2,7 +2,7 @@
  * Food Repository Interface - Domain Layer
  */
 
-import { Food, FoodWithImages, FoodCategory } from '../entities/Food';
+import { Food, FoodWithImages, FoodCategory, FoodImage } from '../entities/Food';
 
 export interface IFoodRepository {
   findById(id: string): Promise<Food | null>;
@@ -19,6 +19,7 @@ export interface IFoodRepository {
   }): Promise<FoodWithImages[]>;
   create(food: Omit<Food, 'id' | 'created_at' | 'updated_at'>): Promise<Food>;
   update(id: string, data: Partial<Food>): Promise<Food>;
+  replacePrimaryImage(foodId: string, imageUrl: string): Promise<FoodImage>;
   delete(id: string): Promise<void>;
   updateAvailability(id: string, isAvailable: boolean): Promise<Food>;
 }

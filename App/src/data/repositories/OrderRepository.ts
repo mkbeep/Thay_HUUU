@@ -1,12 +1,5 @@
 import { Order, OrderStatus } from '../../domain/models/Order';
-import axios from 'axios';
-import { getApiBaseUrl } from '../../utils/apiBaseUrl';
-
-const apiClient = axios.create({
-  baseURL: getApiBaseUrl(),
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
-});
+import { apiClient } from '../../utils/apiClient';
 
 export class OrderRepository {
   async getAllOrders(): Promise<Order[]> {
@@ -59,9 +52,9 @@ export class OrderRepository {
         table_session_id: order.tableNumber.toString(), // TODO: Use actual session ID
         order_type: 'dine_in',
         items: order.items.map(item => ({
-          food_id: item.id,
+          food_id: item.menuItem.id,
           quantity: item.quantity,
-          unit_price: item.price,
+          unit_price: item.menuItem.price,
           notes: item.notes,
         })),
         notes: '',

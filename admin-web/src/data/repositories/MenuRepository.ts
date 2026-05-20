@@ -51,13 +51,15 @@ const resolveImageUrl = (rawUrl?: string): string => {
   const url = rawUrl.trim();
   if (!url) return '';
   if (/^https?:\/\//i.test(url) || url.startsWith('//')) return url;
+  if (url.startsWith('/uploads/')) return `${API_ORIGIN}${url}`;
   if (url.startsWith('/images/')) return `${API_ORIGIN}${url}`;
+  if (url.startsWith('uploads/')) return `${API_ORIGIN}/${url}`;
   if (url.startsWith('menu/')) return `${API_ORIGIN}/images/${url}`;
   return `${API_ORIGIN}/images/menu/${url.replace(/^\/+/, '')}`;
 };
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token'); // ✅ Fix: đổi từ 'access_token' thành 'token'
+  const token = localStorage.getItem('token') || localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -101,22 +103,32 @@ export class MenuRepository {
     }
   }
 
-  async createMenuItem(dto: CreateMenuItemDto): Promise<MenuItem> {
-    const response = await apiClient.post('/foods', {
-      name: dto.name,
-      description: dto.description,
-      category: dto.category,
-      base_price: dto.price,
-      is_available: true,
-      preparation_time: dto.preparationTime || 15,
-      is_vegetarian: dto.isVegetarian || false,
-      is_spicy: dto.isSpicy || false,
+  async createMenuItem(dto: CreateMenuItemDto, image?: File): Promise<MenuItem> {
+    const formData = new FormData();
+    formData.append('name', dto.name);
+    formData.append('description', dto.description || '');
+    formData.append('category', categoryToApiValue(dto.category));
+    formData.append('base_price', String(dto.price));
+    formData.append('is_available', 'true');
+    formData.append('preparation_time', String(dto.preparationTime || 15));
+    formData.append('is_vegetarian', String(dto.isVegetarian || false));
+    formData.append('is_spicy', String(dto.isSpicy || false));
+    if (dto.imageUrl) formData.append('image_url', dto.imageUrl);
+    if (image) formData.append('image', image);
+
+    const response = await apiClient.post('/foods', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
     return this.mapToMenuItem(response.data.data);
   }
 
-  async updateMenuItem(id: string, dto: UpdateMenuItemDto): Promise<MenuItem | undefined> {
+  async updateMenuItem(id: string, dto: UpdateMenuItemDto, image?: File): Promise<MenuItem | undefined> {
     try {
+      console.debug('[MenuRepository] updateMenuItem:start', {
+        id,
+        dto,
+        image: image ? { name: image.name, size: image.size, type: image.type } : null,
+      });
       if (dto.available !== undefined) {
         await apiClient.patch(`/foods/${id}/availability`, {
           is_available: dto.available,
@@ -131,24 +143,79 @@ export class MenuRepository {
         dto.preparationTime,
         dto.isVegetarian,
         dto.isSpicy,
+        dto.imageUrl,
+        image,
       ].some(value => value !== undefined);
 
       if (!hasMainPayload) {
         return this.getMenuItemById(id);
       }
 
-      const response = await apiClient.put(`/foods/${id}`, {
-        name: dto.name,
-        description: dto.description,
-        category: dto.category ? categoryToApiValue(dto.category) : undefined,
-        base_price: dto.price,
-        preparation_time: dto.preparationTime,
-        is_vegetarian: dto.isVegetarian,
-        is_spicy: dto.isSpicy,
+      const formData = new FormData();
+      if (dto.name !== undefined) formData.append('name', dto.name);
+      if (dto.description !== undefined) formData.append('description', dto.description);
+      if (dto.category !== undefined) formData.append('category', categoryToApiValue(dto.category));
+      if (dto.price !== undefined) formData.append('base_price', String(dto.price));
+      if (dto.preparationTime !== undefined) formData.append('preparation_time', String(dto.preparationTime));
+      if (dto.isVegetarian !== undefined) formData.append('is_vegetarian', String(dto.isVegetarian));
+      if (dto.isSpicy !== undefined) formData.append('is_spicy', String(dto.isSpicy));
+      if (dto.imageUrl !== undefined) formData.append('image_url', dto.imageUrl);
+      if (image) formData.append('image', image);
+
+      const onlyImageUpdate =
+        !!image &&
+        dto.name === undefined &&
+        dto.description === undefined &&
+        dto.category === undefined &&
+        dto.price === undefined &&
+        dto.preparationTime === undefined &&
+        dto.isVegetarian === undefined &&
+        dto.isSpicy === undefined &&
+        dto.imageUrl === undefined;
+
+      const endpoint = onlyImageUpdate ? `/foods/${id}/image` : `/foods/${id}`;
+      const method = onlyImageUpdate ? 'patch' : 'put';
+
+      const response = await apiClient.request({
+        url: endpoint,
+        method,
+        data: formData,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      console.debug('[MenuRepository] updateMenuItem:response', {
+        id,
+        data: response.data?.data,
+        imageUrl: response.data?.data?.images?.find?.((img: any) => img.is_primary)?.image_url || response.data?.data?.images?.[0]?.image_url,
       });
       return this.mapToMenuItem(response.data.data);
     } catch (error) {
       console.error('Error updating menu item:', error);
+      return undefined;
+    }
+  }
+
+  async uploadMenuItemImage(id: string, image: File): Promise<MenuItem | undefined> {
+    try {
+      console.debug('[MenuRepository] uploadMenuItemImage:start', {
+        id,
+        fileName: image.name,
+        fileSize: image.size,
+        fileType: image.type,
+      });
+      const formData = new FormData();
+      formData.append('image', image);
+
+      const response = await apiClient.patch(`/foods/${id}/image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      console.debug('[MenuRepository] uploadMenuItemImage:response', {
+        id,
+        data: response.data?.data,
+        imageUrl: response.data?.data?.images?.find?.((img: any) => img.is_primary)?.image_url || response.data?.data?.images?.[0]?.image_url,
+      });
+      return this.mapToMenuItem(response.data.data);
+    } catch (error) {
+      console.error('Error uploading menu item image:', error);
       return undefined;
     }
   }

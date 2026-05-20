@@ -28,13 +28,13 @@ export interface Order {
   id: string;
   order_number: string;
   table_session_id?: string;
+  table_number?: string | number;
   customer_id?: string;
   staff_id?: string;
   order_type: OrderType;
   status: OrderStatus;
   subtotal: number;
   tax_amount: number;
-  discount_amount: number;
   total_amount: number;
   payment_status?: PaymentStatus;
   payment_method?: 'qr' | 'cash' | 'card' | 'e_wallet';

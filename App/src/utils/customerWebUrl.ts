@@ -1,4 +1,5 @@
 import { CUSTOMER_WEB_BASE_URL } from '@env';
+import { appendNgrokBypassQuery } from './publicWebUrl';
 
 function baseUrl(): string {
   const raw = (CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').trim();
@@ -19,8 +20,8 @@ export function buildCustomerTableWebUrl(
 ): string {
   const num = encodeURIComponent(String(tableNumber).trim());
   const id = tableId?.trim();
-  if (id) {
-    return `${baseUrl()}/table/${num}?tid=${encodeURIComponent(id)}`;
-  }
-  return `${baseUrl()}/table/${num}`;
+  const path = id
+    ? `${baseUrl()}/table/${num}?tid=${encodeURIComponent(id)}`
+    : `${baseUrl()}/table/${num}`;
+  return appendNgrokBypassQuery(path);
 }

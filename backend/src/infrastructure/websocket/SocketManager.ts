@@ -5,7 +5,7 @@
 
 import { Server as HTTPServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { config } from '../config/env.config';
+import { isAllowedCorsOrigin } from '../config/corsOrigins';
 
 export class SocketManager {
   private io: Server;
@@ -14,7 +14,13 @@ export class SocketManager {
   private constructor(httpServer: HTTPServer) {
     this.io = new Server(httpServer, {
       cors: {
-        origin: config.cors.origin,
+        origin: (origin, callback) => {
+          if (isAllowedCorsOrigin(origin)) {
+            callback(null, true);
+            return;
+          }
+          callback(new Error(`CORS blocked origin: ${origin}`));
+        },
         credentials: true,
       },
       transports: ['websocket', 'polling'],

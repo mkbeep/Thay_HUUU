@@ -16,6 +16,12 @@ export function getApiBaseUrl(): string {
   try {
     const u = new URL(base.startsWith('http') ? base : `http://${base}`);
     const pageHost = window.location.hostname;
+    const apiIsNgrok = /\.ngrok(-free)?\.app$/i.test(u.hostname);
+    const pageIsNgrok = /\.ngrok(-free)?\.app$/i.test(pageHost);
+    // Không đổi host khi API đã là ngrok (backend tunnel khác web khách)
+    if (apiIsNgrok || pageIsNgrok) {
+      return base;
+    }
     if (
       pageHost &&
       pageHost !== 'localhost' &&

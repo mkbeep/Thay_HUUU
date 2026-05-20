@@ -32,7 +32,6 @@ export interface Order {
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
   subtotal: number;
   tax_amount: number;
-  discount_amount: number;
   total_amount: number;
   notes?: string;
   created_at: string;

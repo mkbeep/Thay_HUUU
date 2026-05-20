@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import { buildTableQrPngFileName } from '../src/infrastructure/utils/qrGenerator';
+import { appendNgrokBypassQuery } from '../src/infrastructure/utils/publicWebUrl';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -27,10 +28,20 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const OUTPUT_DIR = path.join(__dirname, '../qr-codes');
 const WEB_BASE = (process.env.CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').replace(/\/+$/, '');
+const BACKEND_URL = (process.env.BACKEND_URL || '').replace(/\/+$/, '');
 
 async function generateQRCodes() {
   console.log('🎨 Starting QR code generation...');
-  console.log(`🌐 Web Base URL: ${WEB_BASE}\n`);
+  console.log(`🌐 Web Base URL: ${WEB_BASE}`);
+  if (WEB_BASE.includes('localhost') || WEB_BASE.includes('127.0.0.1')) {
+    console.warn(
+      '⚠️  CUSTOMER_WEB_BASE_URL đang là localhost — QR chỉ dùng được trên máy bạn.'
+    );
+    console.warn('    Chạy App (npm run start), rồi từ thư mục gốc: .\\setup-ngrok.ps1');
+  } else if (BACKEND_URL.includes('ngrok') && !WEB_BASE.includes('ngrok')) {
+    console.warn('⚠️  Backend dùng ngrok nhưng web khách chưa — chạy .\\setup-ngrok.ps1');
+  }
+  console.log('');
 
   try {
     // Get all tables from 'dining_table' collection (not 'tables')
@@ -66,7 +77,9 @@ async function generateQRCodes() {
       const capacity = data.capacity || 0;
 
       // Generate QR URL
-      const qrUrl = `${WEB_BASE}/table/${encodeURIComponent(tableNum)}?tid=${encodeURIComponent(tableId)}`;
+      const qrUrl = appendNgrokBypassQuery(
+        `${WEB_BASE}/table/${encodeURIComponent(tableNum)}?tid=${encodeURIComponent(tableId)}`
+      );
       const fileName = buildTableQrPngFileName(tableNum, tableId);
       const filePath = path.join(OUTPUT_DIR, fileName);
 

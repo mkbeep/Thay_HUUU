@@ -35,17 +35,24 @@ interface MenuItemDetailScreenProps {
   onAddToCart: () => void;
 }
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
 const FOOD_TOPPINGS: Topping[] = [
-  { id: 'cheese', name: 'Phô mai thêm', price: 15, priceDisplay: '15k' },
-  { id: 'egg', name: 'Trứng ốp la', price: 10, priceDisplay: '10k' },
-  { id: 'mushroom', name: 'Nấm tươi', price: 12, priceDisplay: '12k' },
-  { id: 'extra-sauce', name: 'Sốt đặc biệt', price: 8, priceDisplay: '8k' },
+  { id: 'cheese', name: 'Phô mai thêm', price: 15000, priceDisplay: formatCurrency(15000) },
+  { id: 'egg', name: 'Trứng ốp la', price: 10000, priceDisplay: formatCurrency(10000) },
+  { id: 'mushroom', name: 'Nấm tươi', price: 12000, priceDisplay: formatCurrency(12000) },
+  { id: 'extra-sauce', name: 'Sốt đặc biệt', price: 8000, priceDisplay: formatCurrency(8000) },
 ];
 
 const DESSERT_TOPPINGS: Topping[] = [
-  { id: 'extra-cream', name: 'Kem tươi thêm', price: 10, priceDisplay: '10k' },
-  { id: 'extra-fruit', name: 'Trái cây thêm', price: 12, priceDisplay: '12k' },
-  { id: 'extra-syrup', name: 'Syrup thêm', price: 6, priceDisplay: '6k' },
+  { id: 'extra-cream', name: 'Kem tươi thêm', price: 10000, priceDisplay: formatCurrency(10000) },
+  { id: 'extra-fruit', name: 'Trái cây thêm', price: 12000, priceDisplay: formatCurrency(12000) },
+  { id: 'extra-syrup', name: 'Syrup thêm', price: 6000, priceDisplay: formatCurrency(6000) },
 ];
 
 // Các lựa chọn mức độ
@@ -133,7 +140,7 @@ export default function MenuItemDetailScreen({
         id: `${item.id}_${Date.now()}_${i}`, // Unique ID cho mỗi món
         name: item.name,
         price: calculateTotal() / quantity, // Giá cho 1 món (bao gồm topping)
-        priceDisplay: `${(calculateTotal() / quantity).toFixed(1)}k`,
+        priceDisplay: formatCurrency(calculateTotal() / quantity),
         image: item.image,
         category: item.category,
         options: options.length > 0 ? options.join(' • ') : isDrink ? 'Tuỳ chỉnh đồ uống' : undefined,
@@ -336,7 +343,7 @@ export default function MenuItemDetailScreen({
       <View style={styles.bottomAction}>
         <View style={styles.totalContainer}>
           <Text style={styles.totalLabel}>Tổng cộng</Text>
-          <Text style={styles.totalValue}>{total.toFixed(1)}k</Text>
+          <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
         </View>
         
         <TouchableOpacity 

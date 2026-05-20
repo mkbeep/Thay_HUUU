@@ -1,4 +1,5 @@
 import { config } from '../config/env.config';
+import { appendNgrokBypassQuery } from './publicWebUrl';
 
 export interface TableWebLinkParams {
   /** ID bàn (Firebase); thêm vào query để web có thể đối chiếu, có thể bỏ qua nếu chỉ có số bàn. */
@@ -14,8 +15,8 @@ export function buildTableWebUrl(params: TableWebLinkParams): string {
   const base = config.customerWeb.baseUrl;
   const num = encodeURIComponent(String(params.tableNumber).trim());
   const id = params.tableId?.trim();
-  if (id) {
-    return `${base}/table/${num}?tid=${encodeURIComponent(id)}`;
-  }
-  return `${base}/table/${num}`;
+  const path = id
+    ? `${base}/table/${num}?tid=${encodeURIComponent(id)}`
+    : `${base}/table/${num}`;
+  return appendNgrokBypassQuery(path);
 }

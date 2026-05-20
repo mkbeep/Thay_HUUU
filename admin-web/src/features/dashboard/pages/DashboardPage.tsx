@@ -14,12 +14,6 @@ import { useNavigate } from 'react-router-dom'
 // Types
 type TimeFilter = 'daily' | 'weekly' | 'monthly'
 
-interface Category {
-  name: string
-  revenue: number
-  percentage: number
-}
-
 // Mock data generator
 // TODO: Replace with real API calls to backend
 // API endpoints needed:
@@ -280,7 +274,7 @@ export default function DashboardPage() {
     const daysInMonth = lastDay.getDate()
     const startingDayOfWeek = firstDay.getDay()
     
-    return { daysInMonth, startingDayOfWeek, year, month }
+    return { daysInMonth, startingDayOfWeek }
   }
 
   const handlePreviousMonth = () => {
@@ -310,7 +304,7 @@ export default function DashboardPage() {
            currentMonth.getFullYear() === selectedDate.getFullYear()
   }
 
-  const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth)
+  const { daysInMonth, startingDayOfWeek } = getDaysInMonth(currentMonth)
   const monthName = currentMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })
 
   return (

@@ -31,6 +31,13 @@ interface CartScreenProps {
   tableNumber?: string | number;
 }
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
 export default function CartScreen({
   onBack,
   onSubmitOrder,
@@ -241,22 +248,22 @@ export default function CartScreen({
               <View style={styles.summaryRows}>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Tạm tính</Text>
-                  <Text style={styles.summaryValue}>{subtotal.toFixed(1)}k</Text>
+                  <Text style={styles.summaryValue}>{formatCurrency(subtotal)}</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Thuế (8%)</Text>
-                  <Text style={styles.summaryValue}>{tax.toFixed(1)}k</Text>
+                  <Text style={styles.summaryValue}>{formatCurrency(tax)}</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Phí dịch vụ</Text>
-                  <Text style={styles.summaryValue}>{serviceFee.toFixed(1)}k</Text>
+                  <Text style={styles.summaryValue}>{formatCurrency(serviceFee)}</Text>
                 </View>
                 
                 <View style={styles.summaryDivider} />
                 
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Tổng cộng</Text>
-                  <Text style={styles.totalValue}>{total.toFixed(1)}k</Text>
+                  <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
                 </View>
               </View>
             </View>

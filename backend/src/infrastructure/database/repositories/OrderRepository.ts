@@ -2,13 +2,72 @@
  * Order Repository Implementation - Infrastructure Layer
  */
 
-import { db } from '../../config/firebase.config';
+import { db, firebaseAdmin } from '../../config/firebase.config';
 import { IOrderRepository } from '../../../domain/repositories/IOrderRepository';
 import { Order, OrderWithItems, OrderStatus, OrderType, OrderItem, PaymentStatus } from '../../../domain/entities/Order';
 
 export class OrderRepository implements IOrderRepository {
   private readonly collection = db.collection('orders');
   private readonly itemsCollection = db.collection('order_item');
+
+  private chunk<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  private async attachTableNumbers<T extends Order>(orders: T[]): Promise<T[]> {
+    const missingTableNumber = orders.filter((order) => {
+      const tableNumber = (order as any).table_number;
+      return !tableNumber && order.table_session_id && String(order.table_session_id).trim() !== '';
+    });
+
+    if (missingTableNumber.length === 0) return orders;
+
+    const sessionIds = Array.from(
+      new Set(missingTableNumber.map((order) => String(order.table_session_id)))
+    );
+    const sessionById = new Map<string, any>();
+
+    for (const ids of this.chunk(sessionIds, 10)) {
+      const snapshot = await db
+        .collection('table_session')
+        .where(firebaseAdmin.firestore.FieldPath.documentId(), 'in', ids)
+        .get();
+      snapshot.docs.forEach((doc) => sessionById.set(doc.id, { id: doc.id, ...doc.data() }));
+    }
+
+    const tableIds = Array.from(
+      new Set(
+        Array.from(sessionById.values())
+          .map((session) => session.table_id)
+          .filter((id): id is string => typeof id === 'string' && id.trim() !== '')
+      )
+    );
+    const tableNumberById = new Map<string, string | number>();
+
+    for (const ids of this.chunk(tableIds, 10)) {
+      const snapshot = await db
+        .collection('dining_table')
+        .where(firebaseAdmin.firestore.FieldPath.documentId(), 'in', ids)
+        .get();
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.table_number !== undefined && data.table_number !== null) {
+          tableNumberById.set(doc.id, data.table_number);
+        }
+      });
+    }
+
+    return orders.map((order) => {
+      if ((order as any).table_number || !order.table_session_id) return order;
+      const session = sessionById.get(String(order.table_session_id));
+      const tableNumber = session?.table_id ? tableNumberById.get(session.table_id) : undefined;
+      return tableNumber !== undefined ? ({ ...order, table_number: tableNumber } as T) : order;
+    });
+  }
 
   async findById(id: string): Promise<Order | null> {
     const doc = await this.collection.doc(id).get();
@@ -114,7 +173,7 @@ export class OrderRepository implements IOrderRepository {
 
     // Sort in memory instead of orderBy on query
     orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    return orders;
+    return this.attachTableNumbers(orders);
   }
 
   async findByTableSession(tableSessionId: string): Promise<Order[]> {
@@ -128,17 +187,85 @@ export class OrderRepository implements IOrderRepository {
     } as Order));
   }
 
-  async create(orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'>): Promise<Order> {
+  async findByTableSessionWithItems(tableSessionId: string): Promise<OrderWithItems[]> {
+    const orders = await this.findByTableSession(tableSessionId);
+    return Promise.all(
+      orders.map(async (order) => {
+        const withItems = await this.findByIdWithItems(order.id);
+        if (withItems && withItems.items.length > 0) return withItems;
+
+        const embeddedItems = Array.isArray((order as any).items) ? (order as any).items : [];
+        const items = await Promise.all(
+          embeddedItems.map(async (item: any, index: number) => {
+            const foodId = item.food_id || item.foodId;
+            const foodDoc = foodId ? await db.collection('food').doc(foodId).get() : null;
+            const food = foodDoc?.exists ? { id: foodDoc.id, ...foodDoc.data() } : null;
+            return {
+              ...item,
+              id: item.id || `${order.id}_${index}`,
+              order_id: order.id,
+              food_id: foodId,
+              unit_price: item.unit_price ?? item.unitPrice ?? 0,
+              subtotal:
+                Number(item.unit_price ?? item.unitPrice ?? 0) * Number(item.quantity ?? 0),
+              special_instructions: item.special_instructions ?? item.notes ?? '',
+              status: item.status || 'pending',
+              created_at: order.created_at,
+              updated_at: order.updated_at,
+              food,
+              toppings: [],
+            };
+          })
+        );
+
+        return { ...order, items } as OrderWithItems;
+      })
+    );
+  }
+
+  async create(orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'> & { items?: any[] }): Promise<Order> {
     const now = new Date();
+    const items = Array.isArray((orderData as any).items) ? (orderData as any).items : [];
+    const subtotal = items.reduce(
+      (sum: number, item: any) => sum + Number(item.unit_price || item.unitPrice || 0) * Number(item.quantity || 0),
+      0
+    );
+    const taxAmount = Number((subtotal * 0.08).toFixed(2));
+    const totalAmount = subtotal + taxAmount;
     const data = {
       ...orderData,
       status: (orderData as any).status || OrderStatus.PENDING,
       payment_status: (orderData as any).payment_status || PaymentStatus.UNPAID,
+      subtotal: (orderData as any).subtotal ?? subtotal,
+      tax_amount: (orderData as any).tax_amount ?? taxAmount,
+      total_amount: (orderData as any).total_amount ?? totalAmount,
       created_at: now,
       updated_at: now,
     };
 
     const docRef = await this.collection.add(data);
+
+    if (items.length > 0) {
+      const batch = db.batch();
+      items.forEach((item: any) => {
+        const unitPrice = Number(item.unit_price || item.unitPrice || 0);
+        const quantity = Number(item.quantity || 0);
+        const itemRef = this.itemsCollection.doc();
+        batch.set(itemRef, {
+          order_id: docRef.id,
+          food_id: item.food_id || item.foodId,
+          quantity,
+          unit_price: unitPrice,
+          subtotal: unitPrice * quantity,
+          special_instructions: item.special_instructions || item.notes || '',
+          status: 'pending',
+          created_at: now,
+          updated_at: now,
+        });
+      });
+      await batch.commit();
+    }
+
     return { id: docRef.id, ...data } as Order;
   }
 

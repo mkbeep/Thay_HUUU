@@ -30,7 +30,11 @@ const initializeFirebase = (): admin.app.App => {
       storageBucket: `${process.env.FIREBASE_PROJECT_ID}.appspot.com`,
     });
 
-    console.log('✅ Firebase Admin SDK initialized successfully');
+    console.log('Firebase Admin SDK initialized', {
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      databaseURL: process.env.FIREBASE_DATABASE_URL,
+    });
     return app;
   } catch (error) {
     console.error('❌ Error initializing Firebase Admin SDK:', error);
@@ -45,7 +49,9 @@ const firebaseApp = initializeFirebase();
 export const db = admin.firestore();
 
 // Export Firebase Storage bucket
-export const bucket = admin.storage().bucket(`${process.env.FIREBASE_PROJECT_ID}.appspot.com`);
+export const bucket: ReturnType<admin.storage.Storage['bucket']> = admin
+  .storage()
+  .bucket(`${process.env.FIREBASE_PROJECT_ID}.appspot.com`);
 
 // Export Firebase Admin
 export const firebaseAdmin = admin;
@@ -57,3 +63,17 @@ export default firebaseApp;
 db.settings({
   ignoreUndefinedProperties: true,
 });
+
+const materialCollection = (process.env.MATERIAL_COLLECTION || 'material').trim();
+if (process.env.FIRESTORE_STARTUP_DIAGNOSTICS === 'true') {
+db.collection(materialCollection)
+  .get()
+  .then((snap) => {
+    console.log(
+      `📦 Firestore "${materialCollection}" on project ${process.env.FIREBASE_PROJECT_ID}: ${snap.size} document(s)`
+    );
+  })
+  .catch((err) => {
+    console.warn(`⚠️ Could not read "${materialCollection}" collection:`, err.message);
+  });
+}

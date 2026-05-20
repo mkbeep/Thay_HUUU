@@ -42,6 +42,12 @@ export const config = {
   /** Base URL bản web khách (Expo Web export `App/web-app` — cùng giao diện app). Quét QR mở trình duyệt tới đây. */
   customerWeb: {
     baseUrl: (process.env.CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').replace(/\/+$/, ''),
+    /** Dev: proxy /table, /_expo, ... tới Expo (8081) qua cùng ngrok :3000 */
+    proxyEnabled: process.env.CUSTOMER_WEB_PROXY === 'true',
+    proxyTarget: (process.env.CUSTOMER_WEB_PROXY_TARGET || 'http://127.0.0.1:8081').replace(
+      /\/+$/,
+      ''
+    ),
   },
 
   // Rate Limiting

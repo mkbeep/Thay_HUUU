@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Order Controller - Presentation Layer
  */
 
@@ -38,6 +38,30 @@ export class OrderController {
     );
   }
 
+  private emitAdminNotification(payload: {
+    title: string;
+    message: string;
+    data?: Record<string, any>;
+    type?: NotificationType;
+    priority?: NotificationPriority;
+  }) {
+    try {
+      const socketManager = SocketManager.getInstance();
+      socketManager.notifyNewNotification({
+        id: `local_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        title: payload.title,
+        message: payload.message,
+        data: payload.data || {},
+        type: payload.type,
+        priority: payload.priority || NotificationPriority.NORMAL,
+        is_read: false,
+        created_at: new Date(),
+      });
+    } catch (error) {
+      console.error('WebSocket notification emit error:', error);
+    }
+  }
+
   /**
    * GET /api/v1/orders
    */
@@ -65,7 +89,7 @@ export class OrderController {
 
   /**
    * GET /api/v1/orders/public?table_session_id=...
-   * Public endpoint cho app khách đồng bộ trạng thái đơn theo bàn
+   * Public endpoint cho app khÃ¡ch Ä‘á»“ng bá»™ tráº¡ng thÃ¡i Ä‘Æ¡n theo bÃ n
    */
   getPublicByTableSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -78,9 +102,9 @@ export class OrderController {
         return;
       }
 
-      const orders = await this.orderRepository.findAll({
-        table_session_id: table_session_id as string,
-      });
+      const orders = await this.orderRepository.findByTableSessionWithItems(
+        table_session_id as string
+      );
 
       res.status(200).json({
         success: true,
@@ -101,7 +125,7 @@ export class OrderController {
       const order = await this.orderRepository.findByIdWithItems(id);
 
       if (!order) {
-        throw new NotFoundError('Đơn hàng không tồn tại');
+        throw new NotFoundError('ÄÆ¡n hÃ ng khÃ´ng tá»“n táº¡i');
       }
 
       res.status(200).json({
@@ -127,16 +151,16 @@ export class OrderController {
         payment_status: PaymentStatus.UNPAID,
       });
 
-      // Gửi notification cho toàn bộ bộ phận vận hành (staff/manager/admin)
+      // Gá»­i notification cho toÃ n bá»™ bá»™ pháº­n váº­n hÃ nh (staff/manager/admin)
       await this.notifyOperationRoles({
         type: NotificationType.ORDER_CREATED,
-        title: 'Đơn hàng mới',
-        message: `Đơn hàng ${orderNumber} vừa được tạo`,
+        title: 'ÄÆ¡n hÃ ng má»›i',
+        message: `ÄÆ¡n hÃ ng ${orderNumber} vá»«a Ä‘Æ°á»£c táº¡o`,
         data: { order_id: order.id },
         priority: NotificationPriority.HIGH,
       });
 
-      // 🔥 Emit WebSocket event
+      // ðŸ”¥ Emit WebSocket event
       try {
         const socketManager = SocketManager.getInstance();
         socketManager.notifyOrderCreated(order);
@@ -144,9 +168,17 @@ export class OrderController {
         console.error('WebSocket emit error:', error);
       }
 
+      this.emitAdminNotification({
+        type: NotificationType.ORDER_CREATED,
+        title: 'ÄÆ¡n hÃ ng má»›i',
+        message: `ÄÆ¡n hÃ ng ${orderNumber} vá»«a Ä‘Æ°á»£c táº¡o`,
+        data: { order_id: order.id, table_number: order.table_number },
+        priority: NotificationPriority.HIGH,
+      });
+
       res.status(201).json({
         success: true,
-        message: 'Tạo đơn hàng thành công',
+        message: 'Táº¡o Ä‘Æ¡n hÃ ng thÃ nh cÃ´ng',
         data: order,
       });
     } catch (error) {
@@ -164,19 +196,19 @@ export class OrderController {
 
       const order = await this.orderRepository.updateStatus(id, status);
 
-      // Gửi notification cho customer
+      // Gá»­i notification cho customer
       if (order.customer_id) {
         await this.notificationService.sendToUser({
           user_id: order.customer_id,
           type: NotificationType.ORDER_UPDATED,
-          title: 'Cập nhật đơn hàng',
-          message: `Đơn hàng ${order.order_number} đã chuyển sang trạng thái ${status}`,
+          title: 'Cáº­p nháº­t Ä‘Æ¡n hÃ ng',
+          message: `ÄÆ¡n hÃ ng ${order.order_number} Ä‘Ã£ chuyá»ƒn sang tráº¡ng thÃ¡i ${status}`,
           data: { order_id: order.id, status },
           priority: NotificationPriority.NORMAL,
         });
       }
 
-      // 🔥 Emit WebSocket event
+      // ðŸ”¥ Emit WebSocket event
       try {
         const socketManager = SocketManager.getInstance();
         socketManager.notifyOrderStatusChanged(order.id, status, order);
@@ -186,7 +218,7 @@ export class OrderController {
 
       res.status(200).json({
         success: true,
-        message: 'Cập nhật trạng thái thành công',
+        message: 'Cáº­p nháº­t tráº¡ng thÃ¡i thÃ nh cÃ´ng',
         data: order,
       });
     } catch (error) {
@@ -196,7 +228,7 @@ export class OrderController {
 
   /**
    * PATCH /api/v1/orders/:id/request-payment
-   * Khách gửi yêu cầu thanh toán
+   * KhÃ¡ch gá»­i yÃªu cáº§u thanh toÃ¡n
    */
   requestPayment = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -206,8 +238,8 @@ export class OrderController {
 
       await this.notifyOperationRoles({
         type: NotificationType.PAYMENT_REQUEST,
-        title: 'Yêu cầu thanh toán',
-        message: `Đơn ${order.order_number} yêu cầu thanh toán bằng ${paymentMethod}`,
+        title: 'YÃªu cáº§u thanh toÃ¡n',
+        message: `ÄÆ¡n ${order.order_number} yÃªu cáº§u thanh toÃ¡n báº±ng ${paymentMethod}`,
         data: { order_id: order.id, payment_method: paymentMethod },
         priority: NotificationPriority.HIGH,
       });
@@ -219,9 +251,17 @@ export class OrderController {
         console.error('WebSocket emit error (request-payment):', error);
       }
 
+      this.emitAdminNotification({
+        type: NotificationType.PAYMENT_REQUEST,
+        title: 'Yêu cầu thanh toán',
+        message: `Đơn ${order.order_number} yêu cầu thanh toán bằng ${paymentMethod}`,
+        data: { order_id: order.id, payment_method: paymentMethod, table_number: order.table_number },
+        priority: NotificationPriority.HIGH,
+      });
+
       res.status(200).json({
         success: true,
-        message: 'Đã gửi yêu cầu thanh toán',
+        message: 'ÄÃ£ gá»­i yÃªu cáº§u thanh toÃ¡n',
         data: order,
       });
     } catch (error) {
@@ -231,7 +271,7 @@ export class OrderController {
 
   /**
    * PATCH /api/v1/orders/:id/cancel
-   * Khách hủy đơn (chỉ pending / confirmed). body: { table_session_id?: string }
+   * KhÃ¡ch há»§y Ä‘Æ¡n (chá»‰ pending / confirmed). body: { table_session_id?: string }
    */
   cancel = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -243,14 +283,14 @@ export class OrderController {
         order = await this.orderRepository.cancelIfAllowed(id, tableSessionId);
       } catch (e: any) {
         if (e?.message === 'Order not found') {
-          throw new NotFoundError('Đơn hàng không tồn tại');
+          throw new NotFoundError('ÄÆ¡n hÃ ng khÃ´ng tá»“n táº¡i');
         }
         if (e?.message === 'TABLE_MISMATCH') {
-          throw new AppError('Không khớp thông tin bàn', 403);
+          throw new AppError('KhÃ´ng khá»›p thÃ´ng tin bÃ n', 403);
         }
         if (e?.message === 'CANCEL_NOT_ALLOWED') {
           throw new AppError(
-            'Chỉ có thể hủy khi đơn ở trạng thái "mới" hoặc "đã nhận", trước khi bếp bắt đầu nấu.',
+            'Chá»‰ cÃ³ thá»ƒ há»§y khi Ä‘Æ¡n á»Ÿ tráº¡ng thÃ¡i "má»›i" hoáº·c "Ä‘Ã£ nháº­n", trÆ°á»›c khi báº¿p báº¯t Ä‘áº§u náº¥u.',
             400
           );
         }
@@ -266,7 +306,7 @@ export class OrderController {
 
       res.status(200).json({
         success: true,
-        message: 'Đã hủy đơn hàng',
+        message: 'ÄÃ£ há»§y Ä‘Æ¡n hÃ ng',
         data: order,
       });
     } catch (error) {
@@ -276,14 +316,14 @@ export class OrderController {
 
   /**
    * PATCH /api/v1/orders/:id/confirm-payment
-   * Thu ngân/admin xác nhận đã nhận tiền
+   * Thu ngÃ¢n/admin xÃ¡c nháº­n Ä‘Ã£ nháº­n tiá»n
    */
   confirmPayment = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const order = await this.orderRepository.confirmPayment(id);
 
-      // 🔥 Emit WebSocket event trước khi xóa
+      // ðŸ”¥ Emit WebSocket event trÆ°á»›c khi xÃ³a
       try {
         const socketManager = SocketManager.getInstance();
         socketManager.notifyOrderUpdated(order);
@@ -291,16 +331,16 @@ export class OrderController {
         console.error('WebSocket emit error:', error);
       }
 
-      // ✅ Kiểm tra xem còn order nào chưa thanh toán của session này không
+      // âœ… Kiá»ƒm tra xem cÃ²n order nÃ o chÆ°a thanh toÃ¡n cá»§a session nÃ y khÃ´ng
       if (order.table_session_id) {
         const remainingOrders = await this.orderRepository.findByTableSession(order.table_session_id);
         const unpaidOrders = remainingOrders.filter(o => 
           o.id !== order.id && o.payment_status !== 'paid'
         );
 
-        console.log(`📊 Session ${order.table_session_id}: ${unpaidOrders.length} unpaid orders remaining`);
+        console.log(`ðŸ“Š Session ${order.table_session_id}: ${unpaidOrders.length} unpaid orders remaining`);
 
-        // Nếu không còn order nào chưa thanh toán → Cập nhật bàn về available
+        // Náº¿u khÃ´ng cÃ²n order nÃ o chÆ°a thanh toÃ¡n â†’ Cáº­p nháº­t bÃ n vá» available
         if (unpaidOrders.length === 0) {
           try {
             const tableRepository = new (require('../../infrastructure/database/repositories/TableRepository').TableRepository)();
@@ -313,25 +353,25 @@ export class OrderController {
               // Update table status to available
               await tableRepository.updateStatus(session.table_id, 'available');
               
-              console.log(`✅ Table ${session.table_id} set to available - all orders paid`);
+              console.log(`âœ… Table ${session.table_id} set to available - all orders paid`);
               
               // Notify table status changed
               const socketManager = SocketManager.getInstance();
               socketManager.notifyTableUpdated(session.table_id);
             }
           } catch (error) {
-            console.error('❌ Error updating table status:', error);
+            console.error('âŒ Error updating table status:', error);
           }
         }
       }
 
-      // 🗑️ XÓA ORDER ĐÃ THANH TOÁN
+      // ðŸ—‘ï¸ XÃ“A ORDER ÄÃƒ THANH TOÃN
       await this.orderRepository.delete(id);
-      console.log(`🗑️ Deleted paid order: ${id}`);
+      console.log(`ðŸ—‘ï¸ Deleted paid order: ${id}`);
 
       res.status(200).json({
         success: true,
-        message: 'Xác nhận thanh toán và xóa đơn hàng thành công',
+        message: 'XÃ¡c nháº­n thanh toÃ¡n vÃ  xÃ³a Ä‘Æ¡n hÃ ng thÃ nh cÃ´ng',
         data: order,
       });
     } catch (error) {
@@ -349,7 +389,7 @@ export class OrderController {
 
       res.status(200).json({
         success: true,
-        message: 'Xóa đơn hàng thành công',
+        message: 'XÃ³a Ä‘Æ¡n hÃ ng thÃ nh cÃ´ng',
       });
     } catch (error) {
       next(error);

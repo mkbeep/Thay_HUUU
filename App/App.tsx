@@ -3,7 +3,7 @@ import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Platform } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -173,6 +173,7 @@ export default function App() {
 
 function AppScreens() {
   const { tableNumber, tableId, isLoading } = useTable();
+  const [bootstrapFailed, setBootstrapFailed] = useState(false);
   const [currentScreen, setCurrentScreen] = useState<Screen>('welcome');
   const [qrReturnScreen, setQrReturnScreen] = useState<Screen>('welcome');
   const [selectedItem, setSelectedItem] = useState<SelectedMenuItem | null>(null);
@@ -235,12 +236,44 @@ function AppScreens() {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     if (isLoading || didWebTableDeepLink.current) return;
-    if (tableNumber == null || !tableId) return;
+    if (tableNumber == null || !tableId) {
+      if (urlSignalsCustomerTable(resolveWebTableBootstrapHref())) {
+        setBootstrapFailed(true);
+      }
+      return;
+    }
+    setBootstrapFailed(false);
     const tableHref = resolveWebTableBootstrapHref();
     if (!urlSignalsCustomerTable(tableHref)) return;
     didWebTableDeepLink.current = true;
     setCurrentScreen('home');
   }, [isLoading, tableNumber, tableId]);
+
+  if (Platform.OS === 'web' && isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <ActivityIndicator size="large" color="#AD2C00" />
+        <Text style={{ marginTop: 16, fontSize: 16, color: '#444' }}>Dang tai thong tin ban...</Text>
+      </View>
+    );
+  }
+
+  if (Platform.OS === 'web' && bootstrapFailed && !tableId) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: '#AD2C00', marginBottom: 12 }}>
+          Khong tai duoc ban
+        </Text>
+        <Text style={{ fontSize: 14, color: '#555', textAlign: 'center', lineHeight: 22 }}>
+          Kiem tra: backend dang chay (port 3000), App dang chay (port 8081), ngrok dang bat. Sau do
+          chay lai npm run setup-ngrok va khoi dong lai App.
+        </Text>
+        <Pressable onPress={() => window.location.reload()}>
+          <Text style={{ marginTop: 16, fontSize: 13, color: '#AD2C00' }}>Bam de tai lai trang</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -274,11 +307,10 @@ function AppScreens() {
               }
             }}
             onMenuItemPress={(item: any) => {
-              const priceNumber = parseFloat(item.price.replace('k', ''));
               setSelectedItem({
                 id: item.id,
                 name: item.name,
-                price: priceNumber,
+                price: item.priceValue,
                 priceDisplay: item.price,
                 image: item.image,
                 description: item.description,

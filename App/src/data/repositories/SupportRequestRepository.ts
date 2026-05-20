@@ -1,11 +1,4 @@
-import axios from 'axios';
-import { getApiBaseUrl } from '../../utils/apiBaseUrl';
-
-const apiClient = axios.create({
-  baseURL: getApiBaseUrl(),
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
-});
+import { apiClient } from '../../utils/apiClient';
 
 export interface CreateSupportRequestDTO {
   table_id: string;

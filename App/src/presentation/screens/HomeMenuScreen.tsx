@@ -24,6 +24,7 @@ interface MenuItem {
   id: string;
   name: string;
   price: string;
+  priceValue: number;
   image: ImageSourcePropType;
   badge?: string;
   badgeColor?: string;
@@ -47,6 +48,13 @@ const CATEGORIES = [
   { id: 'specials', name: 'Đặc biệt', icon: 'star' as const },
 ];
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
 export default function HomeMenuScreen({ 
   onCartPress,
   onNavigate,
@@ -64,7 +72,7 @@ export default function HomeMenuScreen({
   // Sử dụng CartContext
   const { addItem, getItemCount, getGrandTotal } = useCart();
   const cartCount = getItemCount();
-  const cartTotal = `${getGrandTotal().toFixed(1)}k`;
+  const cartTotal = formatCurrency(getGrandTotal());
 
   // Khởi tạo MenuService
   const menuService = new MenuService();
@@ -82,7 +90,8 @@ export default function HomeMenuScreen({
       const displayItems: MenuItem[] = items.map(item => ({
         id: item.id,
         name: item.name,
-        price: `${(item.price / 1000).toFixed(0)}k`, // 145000 -> "145k"
+        price: formatCurrency(item.price),
+        priceValue: item.price,
         image: item.image,
         badge: item.badge,
         badgeColor: item.badgeColor,
@@ -105,7 +114,8 @@ export default function HomeMenuScreen({
       const displayItems: MenuItem[] = items.map(item => ({
         id: item.id,
         name: item.name,
-        price: `${(item.price / 1000).toFixed(0)}k`,
+        price: formatCurrency(item.price),
+        priceValue: item.price,
         image: item.image,
         badge: item.badge,
         badgeColor: item.badgeColor,
@@ -248,8 +258,8 @@ export default function HomeMenuScreen({
               // Ngăn event bubble lên parent TouchableOpacity
               e.stopPropagation();
               
-              // Thêm món vào giỏ hàng - Parse giá đúng cách
-              const priceNumber = parseFloat(item.price.replace('k', '').trim());
+              // Thêm món vào giỏ hàng bằng giá VND gốc, không parse từ text hiển thị.
+              const priceNumber = item.priceValue;
               console.log('Price number:', priceNumber);
               
               const cartItem = {
