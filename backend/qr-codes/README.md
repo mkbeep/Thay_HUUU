@@ -2,8 +2,8 @@
 
 ## Thông tin
 - **Tổng số bàn**: 20
-- **Web Base URL**: https://unfrothed-sharri-releasible.ngrok-free.dev
-- **Ngày tạo**: 10:42:51 20/5/2026
+- **Web Base URL**: http://192.168.110.67:8081
+- **Ngày tạo**: 11:58:47 20/5/2026
 
 ## Danh sách bàn
 - **1** - Tầng 1 - Khu A (2 chỗ)

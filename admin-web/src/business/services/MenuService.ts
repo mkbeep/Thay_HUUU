@@ -49,14 +49,8 @@ export class MenuService {
     return await this.menuRepository.deleteMenuItem(id);
   }
 
-  async toggleItemAvailability(itemId: string): Promise<MenuItem | undefined> {
-    const item = await this.menuRepository.getMenuItemById(itemId);
-    if (item) {
-      return await this.menuRepository.updateMenuItem(itemId, {
-        available: !item.available,
-      });
-    }
-    return undefined;
+  async toggleItemAvailability(itemId: string, available: boolean): Promise<MenuItem | undefined> {
+    return await this.menuRepository.updateMenuItem(itemId, { available });
   }
 
   async searchMenuItems(query: string): Promise<MenuItem[]> {

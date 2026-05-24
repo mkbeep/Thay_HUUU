@@ -101,6 +101,28 @@ export class NotificationRepository implements INotificationRepository {
     await this.collection.doc(id).delete();
   }
 
+  async deleteByOrderId(orderId: string, type?: NotificationType): Promise<number> {
+    let query: FirebaseFirestore.Query = this.collection.where('data.order_id', '==', orderId);
+
+    if (type) {
+      query = query.where('type', '==', type);
+    }
+
+    const snapshot = await query.get();
+    if (snapshot.empty) return 0;
+
+    let deleted = 0;
+    for (let i = 0; i < snapshot.docs.length; i += 500) {
+      const batch = db.batch();
+      const chunk = snapshot.docs.slice(i, i + 500);
+      chunk.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+      deleted += chunk.length;
+    }
+
+    return deleted;
+  }
+
   async deleteExpired(): Promise<void> {
     const now = new Date();
     const snapshot = await this.collection

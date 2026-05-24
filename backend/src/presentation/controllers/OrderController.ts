@@ -14,14 +14,15 @@ import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 
 export class OrderController {
   private orderRepository: OrderRepository;
+  private notificationRepository: NotificationRepository;
   private notificationService: NotificationService;
   private readonly operationRoles = ['staff', 'manager', 'admin', 'chef'] as const;
 
   constructor() {
     this.orderRepository = new OrderRepository();
-    const notificationRepository = new NotificationRepository();
+    this.notificationRepository = new NotificationRepository();
     const userRepository = new UserRepository();
-    this.notificationService = new NotificationService(notificationRepository, userRepository);
+    this.notificationService = new NotificationService(this.notificationRepository, userRepository);
   }
 
   private async notifyOperationRoles(
@@ -36,6 +37,20 @@ export class OrderController {
     await Promise.all(
       this.operationRoles.map((role) => this.notificationService.sendToRole(role, payload))
     );
+  }
+
+  private notifyOperationRolesBestEffort(
+    payload: {
+      type: NotificationType;
+      title: string;
+      message: string;
+      data?: Record<string, any>;
+      priority?: NotificationPriority;
+    }
+  ) {
+    void this.notifyOperationRoles(payload).catch((error) => {
+      console.error('Operation role notification error:', error);
+    });
   }
 
   private emitAdminNotification(payload: {
@@ -151,15 +166,6 @@ export class OrderController {
         payment_status: PaymentStatus.UNPAID,
       });
 
-      // Gá»­i notification cho toÃ n bá»™ bá»™ pháº­n váº­n hÃ nh (staff/manager/admin)
-      await this.notifyOperationRoles({
-        type: NotificationType.ORDER_CREATED,
-        title: 'ÄÆ¡n hÃ ng má»›i',
-        message: `ÄÆ¡n hÃ ng ${orderNumber} vá»«a Ä‘Æ°á»£c táº¡o`,
-        data: { order_id: order.id },
-        priority: NotificationPriority.HIGH,
-      });
-
       // ðŸ”¥ Emit WebSocket event
       try {
         const socketManager = SocketManager.getInstance();
@@ -170,8 +176,18 @@ export class OrderController {
 
       this.emitAdminNotification({
         type: NotificationType.ORDER_CREATED,
-        title: 'ÄÆ¡n hÃ ng má»›i',
-        message: `ÄÆ¡n hÃ ng ${orderNumber} vá»«a Ä‘Æ°á»£c táº¡o`,
+        title: '\u0110\u01a1n h\u00e0ng m\u1edbi',
+        message: `\u0110\u01a1n h\u00e0ng ${orderNumber} v\u1eeba \u0111\u01b0\u1ee3c t\u1ea1o`,
+        data: { order_id: order.id, table_number: order.table_number },
+        priority: NotificationPriority.HIGH,
+      });
+
+      // Gá»­i notification cho toÃ n bá»™ bá»™ pháº­n váº­n hÃ nh (staff/manager/admin)
+      // Chay best-effort de realtime/response khong bi chan neu Firestore/FCM loi.
+      this.notifyOperationRolesBestEffort({
+        type: NotificationType.ORDER_CREATED,
+        title: '\u0110\u01a1n h\u00e0ng m\u1edbi',
+        message: `\u0110\u01a1n h\u00e0ng ${orderNumber} v\u1eeba \u0111\u01b0\u1ee3c t\u1ea1o`,
         data: { order_id: order.id, table_number: order.table_number },
         priority: NotificationPriority.HIGH,
       });
@@ -236,17 +252,9 @@ export class OrderController {
       const paymentMethod = req.body.payment_method || 'qr';
       const order = await this.orderRepository.requestPayment(id, paymentMethod);
 
-      await this.notifyOperationRoles({
-        type: NotificationType.PAYMENT_REQUEST,
-        title: 'YÃªu cáº§u thanh toÃ¡n',
-        message: `ÄÆ¡n ${order.order_number} yÃªu cáº§u thanh toÃ¡n báº±ng ${paymentMethod}`,
-        data: { order_id: order.id, payment_method: paymentMethod },
-        priority: NotificationPriority.HIGH,
-      });
-
       try {
         const socketManager = SocketManager.getInstance();
-        socketManager.notifyOrderUpdated(order);
+        socketManager.notifyPaymentRequested(order);
       } catch (error) {
         console.error('WebSocket emit error (request-payment):', error);
       }
@@ -255,6 +263,14 @@ export class OrderController {
         type: NotificationType.PAYMENT_REQUEST,
         title: 'Yêu cầu thanh toán',
         message: `Đơn ${order.order_number} yêu cầu thanh toán bằng ${paymentMethod}`,
+        data: { order_id: order.id, payment_method: paymentMethod, table_number: order.table_number },
+        priority: NotificationPriority.HIGH,
+      });
+
+      this.notifyOperationRolesBestEffort({
+        type: NotificationType.PAYMENT_REQUEST,
+        title: 'Y\u00eau c\u1ea7u thanh to\u00e1n',
+        message: `\u0110\u01a1n ${order.order_number} y\u00eau c\u1ea7u thanh to\u00e1n b\u1eb1ng ${paymentMethod}`,
         data: { order_id: order.id, payment_method: paymentMethod, table_number: order.table_number },
         priority: NotificationPriority.HIGH,
       });
@@ -367,6 +383,11 @@ export class OrderController {
 
       // ðŸ—‘ï¸ XÃ“A ORDER ÄÃƒ THANH TOÃN
       await this.orderRepository.delete(id);
+      try {
+        await this.notificationRepository.deleteByOrderId(id);
+      } catch (error) {
+        console.error('Notification cleanup error:', error);
+      }
       console.log(`ðŸ—‘ï¸ Deleted paid order: ${id}`);
 
       res.status(200).json({

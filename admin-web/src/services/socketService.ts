@@ -1,11 +1,10 @@
 /**
  * WebSocket Service
- * Quản lý real-time connection với Socket.IO
+ * Single shared Socket.IO connection for the admin app.
  */
 
 import { io, Socket } from 'socket.io-client';
 
-// VITE_SOCKET_URL (ngrok) hoặc suy ra từ VITE_API_URL
 const getSocketUrl = () => {
   const explicit = (import.meta.env.VITE_SOCKET_URL || '').trim();
   if (explicit) return explicit.replace(/\/+$/, '');
@@ -21,23 +20,29 @@ class SocketService {
   private maxReconnectAttempts = 5;
 
   connect(token?: string): Socket {
-    const authToken = token || localStorage.getItem('token') || localStorage.getItem('access_token') || undefined;
+    const authToken =
+      token || localStorage.getItem('token') || localStorage.getItem('access_token') || undefined;
+
     if (!authToken) {
       this.disconnect();
       throw new Error('Missing auth token for WebSocket connection');
     }
 
-    if (this.socket?.connected) {
+    if (this.socket) {
+      this.socket.auth = { token: authToken };
+      if (this.socket.connected) {
+        this.joinAdminRoom();
+      } else if (this.socket.disconnected) {
+        this.socket.connect();
+      }
       return this.socket;
     }
 
-    console.log('🔌 Connecting to WebSocket:', SOCKET_URL);
+    console.log('Connecting to WebSocket:', SOCKET_URL);
 
     this.socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
-      auth: {
-        token: authToken,
-      },
+      auth: { token: authToken },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
@@ -45,38 +50,42 @@ class SocketService {
     });
 
     this.setupEventHandlers();
-    
-    // ✅ Expose socket to window for easy access
     (window as any).socket = this.socket;
 
     return this.socket;
+  }
+
+  private joinAdminRoom(): void {
+    if (!this.socket?.connected) return;
+    this.socket.emit('join:admin');
+    console.log('Joined admin room');
   }
 
   private setupEventHandlers(): void {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log('✅ WebSocket connected:', this.socket?.id);
+      console.log('WebSocket connected:', this.socket?.id);
       this.reconnectAttempts = 0;
-      // Join admin room
-      this.socket?.emit('join:admin');
+      this.joinAdminRoom();
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('🔌 WebSocket disconnected:', reason);
+      console.log('WebSocket disconnected:', reason);
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('❌ WebSocket connection error:', error);
+      console.error('WebSocket connection error:', error);
       this.reconnectAttempts++;
-      
+
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.log('⚠️ Max reconnection attempts reached. Falling back to polling.');
+        console.log('Max reconnection attempts reached. Falling back to polling.');
       }
     });
 
     this.socket.on('reconnect', (attemptNumber) => {
-      console.log(`🔄 WebSocket reconnected after ${attemptNumber} attempts`);
+      console.log(`WebSocket reconnected after ${attemptNumber} attempts`);
+      this.joinAdminRoom();
     });
   }
 
@@ -84,7 +93,7 @@ class SocketService {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
-      console.log('🔌 WebSocket disconnected manually');
+      console.log('WebSocket disconnected manually');
     }
   }
 
@@ -96,7 +105,6 @@ class SocketService {
     return this.socket?.connected || false;
   }
 
-  // Event listeners
   on(event: string, callback: (...args: any[]) => void): void {
     this.socket?.on(event, callback);
   }

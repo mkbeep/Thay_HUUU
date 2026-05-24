@@ -1,8 +1,8 @@
-import { CUSTOMER_WEB_BASE_URL } from '@env';
+import { EXPO_PUBLIC_CUSTOMER_WEB_BASE_URL } from '@env';
 import { appendNgrokBypassQuery } from './publicWebUrl';
 
 function baseUrl(): string {
-  const raw = (CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').trim();
+  const raw = (EXPO_PUBLIC_CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').trim();
   return raw.replace(/\/+$/, '');
 }
 

@@ -113,6 +113,12 @@ export class SocketManager {
     }
   }
 
+  public notifyPaymentRequested(order: any): void {
+    this.emitToAdmin('payment:requested', order);
+    this.emitToKitchen('payment:requested', order);
+    this.notifyOrderUpdated(order);
+  }
+
   public notifyOrderStatusChanged(orderId: string, status: string, order: any): void {
     this.emitToAdmin('order:status_changed', { orderId, status, order });
     this.emitToKitchen('order:status_changed', { orderId, status, order });

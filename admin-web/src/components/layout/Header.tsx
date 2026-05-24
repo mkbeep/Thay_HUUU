@@ -10,6 +10,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
 
 interface NotificationItem {
   id: string
+  type?: string
   title: string
   message: string
   created_at: string
@@ -47,12 +48,32 @@ export default function Header() {
 
   const normalizeNotification = (item: any): NotificationItem => ({
     id: String(item?.id || `local_${Date.now()}`),
+    type: item?.type ? String(item.type) : undefined,
     title: String(item?.title || 'Thông báo'),
     message: String(item?.message || ''),
     created_at: item?.created_at || item?.createdAt || new Date().toISOString(),
     is_read: Boolean(item?.is_read ?? item?.isRead ?? item?.read ?? false),
     data: item?.data || {},
   })
+
+  const notificationKey = (item: NotificationItem) => {
+    const orderId = item.data?.order_id
+    if (!orderId) return item.id
+    const kind =
+      item.type ||
+      (item.id.includes('payment') ? 'payment_request' : item.id.includes('order') ? 'order_created' : item.title)
+    return `${kind}:${orderId}`
+  }
+
+  const mergeNotifications = (items: NotificationItem[]) => {
+    const seen = new Set<string>()
+    return items.filter((item) => {
+      const key = notificationKey(item)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -65,7 +86,7 @@ export default function Header() {
       const serverList = (response.data?.data || []).map(normalizeNotification)
       setNotifications((prev) => {
         const localList = prev.filter((n) => n.id.startsWith('local_'))
-        const merged = [...localList, ...serverList].slice(0, 10)
+        const merged = mergeNotifications([...localList, ...serverList]).slice(0, 10)
         setUnreadCount(
           response.data?.unread_count !== undefined
             ? Number(response.data.unread_count) + localList.filter((n) => !n.is_read).length
@@ -83,8 +104,11 @@ export default function Header() {
 
   const addLocalNotification = useCallback((notif: NotificationItem | any) => {
     const normalized = normalizeNotification(notif)
+    let added = false
     setNotifications((prev) => {
       if (prev.some((item) => item.id === normalized.id)) return prev
+      const nextKey = notificationKey(normalized)
+      if (prev.some((item) => notificationKey(item) === nextKey)) return prev
       if (
         normalized.data?.order_id &&
         prev.some(
@@ -93,10 +117,14 @@ export default function Header() {
       ) {
         return prev
       }
+      added = true
       return [normalized, ...prev].slice(0, 10)
     })
-    setUnreadCount((prev) => prev + 1)
-    toast(`${normalized.title}: ${normalized.message}`, { duration: 5000 })
+    window.setTimeout(() => {
+      if (!added) return
+      setUnreadCount((prev) => prev + 1)
+      toast(`${normalized.title}: ${normalized.message}`, { duration: 5000 })
+    }, 0)
   }, [])
 
   const markAsRead = async (id: string) => {
@@ -196,15 +224,29 @@ export default function Header() {
       }
     }
 
-    const handleOrderCreated = (order: any) => addLocalNotification(buildOrderNotification(order))
+    const refreshNotificationsSoon = () => {
+      window.setTimeout(() => void fetchNotifications(), 800)
+    }
+
+    const handleOrderCreated = (order: any) => {
+      addLocalNotification(buildOrderNotification(order))
+      refreshNotificationsSoon()
+    }
 
     const handleOrderUpdated = (order: any) => {
+      if (order?.id && order?.payment_status === 'paid') {
+        setNotifications((prev) => prev.filter((item) => item.data?.order_id !== order.id))
+        void fetchNotifications()
+        return
+      }
+
       if (order?.payment_status === 'payment_pending_confirmation') {
         const orderNo = order?.order_number || order?.id || ''
         const tableNumber = order?.table_number
         const tableText = tableNumber ? ` bàn ${tableNumber}` : ''
         addLocalNotification({
           id: `local_payment_${order?.id || orderNo}`,
+          type: 'payment_request',
           title: 'Yêu cầu thanh toán',
           message: `Đơn ${orderNo}${tableText} yêu cầu thanh toán`,
           created_at: new Date().toISOString(),
@@ -228,16 +270,20 @@ export default function Header() {
 
     socketService.on('order:created', handleOrderCreated)
     socketService.on('order:updated', handleOrderUpdated)
+    socketService.on('payment:requested', handleOrderUpdated)
     socketService.on('support:created', handleSupportRequest)
     socketService.on('notification:new', addLocalNotification)
+    socketService.on('connect', fetchNotifications)
 
     return () => {
       socketService.off('order:created', handleOrderCreated)
       socketService.off('order:updated', handleOrderUpdated)
+      socketService.off('payment:requested', handleOrderUpdated)
       socketService.off('support:created', handleSupportRequest)
       socketService.off('notification:new', addLocalNotification)
+      socketService.off('connect', fetchNotifications)
     }
-  }, [addLocalNotification])
+  }, [addLocalNotification, fetchNotifications])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()

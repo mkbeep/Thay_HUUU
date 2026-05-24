@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo/AppEntry.js",
   "scripts": {
+    "dev": "expo start --web --port 8081 --lan",
     "start": "expo start",
     "start:lan": "expo start --lan --host 192.168.1.8",
     "start:ngrok": "expo start --port 8081",

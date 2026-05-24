@@ -286,6 +286,7 @@ export default function OrdersPageWebSocket() {
 
     on('order:created', handleOrderCreated)
     on('order:updated', handleOrderUpdated)
+    on('payment:requested', handleOrderUpdated)
     on('order:status_changed', handleOrderStatusChanged)
 
     const handleReconnect = () => {
@@ -295,10 +296,17 @@ export default function OrdersPageWebSocket() {
     }
     on('connect', handleReconnect)
 
+    const fallbackTimer = window.setInterval(() => {
+      if (!mounted || document.hidden) return
+      void loadOrders(false)
+    }, 8000)
+
     return () => {
       mounted = false
+      window.clearInterval(fallbackTimer)
       off('order:created', handleOrderCreated)
       off('order:updated', handleOrderUpdated)
+      off('payment:requested', handleOrderUpdated)
       off('order:status_changed', handleOrderStatusChanged)
       off('connect', handleReconnect)
     }

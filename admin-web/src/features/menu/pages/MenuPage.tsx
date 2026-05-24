@@ -189,24 +189,37 @@ export default function MenuPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc muốn xóa món này?')) {
+      const previousItems = menuItems
+      setMenuItems((current) => current.filter(item => item.id !== id))
       const deleted = await menuService.deleteMenuItem(id)
-      if (deleted) {
-        setMenuItems(menuItems.filter(item => item.id !== id))
-      } else {
+      if (!deleted) {
+        setMenuItems(previousItems)
         alert('Không thể xóa món ăn')
       }
     }
   }
 
   const handleToggleStock = async (id: string) => {
+    const currentItem = menuItems.find((item) => item.id === id)
+    if (!currentItem) return
+    const nextInStock = !currentItem.inStock
+    setMenuItems((current) =>
+      current.map(item => item.id === id ? { ...item, inStock: nextInStock } : item)
+    )
     try {
-      await menuService.toggleItemAvailability(id)
+      const savedItem = await menuService.toggleItemAvailability(id, nextInStock)
       // Update local state
-      setMenuItems(menuItems.map(item => 
-        item.id === id ? { ...item, inStock: !item.inStock } : item
-      ))
+      if (savedItem) {
+        const mappedItem = mapDomainItem(savedItem)
+        setMenuItems((current) =>
+          current.map(item => item.id === id ? mappedItem : item)
+        )
+      }
     } catch (error) {
       console.error('Error toggling stock:', error)
+      setMenuItems((current) =>
+        current.map(item => item.id === id ? { ...item, inStock: currentItem.inStock } : item)
+      )
       alert('Không thể cập nhật trạng thái món ăn')
     }
   }
@@ -401,7 +414,7 @@ export default function MenuPage() {
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className={`bg-white rounded-lg overflow-hidden flex flex-col group transition-all hover:-translate-y-1 ${
+                  className={`bg-white rounded-lg overflow-hidden flex flex-col group transition-[transform,opacity,filter] duration-150 will-change-transform hover:-translate-y-0.5 ${
                     !item.inStock ? 'opacity-75 grayscale' : ''
                   }`}
                 >
@@ -409,7 +422,7 @@ export default function MenuPage() {
                   <div className="relative h-48 w-full overflow-hidden">
                     <img
                       alt={item.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
                       src={item.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800'}
                     />
                     <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 backdrop-blur text-[#AD2C00] font-bold rounded-full text-sm">

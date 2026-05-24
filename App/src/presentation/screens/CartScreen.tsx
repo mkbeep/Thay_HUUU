@@ -46,22 +46,12 @@ export default function CartScreen({
   const { items, removeItem, updateQuantity, getTotal, getTax, getServiceFee, getGrandTotal, clearCart } = useCart();
   const { createOrder } = useOrder();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const subtotal = getTotal();
   const tax = getTax();
   const serviceFee = getServiceFee();
   const total = getGrandTotal();
-
-  // Debug: Log render info
-  console.log('🎨 CartScreen render:', {
-    itemsCount: items.length,
-    tableNumber,
-    subtotal,
-    tax,
-    serviceFee,
-    total,
-    showBottomButton: items.length > 0
-  });
 
   const handleRemoveItem = (id: string, name: string) => {
     Alert.alert(
@@ -89,7 +79,7 @@ export default function CartScreen({
   };
 
   const handleSubmitOrder = async () => {
-    console.log('🔍 handleSubmitOrder called');
+    if (isSubmitting) return;
 
     if (items.length === 0) {
       Alert.alert('Giỏ hàng trống', 'Vui lòng thêm món vào giỏ hàng trước khi gửi đơn.');
@@ -104,13 +94,11 @@ export default function CartScreen({
       return;
     }
 
-    console.log('✅ Submitting order...');
+    setIsSubmitting(true);
     
     // OPTIMISTIC UI: Xóa giỏ hàng và chuyển màn hình NGAY LẬP TỨC
     clearCart();
-    console.log('🗑️ Cart cleared');
     
-    console.log('� Navigating to order history...');
     onSubmitOrder();
     
     // Gửi API ở background (không đợi)
@@ -118,11 +106,11 @@ export default function CartScreen({
       if (!result.success) {
         console.error('❌ Order submission failed:', result.error);
         // Có thể thêm toast notification ở đây nếu cần
-      } else {
-        console.log('✅ Order submitted successfully!');
       }
+      setIsSubmitting(false);
     }).catch(error => {
       console.error('❌ Unexpected error:', error);
+      setIsSubmitting(false);
     });
   };
 
@@ -284,21 +272,15 @@ export default function CartScreen({
         <View style={styles.bottomAction}>
           <TouchableOpacity 
             style={styles.submitButton}
-            onPress={() => {
-              console.log('========================================');
-              console.log('🔘 SUBMIT BUTTON PRESSED!');
-              console.log('Timestamp:', new Date().toISOString());
-              console.log('Items count:', items.length);
-              console.log('Table number:', tableNumber);
-              console.log('========================================');
-              handleSubmitOrder();
-            }}
-            activeOpacity={0.9}
-            disabled={false}
+            onPress={handleSubmitOrder}
+            activeOpacity={0.82}
+            disabled={isSubmitting}
           >
             <View style={styles.submitButtonGradient}>
-              <Ionicons name="restaurant" size={20} color="#FFFFFF" />
-              <Text style={styles.submitButtonText}>Gửi đơn đến bếp</Text>
+              <Ionicons name={isSubmitting ? 'hourglass-outline' : 'restaurant'} size={20} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>
+                {isSubmitting ? 'Đang gửi...' : 'Gửi đơn đến bếp'}
+              </Text>
             </View>
           </TouchableOpacity>
         </View>

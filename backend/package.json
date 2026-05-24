@@ -20,6 +20,7 @@
     "verify:images": "ts-node scripts/verify-images.ts",
     "clear:foods": "ts-node scripts/clear-foods.ts",
     "clear:orders": "ts-node scripts/clear-orders.ts",
+    "cleanup:unused-collections": "ts-node scripts/cleanup-unused-collections.ts",
     "check:all": "ts-node scripts/check-all-data.ts",
     "migrate:inventory-to-material": "ts-node scripts/migrate-inventory-to-material.ts",
     "seed:material": "ts-node scripts/seed-material-items.ts",

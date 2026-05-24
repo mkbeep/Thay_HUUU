@@ -15,6 +15,7 @@ export interface INotificationRepository {
   markAsRead(id: string): Promise<void>;
   markAllAsRead(userId: string): Promise<void>;
   delete(id: string): Promise<void>;
+  deleteByOrderId(orderId: string, type?: NotificationType): Promise<number>;
   deleteExpired(): Promise<void>;
   countUnread(userId: string): Promise<number>;
 }
