@@ -158,102 +158,90 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       tableNumberType: typeof tableNumber 
     });
 
-    // ✅ CHỈ XÉT CÁC ĐƠN CHƯA THANH TOÁN (bỏ qua đơn đã paid)
-    const existingOrders = orders.filter(
-      (order) => order.tableNumber === tableNumber && order.paymentStatus !== 'paid'
-    );
-    
-    console.log('📊 Existing unpaid orders:', existingOrders.length);
-
-    // Lấy tất cả món đã đặt trước đó (từ các đơn cũ)
-    const previouslyOrderedItemIds = new Set(
-      existingOrders.flatMap((order) => order.items.map((item) => item.id))
-    );
-
-    // Tách món mới (chưa từng đặt) và món đã đặt (đặt thêm)
-    const newItems = items.filter((item) => !previouslyOrderedItemIds.has(item.id));
-    const reorderedItems = items.filter((item) => previouslyOrderedItemIds.has(item.id));
-
-    console.log('🔍 Order analysis:', {
-      totalItems: items.length,
-      newItems: newItems.length,
-      reorderedItems: reorderedItems.length,
-      existingOrders: existingOrders.length,
-    });
-
-    // ✅ CHỈ TẠO ĐỐN MỚI CHO MÓN MỚI (hoặc tất cả nếu là đơn đầu tiên)
-    const itemsToOrder = existingOrders.length > 0 ? newItems : items;
-    
-    if (itemsToOrder.length === 0) {
-      console.log('⚠️ No new items to order');
-      return { success: true }; // Không có món mới để đặt
+    if (items.length === 0) {
+      console.log('⚠️ No items to order');
+      return { success: true };
     }
 
-    // Tính tổng tiền CHỈ cho món mới
-    const newOrderSubtotal = itemsToOrder.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-    const newOrderTax = newOrderSubtotal * 0.08;
-    const newOrderTotal = newOrderSubtotal + newOrderTax;
+    const createdAt = new Date();
+    const localOrders = items.map((item, index) => {
+      const subtotal = item.price * item.quantity;
+      const tax = subtotal * 0.08;
+      return {
+        id: `order_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`,
+        orderNumber: generateOrderNumber(),
+        items: [item],
+        total: subtotal + tax,
+        status: 'pending' as OrderStatus,
+        paymentStatus: 'unpaid' as PaymentStatus,
+        createdAt,
+        updatedAt: createdAt,
+        tableNumber,
+      };
+    });
 
-    const newOrder: Order = {
-      id: `order_${Date.now()}`,
-      orderNumber: generateOrderNumber(),
-      items: itemsToOrder,
-      total: newOrderTotal, // ✅ CHỈ TÍNH TIỀN MÓN MỚI
-      status: 'pending',
-      paymentStatus: 'unpaid',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      tableNumber,
-    };
-
-    setOrders((prev) => [newOrder, ...prev]);
-
-    // Đồng bộ đơn lên backend để admin/staff thấy ngay
-    const perItemNotes = itemsToOrder
-      .filter((item) => item.note?.trim())
-      .map((item) => `${item.name}: ${item.note!.trim()}`);
-
-    const payload = {
-      table_session_id: sessionId || String(tableNumber),
-      table_number: String(tableNumber),
-      order_type: 'dine_in',
-      subtotal: newOrderSubtotal,
-      tax_amount: newOrderTax,
-      discount_amount: 0,
-      total_amount: newOrderTotal,
-      items: itemsToOrder.map((item) => ({
-        food_id: item.id,
-        quantity: item.quantity,
-        unit_price: item.price,
-        notes: item.note,
-      })),
-      notes: perItemNotes.length > 0 ? perItemNotes.join('\n') : '',
-    };
+    // Mỗi dòng món là một order riêng để gọi lại cùng món và cập nhật trạng thái độc lập.
+    setOrders((prev) => [...localOrders, ...prev]);
 
     try {
       const url = `${apiBaseUrl}/orders`;
-      console.log('🔄 Sending order to backend:', { url, payload });
-      
-      const response = await axios.post(url, payload);
+      const responses = await Promise.allSettled(
+        localOrders.map((localOrder) => {
+          const item = localOrder.items[0];
+          const subtotal = item.price * item.quantity;
+          const tax = subtotal * 0.08;
+          const payload = {
+            table_session_id: sessionId || String(tableNumber),
+            table_number: String(tableNumber),
+            order_type: 'dine_in',
+            subtotal,
+            tax_amount: tax,
+            discount_amount: 0,
+            total_amount: subtotal + tax,
+            items: [
+              {
+                food_id: item.id,
+                quantity: item.quantity,
+                unit_price: item.price,
+                notes: item.note,
+              },
+            ],
+            notes: item.note?.trim() ? `${item.name}: ${item.note.trim()}` : '',
+          };
 
-      const serverOrder = response?.data?.data;
-      console.log('✅ Order created successfully:', serverOrder);
+          console.log('🔄 Sending item order to backend:', { url, payload });
+          return axios.post(url, payload).then((response) => ({
+            localId: localOrder.id,
+            serverOrder: response?.data?.data,
+          }));
+        })
+      );
 
-      if (serverOrder?.id) {
-        setOrders((prev) =>
-          prev.map((order) =>
-            order.id === newOrder.id
-              ? {
-                  ...order,
-                  id: serverOrder.id,
-                  orderNumber: serverOrder.order_number || order.orderNumber,
-                }
-              : order
-          )
-        );
+      const syncedResponses = responses
+        .filter(
+          (
+            result
+          ): result is PromiseFulfilledResult<{ localId: string; serverOrder: any }> =>
+            result.status === 'fulfilled'
+        )
+        .map((result) => result.value);
+
+      setOrders((prev) =>
+        prev.map((order) => {
+          const synced = syncedResponses.find((item) => item.localId === order.id);
+          if (!synced?.serverOrder?.id) return order;
+          return {
+            ...order,
+            id: synced.serverOrder.id,
+            orderNumber: synced.serverOrder.order_number || order.orderNumber,
+          };
+        })
+      );
+
+      const failedResponses = responses.filter((result) => result.status === 'rejected');
+      if (failedResponses.length > 0) {
+        console.error('❌ Some item orders failed to sync:', failedResponses);
+        return { success: false, error: failedResponses };
       }
 
       return { success: true };
@@ -263,7 +251,6 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
         response: error?.response?.data,
         status: error?.response?.status,
         url: `${apiBaseUrl}/orders`,
-        payload
       });
       return { success: false, error };
     }

@@ -40,7 +40,13 @@ export default function OrderHistoryScreen({
 }: OrderHistoryScreenProps) {
   const { orders, currentOrder, cancelCustomerOrder } = useOrder();
   const [showNotification, setShowNotification] = useState(true);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
+  const selectedOrder =
+    orders.find((order) => order.id === selectedOrderId) ||
+    currentOrder ||
+    orders.find((order) => order.status !== 'served' && order.status !== 'cancelled') ||
+    orders[0];
 
   const getStatusProgress = (status: OrderStatus): number => {
     if (status === 'cancelled') return -1;
@@ -123,18 +129,26 @@ export default function OrderHistoryScreen({
     );
   };
 
-  const renderOrderCard = (order: any, isLatest: boolean = false) => {
+  const renderOrderCard = (
+    order: any,
+    isLatest: boolean = false,
+    isSelected: boolean = false
+  ) => {
     const isCompleted = order.status === 'served';
     const isCancelled = order.status === 'cancelled';
+    const isActive = !isCompleted && !isCancelled;
 
     return (
-      <View
+      <TouchableOpacity
         key={order.id}
         style={[
           styles.orderCard,
           isCompleted && styles.orderCardCompleted,
           isCancelled && styles.orderCardCancelled,
+          isSelected && styles.orderCardSelected,
         ]}
+        activeOpacity={0.85}
+        onPress={() => setSelectedOrderId(order.id)}
       >
         <View style={styles.orderCardContent}>
           <Image
@@ -153,12 +167,14 @@ export default function OrderHistoryScreen({
                   isLatest && styles.orderTimeLatest,
                 ]}
               >
-                {isLatest ? 'MỚI NHẤT' : 'ĐÃ XONG'} • {formatTime(order.createdAt)}
+                {isLatest ? 'MỚI NHẤT' : isCompleted ? 'ĐÃ XONG' : 'ĐANG THEO DÕI'} • {formatTime(order.createdAt)}
               </Text>
-              {isLatest ? (
+              {isActive ? (
                 <Ionicons name="time" size={18} color="#AD2C00" />
-              ) : (
+              ) : isCompleted ? (
                 <Ionicons name="checkmark-circle" size={18} color="#006A35" />
+              ) : (
+                <Ionicons name="close-circle" size={18} color="#B91C1C" />
               )}
             </View>
 
@@ -180,7 +196,7 @@ export default function OrderHistoryScreen({
             )}
 
             <View style={styles.orderFooter}>
-              {isLatest ? (
+              {isActive ? (
                 <View style={styles.statusBadge}>
                   <View style={styles.statusDot} />
                   <Text style={styles.statusText}>
@@ -195,7 +211,7 @@ export default function OrderHistoryScreen({
             </View>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -245,23 +261,23 @@ export default function OrderHistoryScreen({
         )}
 
         {/* Current Order Status */}
-        {currentOrder && (
+        {selectedOrder && (
           <View style={styles.currentOrderSection}>
-            <Text style={styles.currentOrderLabel}>Đơn hàng hiện tại</Text>
+            <Text style={styles.currentOrderLabel}>Theo dõi món</Text>
             <View style={styles.currentOrderTitleRow}>
               <Text style={styles.currentOrderNumber} numberOfLines={1}>
-                #{currentOrder.orderNumber}
+                {selectedOrder.items[0]?.name || `#${selectedOrder.orderNumber}`}
               </Text>
               <View style={styles.statusChip}>
                 <Text style={styles.statusChipText} numberOfLines={1}>
-                  {STATUS_CONFIG[currentOrder.status]?.label ?? '—'}
+                  {STATUS_CONFIG[selectedOrder.status]?.label ?? '—'}
                 </Text>
               </View>
             </View>
 
-            {renderProgressStepper(currentOrder.status)}
+            {renderProgressStepper(selectedOrder.status)}
 
-            {(currentOrder.status === 'pending' || currentOrder.status === 'confirmed') && (
+            {(selectedOrder.status === 'pending' || selectedOrder.status === 'confirmed') && (
               <TouchableOpacity
                 style={styles.cancelOrderButton}
                 onPress={() =>
@@ -274,7 +290,7 @@ export default function OrderHistoryScreen({
                         text: 'Hủy đơn',
                         style: 'destructive',
                         onPress: async () => {
-                          const ok = await cancelCustomerOrder(currentOrder.id);
+                          const ok = await cancelCustomerOrder(selectedOrder.id);
                           Alert.alert(
                             ok ? 'Đã hủy đơn' : 'Không thể hủy',
                             ok
@@ -301,7 +317,11 @@ export default function OrderHistoryScreen({
           <View style={styles.orderList}>
             {orders.length > 0 ? (
               orders.map((order, index) =>
-                renderOrderCard(order, index === 0 && order.status !== 'served')
+                renderOrderCard(
+                  order,
+                  index === 0 && order.status !== 'served',
+                  selectedOrder?.id === order.id
+                )
               )
             ) : (
               <View style={styles.emptyState}>
@@ -570,6 +590,10 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     borderWidth: 1,
     borderColor: '#FECACA',
+  },
+  orderCardSelected: {
+    borderWidth: 2,
+    borderColor: '#AD2C00',
   },
   orderCardContent: {
     flexDirection: 'row',
