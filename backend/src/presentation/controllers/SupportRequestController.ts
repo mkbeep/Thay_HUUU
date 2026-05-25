@@ -7,6 +7,7 @@ import { SupportRequestRepository } from '../../infrastructure/database/reposito
 import { NotificationService } from '../../application/services/NotificationService';
 import { NotificationRepository } from '../../infrastructure/database/repositories/NotificationRepository';
 import { UserRepository } from '../../infrastructure/database/repositories/UserRepository';
+import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 import { NotificationType, NotificationPriority } from '../../domain/entities/Notification';
 import {
   SupportRequestStatus,
@@ -76,6 +77,13 @@ export class SupportRequestController {
           this.notificationService.sendToRole(role, notifyPayload)
         )
       );
+
+      SocketManager.getInstance().notifyNewNotification({
+        id: supportRequest.id,
+        ...notifyPayload,
+        created_at: new Date(),
+        is_read: false,
+      });
 
       res.status(201).json({
         success: true,

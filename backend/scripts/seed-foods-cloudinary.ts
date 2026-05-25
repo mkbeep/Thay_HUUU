@@ -177,8 +177,8 @@ async function seedData() {
   console.log(`   - Ảnh: ${imageCount}`);
   console.log(`\n💡 Bước tiếp theo:`);
   console.log(`   1. Kiểm tra: npm run check:food`);
-  console.log(`   2. Test API: curl http://192.168.1.3:3000/api/v1/foods`);
-  console.log(`   3. Mở Admin Web: http://192.168.1.3:5173`);
+  console.log(`   2. Test API: curl http://192.168.1.2:3000/api/v1/foods`);
+  console.log(`   3. Mở Admin Web: http://192.168.1.2:5173`);
   console.log(`   4. Mở Mobile App và kiểm tra menu`);
 }
 

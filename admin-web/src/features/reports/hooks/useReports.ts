@@ -14,5 +14,6 @@ export function useReportsAnalytics(params: ReportsQueryParams) {
     queryKey: reportsQueryKeys.analytics(params),
     queryFn: () => reportsApi.getAnalytics(params),
     enabled,
+    refetchOnWindowFocus: true,
   });
 }

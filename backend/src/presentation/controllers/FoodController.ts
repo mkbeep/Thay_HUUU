@@ -6,6 +6,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { FoodRepository } from '../../infrastructure/database/repositories/FoodRepository';
 import { NotFoundError } from '../../application/errors/AppError';
+import { CloudinaryService } from '../../infrastructure/services/CloudinaryService';
 
 const normalizeCategory = (category?: string): string => {
   const value = (category || '').toString().trim().toLowerCase();
@@ -38,6 +39,31 @@ export class FoodController {
 
   constructor() {
     this.foodRepository = new FoodRepository();
+  }
+
+  private buildFoodPayload(body: Request['body']) {
+    return {
+      name: body.name,
+      description: body.description,
+      category: body.category,
+      base_price: body.base_price !== undefined ? Number(body.base_price) : undefined,
+      is_available: body.is_available !== undefined
+        ? body.is_available === true || body.is_available === 'true'
+        : undefined,
+      preparation_time: body.preparation_time !== undefined ? Number(body.preparation_time) : undefined,
+      is_vegetarian: body.is_vegetarian !== undefined
+        ? body.is_vegetarian === true || body.is_vegetarian === 'true'
+        : undefined,
+      is_spicy: body.is_spicy !== undefined
+        ? body.is_spicy === true || body.is_spicy === 'true'
+        : undefined,
+    };
+  }
+
+  private stripUndefined<T extends Record<string, unknown>>(data: T): Partial<T> {
+    return Object.fromEntries(
+      Object.entries(data).filter(([, value]) => value !== undefined)
+    ) as Partial<T>;
   }
 
   /**
@@ -95,12 +121,22 @@ export class FoodController {
    */
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const food = await this.foodRepository.create(req.body);
+      const food = await this.foodRepository.create(
+        this.stripUndefined(this.buildFoodPayload(req.body)) as any
+      );
+
+      const file = req.file;
+      if (file) {
+        const uploaded = await CloudinaryService.uploadFoodImage(file, food.id, food.category);
+        await this.foodRepository.createImage(food.id, uploaded.secure_url, uploaded.public_id);
+      }
+
+      const foodWithImages = await this.foodRepository.findByIdWithImages(food.id);
 
       res.status(201).json({
         success: true,
         message: 'Tạo món ăn thành công',
-        data: food,
+        data: foodWithImages || food,
       });
     } catch (error) {
       next(error);
@@ -114,12 +150,30 @@ export class FoodController {
   update = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const food = await this.foodRepository.update(id, req.body);
+      const food = await this.foodRepository.update(
+        id,
+        this.stripUndefined(this.buildFoodPayload(req.body))
+      );
+
+      const shouldRemoveImage = req.body.remove_image === true || req.body.remove_image === 'true';
+      if (shouldRemoveImage) {
+        await this.foodRepository.deleteImages(id, true);
+      }
+
+      const file = req.file;
+      if (file) {
+        const uploaded = await CloudinaryService.uploadFoodImage(file, id, food.category);
+        await this.foodRepository.replacePrimaryImage(id, uploaded.secure_url, uploaded.public_id);
+      } else if (!shouldRemoveImage && req.body.category !== undefined) {
+        await this.foodRepository.movePrimaryImageToCategory(id, food.category);
+      }
+
+      const foodWithImages = await this.foodRepository.findByIdWithImages(id);
 
       res.status(200).json({
         success: true,
         message: 'Cập nhật món ăn thành công',
-        data: food,
+        data: foodWithImages || food,
       });
     } catch (error) {
       next(error);

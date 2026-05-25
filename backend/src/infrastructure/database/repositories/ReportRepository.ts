@@ -18,11 +18,14 @@ export class ReportRepository {
    * Items: embedded `items[]` on order doc, else loaded from order_item collection.
    */
   async findOrdersInRange(range: DateRange): Promise<ReportOrder[]> {
-    const snapshot = await this.ordersCollection.get();
+    const snapshot = await this.ordersCollection
+      .where('payment_status', '==', 'paid')
+      .get();
     const rawOrders: Array<{
       id: string;
       created_at: Date;
       status?: string;
+      payment_status?: string;
       embeddedItems?: ReportOrderItem[];
     }> = [];
 
@@ -30,22 +33,27 @@ export class ReportRepository {
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
-      const created_at = toDate(data.created_at);
-      if (created_at < range.start || created_at > range.end) continue;
+      const paymentStatus = String(data.payment_status || '');
+      const reportDate = paymentStatus === 'paid'
+        ? toDate(data.paid_at || data.created_at)
+        : toDate(data.created_at);
+      if (reportDate < range.start || reportDate > range.end) continue;
 
       const embedded = this.parseEmbeddedItems(data.items);
       if (embedded.length > 0) {
         rawOrders.push({
           id: doc.id,
-          created_at,
+          created_at: reportDate,
           status: data.status,
+          payment_status: data.payment_status,
           embeddedItems: embedded,
         });
       } else {
         rawOrders.push({
           id: doc.id,
-          created_at,
+          created_at: reportDate,
           status: data.status,
+          payment_status: data.payment_status,
         });
         needsSubcollection.push(doc.id);
       }
@@ -57,6 +65,7 @@ export class ReportRepository {
       id: o.id,
       created_at: o.created_at,
       status: o.status,
+      payment_status: o.payment_status,
       items: o.embeddedItems ?? itemsByOrderId.get(o.id) ?? [],
     }));
   }

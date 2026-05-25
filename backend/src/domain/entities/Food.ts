@@ -31,6 +31,7 @@ export interface FoodImage {
   id: string;
   food_id: string;
   image_url: string;
+  public_id?: string;
   is_primary: boolean;
   display_order: number;
   uploaded_at: Date;

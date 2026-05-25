@@ -12,6 +12,7 @@ import { OrderService } from '../../business/services/OrderService';
 import axios from 'axios';
 import { getApiBaseUrl } from '../../utils/apiBaseUrl';
 import { socketService } from '../../services/socketService';
+import { useTable } from './TableContext';
 
 // Presentation layer status mapping
 export type OrderStatus = 'pending' | 'confirmed' | 'cooking' | 'ready' | 'served' | 'cancelled';
@@ -47,7 +48,7 @@ interface OrderContextType {
   currentOrder: Order | null;
   createOrder: (items: OrderItem[], total: number, tableNumber: string | number) => Promise<{ success: boolean; error?: any }>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  requestPaymentForServedOrders: () => boolean;
+  requestPaymentForServedOrders: (paymentMethod?: 'qr' | 'cash' | 'card' | 'e_wallet') => boolean;
   markPaymentConfirmed: () => void;
   hasPendingPaymentConfirmation: () => boolean;
   isTableFullyPaid: () => boolean;
@@ -100,6 +101,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   
   const orderService = new OrderService();
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const { sessionId } = useTable();
 
   // ✅ Không cần lắng nghe storage event nữa vì không dùng localStorage
   // useEffect(() => {
@@ -188,10 +190,12 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // Tính tổng tiền CHỈ cho món mới
-    const newOrderTotal = itemsToOrder.reduce(
+    const newOrderSubtotal = itemsToOrder.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
     );
+    const newOrderTax = newOrderSubtotal * 0.08;
+    const newOrderTotal = newOrderSubtotal + newOrderTax;
 
     const newOrder: Order = {
       id: `order_${Date.now()}`,
@@ -213,8 +217,13 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       .map((item) => `${item.name}: ${item.note!.trim()}`);
 
     const payload = {
-      table_session_id: String(tableNumber),
+      table_session_id: sessionId || String(tableNumber),
+      table_number: String(tableNumber),
       order_type: 'dine_in',
+      subtotal: newOrderSubtotal,
+      tax_amount: newOrderTax,
+      discount_amount: 0,
+      total_amount: newOrderTotal,
       items: itemsToOrder.map((item) => ({
         food_id: item.id,
         quantity: item.quantity,
@@ -270,7 +279,9 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
-  const requestPaymentForServedOrders = (): boolean => {
+  const requestPaymentForServedOrders = (
+    paymentMethod: 'qr' | 'cash' | 'card' | 'e_wallet' = 'qr'
+  ): boolean => {
     const eligibleOrderIds = orders
       .filter((order) => order.status === 'served' && order.paymentStatus === 'unpaid')
       .map((order) => order.id);
@@ -295,7 +306,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     // Gửi yêu cầu thanh toán lên backend (best effort)
     eligibleOrderIds.forEach((orderId) => {
       axios.patch(`${apiBaseUrl}/orders/${orderId}/request-payment`, {
-        payment_method: 'qr',
+        payment_method: paymentMethod,
       })
       .then(() => {
         console.log(`✅ Payment request sent for order ${orderId}`);
@@ -323,7 +334,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     }
     try {
       await axios.patch(`${apiBaseUrl}/orders/${orderId}/cancel`, {
-        table_session_id: String(order.tableNumber),
+        table_session_id: sessionId || String(order.tableNumber),
       });
       setOrders((prev) =>
         prev.map((o) =>
@@ -359,7 +370,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   // WebSocket real-time updates
   useEffect(() => {
     if (orders.length === 0) return;
-    const tableSessionId = String(orders[0].tableNumber);
+    const tableSessionId = sessionId || String(orders[0].tableNumber);
 
     // Initial sync
     const syncOrders = async () => {
@@ -507,7 +518,7 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       socketService.off('order:status_changed', handleOrderStatusChanged);
       socketService.leaveTable();
     };
-  }, [orders.length, orders[0]?.tableNumber, apiBaseUrl]);
+  }, [orders.length, orders[0]?.tableNumber, apiBaseUrl, sessionId]);
 
   const getOrderHistory = () => {
     return orders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

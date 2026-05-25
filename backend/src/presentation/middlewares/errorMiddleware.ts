@@ -12,13 +12,27 @@ export const errorMiddleware = (
   res: Response,
   _next: NextFunction
 ) => {
+  const grpcCode = (err as Error & { code?: number }).code;
+  const isQuotaError =
+    grpcCode === 8 ||
+    err.message.includes('RESOURCE_EXHAUSTED') ||
+    err.message.toLowerCase().includes('quota exceeded');
+
   // Log error
   console.error('❌ Error:', {
     message: err.message,
-    stack: err.stack,
+    stack: isQuotaError ? undefined : err.stack,
     path: req.path,
     method: req.method,
   });
+
+  if (isQuotaError) {
+    return res.status(429).json({
+      success: false,
+      message: 'Firebase/Firestore đã vượt quota. Vui lòng đợi quota reset hoặc giảm tần suất gọi API.',
+      statusCode: 429,
+    });
+  }
 
   // Handle AppError
   if (err instanceof AppError) {

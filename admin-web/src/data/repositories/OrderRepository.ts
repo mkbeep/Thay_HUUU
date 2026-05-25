@@ -34,6 +34,8 @@ export interface Order {
   tax_amount: number;
   discount_amount: number;
   total_amount: number;
+  payment_status?: 'unpaid' | 'payment_pending_confirmation' | 'paid';
+  payment_method?: 'qr' | 'cash' | 'card' | 'e_wallet';
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -122,7 +124,7 @@ export class OrderRepository {
    */
   async confirmPayment(id: string, paymentMethod: string = 'cash'): Promise<Order> {
     try {
-      const response = await axios.post(
+      const response = await axios.patch(
         `${API_URL}/orders/${id}/confirm-payment`,
         { payment_method: paymentMethod },
         { headers: this.getAuthHeaders() }

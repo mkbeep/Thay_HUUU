@@ -11,13 +11,11 @@ import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { buildTableQrPngFileName } from '../src/infrastructure/utils/qrGenerator';
+import { resolveCustomerWebBaseUrl } from './resolve-lan-web-base';
 
 const OUTPUT_DIR = path.join(__dirname, '../qr-codes');
 
-const WEB_BASE = (process.env.CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').replace(
-  /\/+$/,
-  ''
-);
+const WEB_BASE = resolveCustomerWebBaseUrl(process.env.CUSTOMER_WEB_BASE_URL);
 
 interface TableQR {
   tableNumber: number;
@@ -44,6 +42,12 @@ async function generateQRCodes() {
   if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     console.log(`📁 Created directory: ${OUTPUT_DIR}`);
+  } else {
+    for (const entry of fs.readdirSync(OUTPUT_DIR)) {
+      if (/^QR-ThucDon-Ban_.*\.png$/i.test(entry)) {
+        fs.unlinkSync(path.join(OUTPUT_DIR, entry));
+      }
+    }
   }
 
   // Generate QR codes

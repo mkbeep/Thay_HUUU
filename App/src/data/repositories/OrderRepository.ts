@@ -59,9 +59,9 @@ export class OrderRepository {
         table_session_id: order.tableNumber.toString(), // TODO: Use actual session ID
         order_type: 'dine_in',
         items: order.items.map(item => ({
-          food_id: item.id,
+          food_id: item.menuItem.id,
           quantity: item.quantity,
-          unit_price: item.price,
+          unit_price: item.menuItem.price,
           notes: item.notes,
         })),
         notes: '',

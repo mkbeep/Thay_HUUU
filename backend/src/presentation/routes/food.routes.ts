@@ -4,12 +4,25 @@
 
 import { Router } from 'express';
 import { body } from 'express-validator';
+import multer from 'multer';
 import { FoodController } from '../controllers/FoodController';
 import { authMiddleware, requireRole } from '../middlewares/authMiddleware';
 import { validate } from '../middlewares/validationMiddleware';
+import { config } from '../../infrastructure/config/env.config';
 
 const router = Router();
 const foodController = new FoodController();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: config.upload.maxFileSize },
+  fileFilter: (_req, file, callback) => {
+    if (!file.mimetype.startsWith('image/')) {
+      callback(new Error('Chỉ cho phép upload file ảnh'));
+      return;
+    }
+    callback(null, true);
+  },
+});
 
 // Validation rules
 const createFoodValidation = [
@@ -28,6 +41,7 @@ router.post(
   '/',
   authMiddleware,
   requireRole('admin', 'manager'),
+  upload.single('image'),
   validate(createFoodValidation),
   foodController.create
 );
@@ -36,6 +50,7 @@ router.put(
   '/:id',
   authMiddleware,
   requireRole('admin', 'manager'),
+  upload.single('image'),
   foodController.update
 );
 

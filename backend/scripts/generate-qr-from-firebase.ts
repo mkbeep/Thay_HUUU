@@ -13,16 +13,14 @@ import * as path from 'path';
 import { buildTableQrPngFileName } from '../src/infrastructure/utils/qrGenerator';
 import * as admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
+import { resolveCustomerWebBaseUrl } from './resolve-lan-web-base';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const OUTPUT_DIR = path.join(__dirname, '../qr-codes');
 
-const WEB_BASE = (process.env.CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').replace(
-  /\/+$/,
-  ''
-);
+const WEB_BASE = resolveCustomerWebBaseUrl(process.env.CUSTOMER_WEB_BASE_URL);
 
 interface TableData {
   id: string;
@@ -144,6 +142,12 @@ async function generateQRCodes() {
   if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     console.log(`📁 Created directory: ${OUTPUT_DIR}\n`);
+  } else {
+    for (const entry of fs.readdirSync(OUTPUT_DIR)) {
+      if (/^QR-ThucDon-Ban_.*\.png$/i.test(entry)) {
+        fs.unlinkSync(path.join(OUTPUT_DIR, entry));
+      }
+    }
   }
   
   const tableQRs: TableQR[] = [];

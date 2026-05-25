@@ -27,7 +27,7 @@ router.get('/public', orderController.getPublicByTableSession);
 router.get('/', authMiddleware, requireRole('admin', 'manager', 'staff'), orderController.getAll);
 router.get('/:id', authMiddleware, requireRole('admin', 'manager', 'staff'), orderController.getById);
 router.patch('/:id/status', authMiddleware, requireRole('admin', 'manager', 'staff'), orderController.updateStatus);
-router.patch('/:id/confirm-payment', authMiddleware, requireRole('admin', 'manager', 'cashier'), orderController.confirmPayment);
+router.patch('/:id/confirm-payment', authMiddleware, requireRole('admin', 'manager', 'staff', 'cashier'), orderController.confirmPayment);
 router.delete('/:id', authMiddleware, requireRole('admin', 'manager'), orderController.delete);
 
 export default router;

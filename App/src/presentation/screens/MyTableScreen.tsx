@@ -34,6 +34,9 @@ export default function MyTableScreen({
   const totalAmount = servedOrders.reduce((sum, order) => sum + order.total, 0);
   const subtotal = totalAmount / 1.08; // Tính ngược lại subtotal (vì total đã bao gồm VAT 8%)
   const vat = totalAmount - subtotal;
+  const formatCurrency = (amount: number) => {
+    return `${Math.round(amount).toLocaleString('vi-VN')}đ`;
+  };
 
   // Tính thời gian ngồi (giả sử bắt đầu từ đơn hàng đầu tiên)
   const startTime = orders.length > 0 ? new Date(orders[0].createdAt) : new Date();
@@ -134,16 +137,16 @@ export default function MyTableScreen({
           <View style={styles.billCard}>
             <View style={styles.billRow}>
               <Text style={styles.billLabel}>Tạm tính</Text>
-              <Text style={styles.billValue}>{subtotal.toFixed(1)}k</Text>
+              <Text style={styles.billValue}>{formatCurrency(subtotal)}</Text>
             </View>
             <View style={styles.billRow}>
               <Text style={styles.billLabel}>VAT (8%)</Text>
-              <Text style={styles.billValue}>{vat.toFixed(1)}k</Text>
+              <Text style={styles.billValue}>{formatCurrency(vat)}</Text>
             </View>
             <View style={styles.billDivider} />
             <View style={styles.billRow}>
               <Text style={styles.billTotalLabel}>Tổng cộng</Text>
-              <Text style={styles.billTotalValue}>{totalAmount.toFixed(1)}k</Text>
+              <Text style={styles.billTotalValue}>{formatCurrency(totalAmount)}</Text>
             </View>
           </View>
         </View>
@@ -256,7 +259,7 @@ export default function MyTableScreen({
                   ? 'ĐANG CHỜ XÁC NHẬN'
                   : 'THANH TOÁN NGAY'}
               </Text>
-              <Text style={styles.paymentAmount}>{totalAmount.toFixed(1)}k</Text>
+              <Text style={styles.paymentAmount}>{formatCurrency(totalAmount)}</Text>
             </View>
             <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
           </LinearGradient>

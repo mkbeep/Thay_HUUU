@@ -1,8 +1,9 @@
-import { Bell, Settings, Search, User, LogOut, Camera, Shield, HelpCircle } from 'lucide-react'
+import { Bell, Settings, Search, User, LogOut, Camera, Shield, HelpCircle, X } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { useWebSocket } from '../../hooks/useWebSocket'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
 
@@ -23,9 +24,11 @@ export default function Header() {
   const [showSettings, setShowSettings] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [toastNotifications, setToastNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notificationPanelRef = useRef<HTMLDivElement>(null)
+  const { on, off } = useWebSocket()
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token')
@@ -95,6 +98,26 @@ export default function Header() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
+
+  useEffect(() => {
+    const handleNewNotification = (notif: NotificationItem) => {
+      setNotifications((prev) => {
+        if (prev.some((item) => item.id === notif.id)) return prev
+        return [notif, ...prev].slice(0, 10)
+      })
+      if (!notif.is_read) {
+        setUnreadCount((count) => count + 1)
+      }
+      setToastNotifications((prev) => [notif, ...prev.filter((item) => item.id !== notif.id)].slice(0, 3))
+
+      window.setTimeout(() => {
+        setToastNotifications((prev) => prev.filter((item) => item.id !== notif.id))
+      }, 7000)
+    }
+
+    on('notification:new', handleNewNotification)
+    return () => off('notification:new', handleNewNotification)
+  }, [on, off])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -180,6 +203,36 @@ export default function Header() {
   }
 
   return (
+    <>
+    {toastNotifications.length > 0 && (
+      <div className="fixed right-6 top-24 z-[80] w-80 max-w-[calc(100vw-2rem)] space-y-3 pointer-events-none">
+        {toastNotifications.map((notif) => (
+          <div
+            key={notif.id}
+            className="pointer-events-auto rounded-xl border border-amber-200 bg-white shadow-2xl overflow-hidden"
+          >
+            <div className="flex items-start gap-3 p-4">
+              <div className="mt-0.5 rounded-full bg-[#AD2C00]/10 p-2">
+                <Bell className="h-4 w-4 text-[#AD2C00]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-stone-900">{notif.title}</p>
+                <p className="mt-1 text-xs leading-5 text-stone-600">{notif.message}</p>
+                <p className="mt-1 text-[11px] text-stone-400">{formatTime(notif.created_at)}</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Đóng thông báo"
+                onClick={() => setToastNotifications((prev) => prev.filter((item) => item.id !== notif.id))}
+                className="rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
     <header className="w-full sticky top-0 z-30 bg-white/80 backdrop-blur-md flex justify-between items-center px-8 py-4 shadow-sm">
       <div className="flex items-center gap-4 flex-1 max-w-2xl">
         <form onSubmit={handleSearch} className="relative w-full">
@@ -392,5 +445,6 @@ export default function Header() {
         </div>
       </div>
     </header>
+    </>
   )
 }

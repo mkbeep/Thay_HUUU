@@ -24,6 +24,7 @@ interface MenuItem {
   id: string;
   name: string;
   price: string;
+  priceValue: number;
   image: ImageSourcePropType;
   badge?: string;
   badgeColor?: string;
@@ -64,37 +65,46 @@ export default function HomeMenuScreen({
   // Sử dụng CartContext
   const { addItem, getItemCount, getGrandTotal } = useCart();
   const cartCount = getItemCount();
-  const cartTotal = `${getGrandTotal().toFixed(1)}k`;
+  const cartTotal = `${Math.round(getGrandTotal()).toLocaleString('vi-VN')}đ`;
 
   // Khởi tạo MenuService
   const menuService = new MenuService();
 
+  const formatCurrency = (amount: number) =>
+    `${Math.round(amount).toLocaleString('vi-VN')}đ`;
+
+  const toDisplayItems = (items: DomainMenuItem[]): MenuItem[] =>
+    items.map(item => ({
+      id: item.id,
+      name: item.name,
+      price: formatCurrency(item.price),
+      priceValue: item.price,
+      image: item.image,
+      badge: item.badge,
+      badgeColor: item.badgeColor,
+      available: item.available,
+      category: mapCategoryToId(item.category),
+      description: item.description,
+    }));
+
   // Load menu items từ service
   useEffect(() => {
-    loadMenuItems();
+    void loadMenuItems();
+    const timer = setInterval(() => {
+      void loadMenuItems({ silent: true });
+    }, 15000);
+    return () => clearInterval(timer);
   }, []);
 
-  const loadMenuItems = async () => {
+  const loadMenuItems = async (options?: { silent?: boolean }) => {
     try {
-      setLoading(true);
+      if (!options?.silent) setLoading(true);
       const items: DomainMenuItem[] = await menuService.getMenuItems();
-      // Chuyển đổi từ domain MenuItem sang presentation MenuItem
-      const displayItems: MenuItem[] = items.map(item => ({
-        id: item.id,
-        name: item.name,
-        price: `${(item.price / 1000).toFixed(0)}k`, // 145000 -> "145k"
-        image: item.image,
-        badge: item.badge,
-        badgeColor: item.badgeColor,
-        available: item.available,
-        category: mapCategoryToId(item.category),
-        description: item.description,
-      }));
-      setMenuItems(displayItems);
+      setMenuItems(toDisplayItems(items));
     } catch (error) {
       console.error('Error loading menu items:', error);
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   };
 
@@ -102,18 +112,7 @@ export default function HomeMenuScreen({
     try {
       setRefreshing(true);
       const items: DomainMenuItem[] = await menuService.refreshMenuItems();
-      const displayItems: MenuItem[] = items.map(item => ({
-        id: item.id,
-        name: item.name,
-        price: `${(item.price / 1000).toFixed(0)}k`,
-        image: item.image,
-        badge: item.badge,
-        badgeColor: item.badgeColor,
-        available: item.available,
-        category: mapCategoryToId(item.category),
-        description: item.description,
-      }));
-      setMenuItems(displayItems);
+      setMenuItems(toDisplayItems(items));
     } catch (error) {
       console.error('Error refreshing menu:', error);
     } finally {
@@ -243,19 +242,15 @@ export default function HomeMenuScreen({
               console.log('========================================');
               console.log('🔘 ADD BUTTON PRESSED!');
               console.log('Item:', item.name);
-              console.log('Price string:', item.price);
+              console.log('Price:', item.priceValue);
               
               // Ngăn event bubble lên parent TouchableOpacity
               e.stopPropagation();
               
-              // Thêm món vào giỏ hàng - Parse giá đúng cách
-              const priceNumber = parseFloat(item.price.replace('k', '').trim());
-              console.log('Price number:', priceNumber);
-              
               const cartItem = {
                 id: item.id,
                 name: item.name,
-                price: priceNumber,
+                price: item.priceValue,
                 priceDisplay: item.price,
                 image: item.image,
                 category: item.category,

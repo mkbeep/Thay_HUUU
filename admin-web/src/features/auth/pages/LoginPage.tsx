@@ -6,8 +6,8 @@ import toast from 'react-hot-toast'
 import { DEFAULT_AUTHENTICATED_HOME } from '../../../utils/permissions'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@gourmet.com')
-  const [password, setPassword] = useState('admin123')
+  const [email, setEmail] = useState('admin@restaurant.com')
+  const [password, setPassword] = useState('Admin@123456')
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -106,7 +106,7 @@ export default function LoginPage() {
                   <input
                     className="block w-full pl-12 pr-4 py-4 bg-[#EAE7E7] border-none rounded-lg focus:ring-2 focus:ring-[#AD2C00]/40 text-[#1C1B1B] transition-all placeholder:text-[#916F67]/60 outline-none"
                     id="email"
-                    placeholder="admin@gourmet.com"
+                    placeholder="admin@restaurant.com"
                     type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}

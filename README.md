@@ -80,8 +80,8 @@ npm run dev
 Mở trình duyệt: http://localhost:5173
 
 **Đăng nhập**:
-- Email: `admin@gourmet.com`
-- Password: `admin123`
+- Email: `admin@restaurant.com`
+- Password: `Admin@123456`
 
 **Hướng dẫn chi tiết**: [SETUP_AND_RUN.md](./SETUP_AND_RUN.md)
 

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,14 +20,11 @@ interface PaymentScreenProps {
 }
 
 type SplitMethod = 'equal' | 'byItem';
-type PaymentMethod = 'momo' | 'zalopay' | 'vnpay' | 'card' | 'cash';
+type PaymentMethod = 'transfer' | 'cash';
 
 const PAYMENT_METHODS = [
-  { id: 'momo', name: 'Momo', icon: 'wallet', color: '#A50064' },
-  { id: 'zalopay', name: 'ZaloPay', icon: 'card', color: '#0068FF' },
-  { id: 'vnpay', name: 'VNPAY', icon: 'card', color: '#0B5FA5' },
-  { id: 'card', name: 'Thẻ', icon: 'card-outline', color: '#5F5E5E' },
-  { id: 'cash', name: 'Tiền mặt', icon: 'cash', color: '#5F5E5E' },
+  { id: 'transfer', name: 'Chuyển khoản', icon: 'qr-code', color: '#AD2C00' },
+  { id: 'cash', name: 'Tiền mặt', icon: 'cash', color: '#006A35' },
 ];
 
 export default function PaymentScreen({
@@ -37,7 +35,7 @@ export default function PaymentScreen({
   const { orders, requestPaymentForServedOrders, hasPendingPaymentConfirmation } = useOrder();
   const [splitMethod, setSplitMethod] = useState<SplitMethod>('equal');
   const [numberOfPeople, setNumberOfPeople] = useState(2);
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('momo');
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('transfer');
   const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Thêm loading state
 
   // Lấy tất cả đơn hàng đã phục vụ (served) VÀ CHƯA THANH TOÁN để tính tổng bill
@@ -109,7 +107,7 @@ export default function PaymentScreen({
     // Kiểm tra có đơn nào cần thanh toán không
     const hasServedOrders = servedOrders.length > 0;
     if (!hasServedOrders) {
-      window.alert('Không có đơn cần thanh toán\n\nVui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
+      Alert.alert('Không có đơn cần thanh toán', 'Vui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
       return;
     }
     
@@ -118,10 +116,14 @@ export default function PaymentScreen({
       
       // Gửi yêu cầu thanh toán
       console.log('📤 Sending payment request...');
-      const requested = requestPaymentForServedOrders();
+      const methodForApi =
+        selectedPayment === 'cash'
+          ? 'cash'
+          : 'qr';
+      const requested = requestPaymentForServedOrders(methodForApi);
       
       if (!requested) {
-        window.alert('Không có đơn cần thanh toán\n\nVui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
+        Alert.alert('Không có đơn cần thanh toán', 'Vui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
         return;
       }
 
@@ -132,14 +134,14 @@ export default function PaymentScreen({
       
     } catch (error) {
       console.error('❌ Error sending payment request:', error);
-      window.alert('Có lỗi xảy ra khi gửi yêu cầu thanh toán. Vui lòng thử lại.');
+      Alert.alert('Không gửi được yêu cầu', 'Có lỗi xảy ra khi gửi yêu cầu thanh toán. Vui lòng thử lại.');
     } finally {
       setIsSubmitting(false); // ✅ Kết thúc loading
     }
   };
 
   const formatCurrency = (amount: number): string => {
-    return `${amount.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ`;
+    return `${Math.round(amount).toLocaleString('vi-VN')}đ`;
   };
 
   return (
@@ -333,6 +335,14 @@ export default function PaymentScreen({
                       selectedPayment === method.id ? method.color : '#A8A29E'
                     }
                   />
+                  <Text
+                    style={[
+                      styles.paymentMethodLabel,
+                      selectedPayment === method.id && styles.paymentMethodLabelActive,
+                    ]}
+                  >
+                    {method.name}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -363,6 +373,19 @@ export default function PaymentScreen({
           </View>
         )}
 
+        {allItems.length > 0 && selectedPayment === 'cash' && (
+          <View style={styles.cashSection}>
+            <View style={styles.cashIconWrap}>
+              <Ionicons name="cash-outline" size={42} color="#AD2C00" />
+            </View>
+            <Text style={styles.cashTitle}>Thanh toán tiền mặt tại bàn</Text>
+            <Text style={styles.cashDescription}>
+              Nhân viên sẽ đến bàn {tableNumber} để xác nhận hóa đơn và nhận tiền mặt.
+            </Text>
+            <Text style={styles.cashAmount}>Số tiền cần thanh toán: {formatCurrency(total)}</Text>
+          </View>
+        )}
+
         <View style={{ height: 120 }} />
       </ScrollView>
 
@@ -373,7 +396,9 @@ export default function PaymentScreen({
             <View style={styles.pendingNotice}>
               <Ionicons name="time-outline" size={20} color="#AD2C00" />
               <Text style={styles.pendingText}>
-                Đang chờ nhân viên xác nhận thanh toán
+                {selectedPayment === 'cash'
+                  ? 'Đã gọi nhân viên thu tiền mặt tại bàn'
+                  : 'Đang chờ nhân viên xác nhận thanh toán'}
               </Text>
             </View>
           )}
@@ -408,7 +433,9 @@ export default function PaymentScreen({
                 </>
               ) : (
                 <>
-                  <Text style={styles.paymentButtonText}>Gửi yêu cầu thanh toán</Text>
+                  <Text style={styles.paymentButtonText}>
+                    {selectedPayment === 'cash' ? 'Gọi nhân viên thu tiền' : 'Gửi yêu cầu thanh toán'}
+                  </Text>
                   <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
                 </>
               )}
@@ -676,8 +703,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   paymentMethod: {
-    width: 64,
-    height: 64,
+    width: 112,
+    height: 82,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     alignItems: 'center',
@@ -693,6 +720,16 @@ const styles = StyleSheet.create({
   paymentMethodActive: {
     borderWidth: 2,
     borderColor: '#AD2C00',
+  },
+  paymentMethodLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#78716C',
+    textAlign: 'center',
+  },
+  paymentMethodLabelActive: {
+    color: '#AD2C00',
   },
   qrSection: {
     alignItems: 'center',
@@ -779,6 +816,44 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginTop: 4,
+  },
+  cashSection: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(145, 111, 103, 0.2)',
+  },
+  cashIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(173, 44, 0, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  cashTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1C1B1B',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  cashDescription: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#5F5E5E',
+    textAlign: 'center',
+  },
+  cashAmount: {
+    marginTop: 14,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#AD2C00',
+    textAlign: 'center',
   },
   bottomAction: {
     position: 'absolute',

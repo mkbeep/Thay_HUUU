@@ -10,6 +10,11 @@ export class OrderRepository implements IOrderRepository {
   private readonly collection = db.collection('orders');
   private readonly itemsCollection = db.collection('order_item');
 
+  private normalizeVndAmount(value: unknown): number {
+    const amount = Number(value) || 0;
+    return amount > 0 && amount < 1000 ? amount * 1000 : amount;
+  }
+
   async findById(id: string): Promise<Order | null> {
     const doc = await this.collection.doc(id).get();
     if (!doc.exists) return null;
@@ -130,15 +135,59 @@ export class OrderRepository implements IOrderRepository {
 
   async create(orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'>): Promise<Order> {
     const now = new Date();
+    const rawItems = Array.isArray((orderData as any).items) ? (orderData as any).items : [];
+    const subtotal = rawItems.reduce(
+      (sum: number, item: any) => sum + this.normalizeVndAmount(item.unit_price) * Number(item.quantity || 0),
+      0
+    );
+    const taxAmount = subtotal * 0.08;
+    const discountAmount = this.normalizeVndAmount((orderData as any).discount_amount || 0);
+    const totalAmount = subtotal + taxAmount - discountAmount;
+    const fallbackSubtotal = this.normalizeVndAmount((orderData as any).subtotal);
+    const normalizedSubtotal = rawItems.length > 0 ? subtotal : fallbackSubtotal;
+    const normalizedTaxAmount =
+      rawItems.length > 0
+        ? taxAmount
+        : this.normalizeVndAmount((orderData as any).tax_amount);
+    const normalizedTotalAmount =
+      rawItems.length > 0
+        ? totalAmount
+        : this.normalizeVndAmount((orderData as any).total_amount);
+    const orderPayload = { ...(orderData as any) };
+    delete orderPayload.items;
     const data = {
-      ...orderData,
+      ...orderPayload,
       status: (orderData as any).status || OrderStatus.PENDING,
       payment_status: (orderData as any).payment_status || PaymentStatus.UNPAID,
+      subtotal: normalizedSubtotal,
+      tax_amount: normalizedTaxAmount,
+      discount_amount: discountAmount,
+      total_amount: normalizedTotalAmount,
       created_at: now,
       updated_at: now,
     };
 
     const docRef = await this.collection.add(data);
+    if (rawItems.length > 0) {
+      const batch = db.batch();
+      rawItems.forEach((item: any) => {
+        const quantity = Number(item.quantity || 0);
+        const unitPrice = this.normalizeVndAmount(item.unit_price);
+        const itemRef = this.itemsCollection.doc();
+        batch.set(itemRef, {
+          order_id: docRef.id,
+          food_id: item.food_id,
+          quantity,
+          unit_price: unitPrice,
+          subtotal: quantity * unitPrice,
+          special_instructions: item.notes || item.special_instructions || '',
+          status: 'pending',
+          created_at: now,
+          updated_at: now,
+        });
+      });
+      await batch.commit();
+    }
     return { id: docRef.id, ...data } as Order;
   }
 

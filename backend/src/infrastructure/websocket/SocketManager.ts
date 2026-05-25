@@ -107,6 +107,10 @@ export class SocketManager {
     }
   }
 
+  public notifyReportsUpdated(payload: any): void {
+    this.emitToAdmin('report:updated', payload);
+  }
+
   public notifyOrderStatusChanged(orderId: string, status: string, order: any): void {
     this.emitToAdmin('order:status_changed', { orderId, status, order });
     this.emitToKitchen('order:status_changed', { orderId, status, order });

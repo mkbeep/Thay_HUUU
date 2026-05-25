@@ -14,6 +14,7 @@ interface Table {
   location: string;
   status: TableStatus;
   qrCode: string;
+  sessionId?: string;
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
@@ -32,6 +33,13 @@ interface ApiDiningTable {
   status: string;
   qr_code?: string;
   location?: string;
+  current_session?: {
+    id: string;
+    table_id: string;
+    is_active: boolean;
+    customer_count?: number;
+    started_at?: string;
+  };
   /** Do backend tính từ CUSTOMER_WEB_BASE_URL — luôn là link http(s) mở web khách */
   customer_menu_url?: string;
 }
@@ -81,7 +89,7 @@ function inferZone(location?: string): ZoneType {
 function mapApiStatus(s: string): TableStatus {
   const u = (s || '').toLowerCase();
   if (u === 'occupied') return 'occupied';
-  if (u === 'reserved' || u === 'cleaning') return 'billing';
+  if (u === 'reserved' || u === 'cleaning' || u === 'billing') return 'billing';
   return 'available';
 }
 
@@ -94,14 +102,18 @@ function mapApiTableToUi(t: ApiDiningTable): Table {
     zone: inferZone(t.location),
     capacity: cap > 0 ? `${cap} khách` : '—',
     location: t.location || '—',
-    status: mapApiStatus(t.status),
+    status: t.current_session?.is_active && mapApiStatus(t.status) === 'available'
+      ? 'occupied'
+      : mapApiStatus(t.status),
     qrCode: resolveQrCodeUrl(t),
+    sessionId: t.current_session?.id,
   };
 }
 
 function formatVnd(n: number): string {
   if (!n || Number.isNaN(n)) return '0đ';
-  return `${Math.round(n).toLocaleString('vi-VN')}đ`;
+  const amount = n > 0 && n < 1000 ? n * 1000 : n;
+  return `${Math.round(amount).toLocaleString('vi-VN')}đ`;
 }
 
 export default function TablesPage() {
@@ -212,11 +224,16 @@ export default function TablesPage() {
       const entries = await Promise.all(
         targets.map(async (t) => {
           try {
+            if (!t.sessionId) return [t.id, 0] as const;
             const res = await api.get('/orders', {
-              params: { table_session_id: t.number },
+              params: { table_session_id: t.sessionId },
             });
             const list = res.data?.data || [];
-            const sum = list.reduce((s: number, o: { total_amount?: number }) => s + (Number(o.total_amount) || 0), 0);
+            const sum = list.reduce(
+              (s: number, o: { total_amount?: number; payment_status?: string }) =>
+                o.payment_status === 'paid' ? s : s + (Number(o.total_amount) || 0),
+              0
+            );
             return [t.id, sum] as const;
           } catch {
             return [t.id, 0] as const;
@@ -502,9 +519,16 @@ export default function TablesPage() {
                 <h3 className="font-bold text-gray-900">{table.name}</h3>
                 <p className="text-xs text-gray-500">{table.capacity} • {table.location}</p>
                 {(table.status === 'occupied' || table.status === 'billing') && total != null && total > 0 && (
-                  <p className="text-xs font-semibold text-blue-700 mt-2">
-                    Tạm tính đơn: {formatVnd(total)}
-                  </p>
+                  <div className={`mt-3 inline-flex flex-col items-center rounded-xl px-4 py-2 ${
+                    table.status === 'billing'
+                      ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                      : 'bg-orange-50 text-[#AD2C00] border border-orange-100'
+                  }`}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
+                      {table.status === 'billing' ? 'Cần thu' : 'Tạm tính'}
+                    </span>
+                    <span className="text-sm font-black tabular-nums">{formatVnd(total)}</span>
+                  </div>
                 )}
               </div>
 

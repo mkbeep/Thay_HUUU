@@ -5,6 +5,7 @@
 import { db } from '../../config/firebase.config';
 import { IFoodRepository } from '../../../domain/repositories/IFoodRepository';
 import { Food, FoodWithImages, FoodCategory, FoodImage } from '../../../domain/entities/Food';
+import { CloudinaryService } from '../../services/CloudinaryService';
 
 export class FoodRepository implements IFoodRepository {
   private readonly collection = db.collection('food');
@@ -24,6 +25,7 @@ export class FoodRepository implements IFoodRepository {
       id: data.id,
       food_id: data.food_id,
       image_url: imageUrl,
+      public_id: data.public_id,
       is_primary: data.is_primary,
       display_order: data.display_order,
       uploaded_at: data.uploaded_at,
@@ -122,6 +124,81 @@ export class FoodRepository implements IFoodRepository {
     return { id: docRef.id, ...data } as Food;
   }
 
+  async createImage(foodId: string, imageUrl: string, publicId?: string): Promise<FoodImage> {
+    const now = new Date();
+    const docRef = await this.imagesCollection.add({
+      food_id: foodId,
+      image_url: imageUrl,
+      public_id: publicId,
+      is_primary: true,
+      display_order: 0,
+      uploaded_at: now,
+    });
+
+    return {
+      id: docRef.id,
+      food_id: foodId,
+      image_url: imageUrl,
+      public_id: publicId,
+      is_primary: true,
+      display_order: 0,
+      uploaded_at: now,
+    };
+  }
+
+  async replacePrimaryImage(foodId: string, imageUrl: string, publicId?: string): Promise<FoodImage> {
+    await this.deleteImages(foodId, true);
+    return this.createImage(foodId, imageUrl, publicId);
+  }
+
+  async movePrimaryImageToCategory(foodId: string, category?: string): Promise<void> {
+    const imagesSnapshot = await this.imagesCollection
+      .where('food_id', '==', foodId)
+      .get();
+    const primaryImageDoc = imagesSnapshot.docs.find(doc => doc.data().is_primary) || imagesSnapshot.docs[0];
+    if (!primaryImageDoc) return;
+
+    const image = primaryImageDoc.data();
+    const currentPublicId = image.public_id || CloudinaryService.publicIdFromUrl(image.image_url);
+    if (!currentPublicId) return;
+
+    const currentFolder = currentPublicId.split('/').slice(0, -1).join('/');
+    const nextFolder = `menu/${CloudinaryService.folderForCategory(category)}`;
+    if (currentFolder === nextFolder) return;
+
+    const moved = await CloudinaryService.moveImageToCategory(currentPublicId, foodId, category);
+    await primaryImageDoc.ref.update({
+      image_url: moved.secure_url,
+      public_id: moved.public_id,
+      uploaded_at: new Date(),
+    });
+  }
+
+  async deleteImages(foodId: string, deleteCloudinaryAssets = true): Promise<void> {
+    const imagesSnapshot = await this.imagesCollection
+      .where('food_id', '==', foodId)
+      .get();
+
+    if (deleteCloudinaryAssets) {
+      await Promise.all(
+        imagesSnapshot.docs.map((doc) => {
+          const image = doc.data();
+          return CloudinaryService.deleteImage(
+            image.public_id || CloudinaryService.publicIdFromUrl(image.image_url)
+          );
+        })
+      );
+    }
+
+    if (imagesSnapshot.empty) return;
+
+    const batch = db.batch();
+    imagesSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+  }
+
   async update(id: string, data: Partial<Food>): Promise<Food> {
     const updateData = {
       ...data,
@@ -136,17 +213,7 @@ export class FoodRepository implements IFoodRepository {
 
   async delete(id: string): Promise<void> {
     await this.collection.doc(id).delete();
-    
-    // Xóa images liên quan
-    const imagesSnapshot = await this.imagesCollection
-      .where('food_id', '==', id)
-      .get();
-    
-    const batch = db.batch();
-    imagesSnapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-    await batch.commit();
+    await this.deleteImages(id, true);
   }
 
   async updateAvailability(id: string, isAvailable: boolean): Promise<Food> {

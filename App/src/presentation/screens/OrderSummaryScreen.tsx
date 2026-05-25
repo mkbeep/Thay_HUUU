@@ -42,7 +42,7 @@ export default function OrderSummaryScreen({
   const tax = total - subtotal;
 
   const formatCurrency = (amount: number): string => {
-    return `${amount.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ`;
+    return `${Math.round(amount).toLocaleString('vi-VN')}đ`;
   };
 
   const formatTime = (date: Date): string => {
@@ -92,9 +92,16 @@ export default function OrderSummaryScreen({
 
             <View style={styles.summaryContent}>
               <View style={styles.summaryHeader}>
-                <View>
+                <View style={styles.summaryAmountBlock}>
                   <Text style={styles.summaryLabel}>Tổng cộng phiên này</Text>
-                  <Text style={styles.summaryTotal}>{formatCurrency(total)}</Text>
+                  <Text
+                    style={styles.summaryTotal}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                  >
+                    {formatCurrency(total)}
+                  </Text>
                 </View>
                 <View style={styles.statusBadge}>
                   <Text style={styles.statusBadgeText}>
@@ -337,12 +344,15 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 4,
   },
+  summaryAmountBlock: {
+    flex: 1,
+    marginRight: 12,
+  },
   summaryTotal: {
     fontSize: 32,
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: -1,
-    maxWidth: '72%',
+    letterSpacing: 0,
   },
   statusBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',

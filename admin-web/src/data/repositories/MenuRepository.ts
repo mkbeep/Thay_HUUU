@@ -5,7 +5,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 const apiClient = axios.create({
   baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' },
 });
 
 const API_ORIGIN = API_URL.replace(/\/api\/v\d+\/?$/, '');
@@ -77,7 +76,7 @@ export class MenuRepository {
       return response.data.data.map(this.mapToMenuItem.bind(this));
     } catch (error) {
       console.error('Error fetching menu items:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -102,16 +101,21 @@ export class MenuRepository {
   }
 
   async createMenuItem(dto: CreateMenuItemDto): Promise<MenuItem> {
-    const response = await apiClient.post('/foods', {
+    const payload = {
       name: dto.name,
       description: dto.description,
-      category: dto.category,
+      category: categoryToApiValue(dto.category),
       base_price: dto.price,
       is_available: true,
       preparation_time: dto.preparationTime || 15,
       is_vegetarian: dto.isVegetarian || false,
       is_spicy: dto.isSpicy || false,
-    });
+    };
+
+    const response = dto.imageFile
+      ? await apiClient.post('/foods', this.toFormData(payload, dto.imageFile))
+      : await apiClient.post('/foods', payload);
+
     return this.mapToMenuItem(response.data.data);
   }
 
@@ -131,13 +135,15 @@ export class MenuRepository {
         dto.preparationTime,
         dto.isVegetarian,
         dto.isSpicy,
+        dto.imageFile,
+        dto.removeImage,
       ].some(value => value !== undefined);
 
       if (!hasMainPayload) {
         return this.getMenuItemById(id);
       }
 
-      const response = await apiClient.put(`/foods/${id}`, {
+      const payload = {
         name: dto.name,
         description: dto.description,
         category: dto.category ? categoryToApiValue(dto.category) : undefined,
@@ -145,7 +151,13 @@ export class MenuRepository {
         preparation_time: dto.preparationTime,
         is_vegetarian: dto.isVegetarian,
         is_spicy: dto.isSpicy,
-      });
+        remove_image: dto.removeImage,
+      };
+
+      const response = dto.imageFile
+        ? await apiClient.put(`/foods/${id}`, this.toFormData(payload, dto.imageFile))
+        : await apiClient.put(`/foods/${id}`, payload);
+
       return this.mapToMenuItem(response.data.data);
     } catch (error) {
       console.error('Error updating menu item:', error);
@@ -195,5 +207,18 @@ export class MenuRepository {
       createdAt: data.created_at ? new Date(data.created_at) : undefined,
       updatedAt: data.updated_at ? new Date(data.updated_at) : undefined,
     };
+  }
+
+  private toFormData(payload: Record<string, unknown>, imageFile?: File): FormData {
+    const formData = new FormData();
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
+    });
+    if (imageFile) {
+      formData.append('image', imageFile);
+    }
+    return formData;
   }
 }

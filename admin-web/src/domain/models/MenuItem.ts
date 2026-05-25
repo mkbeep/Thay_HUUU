@@ -29,6 +29,7 @@ export interface CreateMenuItemDto {
   price: number;
   category: MenuCategory;
   imageUrl?: string;
+  imageFile?: File;
   preparationTime?: number;
   ingredients?: string[];
   allergens?: string[];
@@ -38,4 +39,5 @@ export interface CreateMenuItemDto {
 
 export interface UpdateMenuItemDto extends Partial<CreateMenuItemDto> {
   available?: boolean;
+  removeImage?: boolean;
 }

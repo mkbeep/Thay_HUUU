@@ -60,15 +60,21 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
           t = await repo.getTableByNumber(parsed.tableNumber);
         }
         if (cancelled || !t) return false;
+        let resolvedSessionId = t.currentOrderId || null;
+        if (!resolvedSessionId) {
+          const session = await repo.createTableSession(t.id, 1);
+          resolvedSessionId = session?.id || null;
+        }
+
         const info: TableInfo = {
           tableNumber: t.number,
           tableId: t.id,
-          sessionId: null,
+          sessionId: resolvedSessionId,
         };
         await AsyncStorage.setItem(TABLE_STORAGE_KEY, JSON.stringify(info));
         setTableNumber(t.number);
         setTableId(t.id);
-        setSessionId(null);
+        setSessionId(resolvedSessionId);
         return true;
       } catch (error) {
         console.error('Web table URL bootstrap failed:', error);
@@ -202,11 +208,7 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
           sessionIdToSave = session.id;
           console.log(`✅ Table session created: ${sessionIdToSave}`);
           
-          // Cập nhật trạng thái bàn thành "occupied"
-          await tableRepo.updateTableStatus(newTableId, TableStatus.OCCUPIED);
-          console.log(`✅ Table status updated to "occupied"`);
-          
-          // ✅ WebSocket sẽ được trigger từ backend khi updateTableStatus
+          // createTableSession đã cập nhật trạng thái bàn và bắn WebSocket từ backend.
         } catch (error) {
           console.error('❌ Error creating table session:', error);
           // Vẫn tiếp tục dù không tạo được session

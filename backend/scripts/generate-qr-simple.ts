@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import { buildTableQrPngFileName } from '../src/infrastructure/utils/qrGenerator';
+import { resolveCustomerWebBaseUrl } from './resolve-lan-web-base';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -26,7 +27,20 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 const OUTPUT_DIR = path.join(__dirname, '../qr-codes');
-const WEB_BASE = (process.env.CUSTOMER_WEB_BASE_URL || 'http://localhost:8081').replace(/\/+$/, '');
+const WEB_BASE = resolveCustomerWebBaseUrl(process.env.CUSTOMER_WEB_BASE_URL);
+
+function cleanOldQrFiles() {
+  if (!fs.existsSync(OUTPUT_DIR)) {
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    return;
+  }
+
+  for (const entry of fs.readdirSync(OUTPUT_DIR)) {
+    if (/^QR-ThucDon-Ban_.*\.png$/i.test(entry)) {
+      fs.unlinkSync(path.join(OUTPUT_DIR, entry));
+    }
+  }
+}
 
 async function generateQRCodes() {
   console.log('🎨 Starting QR code generation...');
@@ -42,10 +56,7 @@ async function generateQRCodes() {
       return;
     }
 
-    // Create output directory
-    if (!fs.existsSync(OUTPUT_DIR)) {
-      fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    }
+    cleanOldQrFiles();
 
     const tables: any[] = [];
 

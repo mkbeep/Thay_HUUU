@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import { 
   Plus, 
@@ -6,10 +6,11 @@ import {
   Trash2, 
   X, 
   Upload,
-  PlusCircle
+  PlusCircle,
+  ImageIcon
 } from 'lucide-react'
 import { MenuService } from '../../../business/services/MenuService'
-import { MenuItem as MenuItemModel } from '../../../domain/models/MenuItem'
+import { MenuCategory } from '../../../domain/models/MenuItem'
 
 // Types
 interface Topping {
@@ -26,62 +27,21 @@ interface MenuItem {
   price: number
   description: string
   imageUrl: string
+  imageFile?: File
+  removeImage?: boolean
   inStock: boolean
   toppings: Topping[]
 }
 
-// Mock data
-const mockMenuItems: MenuItem[] = [
-  {
-    id: '1',
-    name: 'Salad Heirloom',
-    category: 'Khai Vị',
-    price: 18.00,
-    description: 'Cà chua hữu cơ với burrata, bọt húng quế và giấm balsamic lâu năm.',
-    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC5il62G_hSHiuQWq9Eys-E0N8H1w5yd56TsUrfe--xQ5rziwWfroW36WP0QsE5LzCxwa110jsd1hXgknE-zB7hZmZu_ZpPiuvtQe7QD4sBm3LgbRFlAu2zXbXT_QfnQfBmNOdKy4tSdmW0JJGV8VUcsKU_mg2ZVDHMst78ZyGt_iHi1GRMkjOb3WmcakcpzHXIWOTDIV69EN0H1IRmVixnR33HZa7FORFJv0uPAnSkoRdvd5KofwZbDTH8j0YEZ2lDcuu72A1wFA',
-    inStock: true,
-    toppings: [
-      { id: 't1', name: 'Thêm Burrata', price: 4.00, mandatory: false },
-      { id: 't2', name: 'Thịt Xông Khói', price: 6.00, mandatory: false }
-    ]
-  },
-  {
-    id: '2',
-    name: 'Arancini Nấm Rừng',
-    category: 'Khai Vị',
-    price: 14.00,
-    description: 'Viên risotto giòn thơm truffle nhồi phô mai fontina và nấm porcini.',
-    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDEwTs7KpN5sMwIJCa_aAowedNhP6RZQoO99XFzpN-ma8_T0n9uNgaUrU_SSdiik6bG2lAXfhUkYLOm5N0nBN2rVvXhXbxgxb4WOz_mtpg5tjcMQoIcr8a_TuvH_CDSrDtIYaY01KhP4XDnoi6GvGs6Tnb4XcI_JCsBP9P2rjo8gpCxRoMx4VS7svODLAA538JwUA-ulfCOSBZXGt7GLymJwVdzyrhmuKSUcBI0Svy_ad0NcMNGvcn-n0zfz_l2GwQ88jEyyvbAeg',
-    inStock: true,
-    toppings: []
-  },
-  {
-    id: '3',
-    name: 'Mì Ý Truffle Đen',
-    category: 'Khai Vị',
-    price: 22.00,
-    description: 'Tagliatelle thủ công, bơ lên men, nấm truffle Perigord bào mỏng.',
-    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBo809s-fIkDBWzsCNVu0uWnnPdINvZd3dplOfngzyEBDIJXP-iW-WZq6vtjRQZ_KTimgTkiZvbWiyUwFQAhiaqQ8INnVI0y1vReSkbXH1aH0qQoj15mpB0EwsQnTsYLtURcyTzD72T8E4PCKjl8pHF90-lxKGHqaGwlXP5aN99YH9I4N11IZIPiJgGnUbjeoVZvZPZi5VNCn9w5RZV8-bSYUOG7ZJVOy7EJtV8BLFqKcdS_mb_LRA49GYzrrD9r9WnA1NTZig9ig',
-    inStock: false,
-    toppings: []
-  },
-  {
-    id: '4',
-    name: 'Súp Tôm Hùm',
-    category: 'Khai Vị',
-    price: 16.00,
-    description: 'Súp kem tôm hùm truyền thống với cognac và kem tươi.',
-    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBmepLMxgB1Es1xxN0QONxayXLhHrjU4qHwpa_gmzhxXuCg6-J4hQilBcZ5EjDvOrqvXr_8K5mrzuGbeLFRwwLg6vNvZV6MSo0pkWAoiFkERw-ckJkkQP6a7kFrofNof8sb4FfGf2IpPeY7gGf4dRdLs3kjDdsIAXnG4i7rKPxesz63A4PUmroXoanTiZ-Tsv9uxvTlviMb31DWE5_4bw_7uhx3jMmuWQ3dVot2bKVh2-uEx3WdaeNm84cJAZ5a20ErFKYP0YbO7A',
-    inStock: true,
-    toppings: []
-  }
-]
-
-const categories = ['Khai vị', 'Món chính', 'Tráng miệng', 'Đồ uống', 'Đặc biệt']
+const categories = Object.values(MenuCategory)
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [pendingToggleIds, setPendingToggleIds] = useState<Set<string>>(new Set())
+  const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set())
   const [showDrawer, setShowDrawer] = useState(false)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [formData, setFormData] = useState<Partial<MenuItem>>({
@@ -90,11 +50,12 @@ export default function MenuPage() {
     price: 0,
     description: '',
     imageUrl: '',
+    removeImage: false,
     inStock: true,
     toppings: []
   })
 
-  const menuService = new MenuService()
+  const menuService = useMemo(() => new MenuService(), [])
 
   // Load menu items from API
   useEffect(() => {
@@ -104,6 +65,7 @@ export default function MenuPage() {
   const loadMenuItems = async () => {
     try {
       setLoading(true)
+      setLoadError('')
       console.log('Loading menu items...')
       const items = await menuService.getMenuItems()
       console.log('Menu items loaded:', items)
@@ -128,9 +90,8 @@ export default function MenuPage() {
         console.error('API Error:', error.response?.data)
         console.error('Status:', error.response?.status)
       }
-      // Fallback to mock data if API fails
-      console.log('Using mock data as fallback')
-      setMenuItems(mockMenuItems)
+      setLoadError('Không thể tải dữ liệu menu từ API. Kiểm tra backend/Firebase rồi tải lại.')
+      setMenuItems([])
     } finally {
       setLoading(false)
     }
@@ -150,46 +111,176 @@ export default function MenuPage() {
       price: 0,
       description: '',
       imageUrl: '',
+      removeImage: false,
       inStock: true,
       toppings: []
     })
     setShowDrawer(true)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc muốn xóa món này?')) {
-      setMenuItems(menuItems.filter(item => item.id !== id))
+      const previousItems = menuItems
+      setMenuItems(previousItems.filter(item => item.id !== id))
+      const success = await menuService.deleteMenuItem(id)
+      if (!success) {
+        setMenuItems(previousItems)
+        alert('Không thể xóa món ăn')
+      }
     }
   }
 
   const handleToggleStock = async (id: string) => {
+    const currentItem = menuItems.find(item => item.id === id)
+    if (!currentItem || pendingToggleIds.has(id)) return
+
+    setPendingToggleIds(prev => new Set(prev).add(id))
+    setMenuItems(items => items.map(item => 
+      item.id === id ? { ...item, inStock: !item.inStock } : item
+    ))
+
     try {
-      await menuService.toggleItemAvailability(id)
-      // Update local state
-      setMenuItems(menuItems.map(item => 
-        item.id === id ? { ...item, inStock: !item.inStock } : item
-      ))
+      const updatedItem = await menuService.updateMenuItem(id, {
+        available: !currentItem.inStock,
+      })
+      if (!updatedItem) throw new Error('No updated item returned')
     } catch (error) {
       console.error('Error toggling stock:', error)
+      setMenuItems(items => items.map(item => 
+        item.id === id ? { ...item, inStock: currentItem.inStock } : item
+      ))
       alert('Không thể cập nhật trạng thái món ăn')
+    } finally {
+      setPendingToggleIds(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
     }
   }
 
-  const handleSave = () => {
-    if (editingItem) {
-      // Update existing item
-      setMenuItems(menuItems.map(item => 
-        item.id === editingItem.id ? { ...item, ...formData } : item
-      ))
-    } else {
-      // Add new item
-      const newItem: MenuItem = {
-        ...formData as MenuItem,
-        id: Date.now().toString()
+  const handleSave = async () => {
+    const snapshot = menuItems
+    const nextName = formData.name?.trim() || ''
+    const nextDescription = formData.description || ''
+    const nextCategory = formData.category || editingItem?.category || 'Khai vị'
+    const nextPrice = Number(formData.price) || 0
+    const nextImageUrl = formData.imageUrl || ''
+
+    try {
+      setSaving(true)
+      setShowDrawer(false)
+
+      if (editingItem) {
+        const optimisticItem: MenuItem = {
+          ...editingItem,
+          name: nextName,
+          description: nextDescription,
+          category: nextCategory,
+          price: nextPrice,
+          imageUrl: nextImageUrl,
+          inStock: formData.inStock ?? editingItem.inStock,
+          removeImage: formData.removeImage,
+          imageFile: formData.imageFile,
+          toppings: formData.toppings || [],
+        }
+
+        setMenuItems(items => items.map(item =>
+          item.id === editingItem.id ? optimisticItem : item
+        ))
+        setBrokenImageKeys(prev => {
+          const next = new Set(prev)
+          next.delete(`${editingItem.id}:${nextImageUrl}`)
+          return next
+        })
+
+        const updated = await menuService.updateMenuItem(editingItem.id, {
+          name: nextName,
+          description: nextDescription,
+          category: nextCategory as MenuCategory,
+          price: nextPrice,
+          imageFile: formData.imageFile,
+          removeImage: formData.removeImage,
+        })
+        if (!updated) throw new Error('Update failed')
+
+        setMenuItems(items => items.map(item => 
+          item.id === editingItem.id
+            ? {
+              ...item,
+              name: updated.name,
+              category: updated.category,
+              price: updated.price,
+              description: updated.description,
+              imageUrl: updated.imageUrl || nextImageUrl,
+              inStock: updated.available,
+            }
+            : item
+        ))
+      } else {
+        const tempId = `temp-${Date.now()}`
+        const optimisticItem: MenuItem = {
+          id: tempId,
+          name: nextName,
+          description: nextDescription,
+          category: nextCategory,
+          price: nextPrice,
+          imageUrl: nextImageUrl,
+          inStock: true,
+          toppings: formData.toppings || [],
+        }
+
+        setMenuItems(items => [...items, optimisticItem])
+
+        const created = await menuService.createMenuItem({
+          name: nextName,
+          description: nextDescription,
+          category: nextCategory as MenuCategory,
+          price: nextPrice,
+          imageFile: formData.imageFile,
+        })
+
+        setMenuItems(items => items.map(item =>
+          item.id === tempId
+            ? {
+              id: created.id,
+              name: created.name,
+              category: created.category,
+              price: created.price,
+              description: created.description,
+              imageUrl: created.imageUrl || nextImageUrl,
+              inStock: created.available,
+              toppings: [],
+            }
+            : item
+        ))
       }
-      setMenuItems([...menuItems, newItem])
+    } catch (error) {
+      console.error('Error saving menu item:', error)
+      setMenuItems(snapshot)
+      alert('Không thể lưu món ăn')
+    } finally {
+      setSaving(false)
     }
-    setShowDrawer(false)
+  }
+
+  const handleImageChange = (file?: File) => {
+    if (!file) return
+    setFormData({
+      ...formData,
+      imageFile: file,
+      imageUrl: URL.createObjectURL(file),
+      removeImage: false,
+    })
+  }
+
+  const handleRemoveImage = () => {
+    setFormData({
+      ...formData,
+      imageFile: undefined,
+      imageUrl: '',
+      removeImage: true,
+    })
   }
 
   const handleAddTopping = () => {
@@ -229,6 +320,15 @@ export default function MenuPage() {
     return acc
   }, {} as Record<string, MenuItem[]>)
 
+  const markImageBroken = (item: MenuItem) => {
+    if (!item.imageUrl) return
+    setBrokenImageKeys(prev => new Set(prev).add(`${item.id}:${item.imageUrl}`))
+  }
+
+  const isImageBroken = (item: MenuItem) => (
+    item.imageUrl ? brokenImageKeys.has(`${item.id}:${item.imageUrl}`) : true
+  )
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
@@ -258,7 +358,17 @@ export default function MenuPage() {
         </div>
       ) : menuItems.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-gray-600 font-medium">Chưa có món ăn nào</p>
+          <p className="text-gray-600 font-medium">
+            {loadError || 'Chưa có món ăn nào'}
+          </p>
+          {loadError && (
+            <button
+              onClick={loadMenuItems}
+              className="mt-4 px-5 py-2 rounded-lg bg-[#AD2C00] text-white font-bold hover:brightness-110"
+            >
+              Tải lại
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-16">
@@ -282,11 +392,19 @@ export default function MenuPage() {
                 >
                   {/* Image */}
                   <div className="relative h-48 w-full overflow-hidden">
-                    <img
-                      alt={item.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      src={item.imageUrl}
-                    />
+                    {isImageBroken(item) ? (
+                      <div className="w-full h-full bg-[#E5E2E1] flex items-center justify-center text-[#916F67]">
+                        <ImageIcon className="w-10 h-10" />
+                      </div>
+                    ) : (
+                      <img
+                        key={`${item.id}:${item.imageUrl}`}
+                        alt={item.name}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        src={item.imageUrl}
+                        onError={() => markImageBroken(item)}
+                      />
+                    )}
                     <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 backdrop-blur text-[#AD2C00] font-bold rounded-full text-sm">
                       {item.price.toLocaleString('vi-VN')}₫
                     </div>
@@ -302,6 +420,7 @@ export default function MenuPage() {
                           type="checkbox"
                           className="sr-only peer"
                           checked={item.inStock}
+                          disabled={pendingToggleIds.has(item.id)}
                           onChange={() => handleToggleStock(item.id)}
                         />
                         <div className="w-11 h-6 bg-[#E5E2E1] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#006A35]"></div>
@@ -368,15 +487,36 @@ export default function MenuPage() {
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-8 space-y-8 pb-10 pt-8">
               {/* Image Upload */}
-              <div className="w-full aspect-video bg-[#E5E2E1] rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-[#916F67]/50 group cursor-pointer hover:bg-orange-50/30 hover:border-[#AD2C00]/50 transition-all">
-                <Upload className="w-10 h-10 text-gray-600 mb-2 group-hover:text-[#AD2C00]" />
-                <p className="text-sm font-bold text-gray-700 group-hover:text-[#AD2C00]">
-                  Click để tải ảnh món ăn
-                </p>
-                <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
-                  JPG, PNG tối đa 5MB
-                </p>
-              </div>
+              <label className="relative w-full aspect-video bg-[#E5E2E1] rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-[#916F67]/50 group cursor-pointer hover:bg-orange-50/30 hover:border-[#AD2C00]/50 transition-all overflow-hidden">
+                {formData.imageUrl ? (
+                  <img src={formData.imageUrl} alt="Ảnh món ăn" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <>
+                    <Upload className="w-10 h-10 text-gray-600 mb-2 group-hover:text-[#AD2C00]" />
+                    <p className="text-sm font-bold text-gray-700 group-hover:text-[#AD2C00]">
+                      Click để tải ảnh món ăn
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
+                      JPG, PNG tối đa 5MB
+                    </p>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => handleImageChange(event.target.files?.[0])}
+                />
+              </label>
+              {formData.imageUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="text-sm font-bold text-[#BA1A1A] hover:underline"
+                >
+                  Xóa ảnh hiện tại
+                </button>
+              )}
 
               {/* Basic Fields */}
               <div className="grid grid-cols-2 gap-6">
@@ -501,9 +641,10 @@ export default function MenuPage() {
               </button>
               <button
                 onClick={handleSave}
+                disabled={saving}
                 className="flex-[2] bg-gradient-to-r from-[#AD2C00] to-[#D83900] text-white py-4 rounded-xl font-bold shadow-lg shadow-[#AD2C00]/30 transition-all active:scale-98 hover:brightness-110"
               >
-                Lưu Thay Đổi
+                {saving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
               </button>
             </div>
           </div>

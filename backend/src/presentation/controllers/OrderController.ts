@@ -10,7 +10,9 @@ import { NotificationRepository } from '../../infrastructure/database/repositori
 import { UserRepository } from '../../infrastructure/database/repositories/UserRepository';
 import { NotificationType, NotificationPriority } from '../../domain/entities/Notification';
 import { PaymentStatus } from '../../domain/entities/Order';
+import { TableStatus } from '../../domain/entities/Table';
 import { SocketManager } from '../../infrastructure/websocket/SocketManager';
+import { TableRepository } from '../../infrastructure/database/repositories/TableRepository';
 
 export class OrderController {
   private orderRepository: OrderRepository;
@@ -119,9 +121,20 @@ export class OrderController {
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orderNumber = await this.orderRepository.generateOrderNumber();
+      let tableNumber = req.body.table_number;
+
+      if (!tableNumber && req.body.table_session_id) {
+        const tableRepository = new TableRepository();
+        const session = await tableRepository.findSessionById(req.body.table_session_id);
+        if (session?.table_id) {
+          const table = await tableRepository.findById(session.table_id);
+          tableNumber = table?.table_number;
+        }
+      }
       
       const order = await this.orderRepository.create({
         ...req.body,
+        table_number: tableNumber,
         order_number: orderNumber,
         customer_id: req.user?.userId,
         payment_status: PaymentStatus.UNPAID,
@@ -204,11 +217,37 @@ export class OrderController {
       const paymentMethod = req.body.payment_method || 'qr';
       const order = await this.orderRepository.requestPayment(id, paymentMethod);
 
+      if (order.table_session_id) {
+        const tableRepository = new TableRepository();
+        const session = await tableRepository.findSessionById(order.table_session_id);
+        if (session?.is_active) {
+          await tableRepository.updateStatus(session.table_id, TableStatus.RESERVED);
+          try {
+            const socketManager = SocketManager.getInstance();
+            socketManager.notifyTableUpdated(session.table_id);
+          } catch (error) {
+            console.error('WebSocket emit error (table billing):', error);
+          }
+        }
+      }
+
+      const methodLabel: Record<string, string> = {
+        cash: 'tiền mặt tại bàn',
+        qr: 'mã QR',
+        card: 'thẻ',
+        e_wallet: 'ví điện tử',
+      };
+
       await this.notifyOperationRoles({
         type: NotificationType.PAYMENT_REQUEST,
         title: 'Yêu cầu thanh toán',
-        message: `Đơn ${order.order_number} yêu cầu thanh toán bằng ${paymentMethod}`,
-        data: { order_id: order.id, payment_method: paymentMethod },
+        message: `Đơn ${order.order_number} yêu cầu thanh toán ${methodLabel[paymentMethod] || paymentMethod} - ${Number(order.total_amount || 0).toLocaleString('vi-VN')}đ`,
+        data: {
+          order_id: order.id,
+          payment_method: paymentMethod,
+          total_amount: order.total_amount,
+          table_session_id: order.table_session_id,
+        },
         priority: NotificationPriority.HIGH,
       });
 
@@ -287,6 +326,12 @@ export class OrderController {
       try {
         const socketManager = SocketManager.getInstance();
         socketManager.notifyOrderUpdated(order);
+        socketManager.notifyReportsUpdated({
+          reason: 'payment_confirmed',
+          order_id: order.id,
+          paid_at: order.paid_at,
+          total_amount: order.total_amount,
+        });
       } catch (error) {
         console.error('WebSocket emit error:', error);
       }
@@ -303,7 +348,7 @@ export class OrderController {
         // Nếu không còn order nào chưa thanh toán → Cập nhật bàn về available
         if (unpaidOrders.length === 0) {
           try {
-            const tableRepository = new (require('../../infrastructure/database/repositories/TableRepository').TableRepository)();
+            const tableRepository = new TableRepository();
             const session = await tableRepository.findSessionById(order.table_session_id);
             
             if (session && session.is_active) {
@@ -311,7 +356,7 @@ export class OrderController {
               await tableRepository.endSession(order.table_session_id);
               
               // Update table status to available
-              await tableRepository.updateStatus(session.table_id, 'available');
+              await tableRepository.updateStatus(session.table_id, TableStatus.AVAILABLE);
               
               console.log(`✅ Table ${session.table_id} set to available - all orders paid`);
               
@@ -325,13 +370,9 @@ export class OrderController {
         }
       }
 
-      // 🗑️ XÓA ORDER ĐÃ THANH TOÁN
-      await this.orderRepository.delete(id);
-      console.log(`🗑️ Deleted paid order: ${id}`);
-
       res.status(200).json({
         success: true,
-        message: 'Xác nhận thanh toán và xóa đơn hàng thành công',
+        message: 'Xác nhận thanh toán thành công',
         data: order,
       });
     } catch (error) {

@@ -24,18 +24,24 @@ export interface ReportOrder {
   id: string;
   created_at: Date;
   status?: string;
+  payment_status?: string;
   items: ReportOrderItem[];
 }
 
 function isValidOrder(order: ReportOrder): boolean {
-  return order.status !== 'cancelled';
+  return order.status !== 'cancelled' && order.payment_status === 'paid';
 }
 
 export function orderRevenue(order: ReportOrder): number {
   return order.items.reduce(
-    (sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price || 0),
+    (sum, item) => sum + Number(item.quantity || 0) * normalizeVndAmount(item.unit_price),
     0
   );
+}
+
+function normalizeVndAmount(value: unknown): number {
+  const amount = Number(value) || 0;
+  return amount > 0 && amount < 1000 ? amount * 1000 : amount;
 }
 
 function filterOrdersInRange(orders: ReportOrder[], range: DateRange): ReportOrder[] {

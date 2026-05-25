@@ -274,11 +274,10 @@ function AppScreens() {
               }
             }}
             onMenuItemPress={(item: any) => {
-              const priceNumber = parseFloat(item.price.replace('k', ''));
               setSelectedItem({
                 id: item.id,
                 name: item.name,
-                price: priceNumber,
+                price: item.priceValue,
                 priceDisplay: item.price,
                 image: item.image,
                 description: item.description,

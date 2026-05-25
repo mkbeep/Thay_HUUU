@@ -3,11 +3,23 @@
  * React hook để sử dụng WebSocket
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { socketService } from '../services/socketService';
 
 export function useWebSocket() {
   const [isConnected, setIsConnected] = useState(false);
+
+  const on = useCallback((event: string, callback: (...args: any[]) => void) => {
+    socketService.on(event, callback);
+  }, []);
+
+  const off = useCallback((event: string, callback?: (...args: any[]) => void) => {
+    socketService.off(event, callback);
+  }, []);
+
+  const emit = useCallback((event: string, data?: any) => {
+    socketService.emit(event, data);
+  }, []);
 
   useEffect(() => {
     const socket = socketService.connect();
@@ -30,8 +42,8 @@ export function useWebSocket() {
   return {
     isConnected,
     socket: socketService.getSocket(),
-    on: socketService.on.bind(socketService),
-    off: socketService.off.bind(socketService),
-    emit: socketService.emit.bind(socketService),
+    on,
+    off,
+    emit,
   };
 }

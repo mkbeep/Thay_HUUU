@@ -28,6 +28,9 @@ function getErrorMessage(error: unknown): string {
   return 'Đã xảy ra lỗi';
 }
 
+const isCustomerRole = (roleName?: string) =>
+  (roleName || '').trim().toUpperCase() === 'CUSTOMER';
+
 export const staffApi = {
   async getActiveCount(): Promise<number> {
     const response = await axios.get(`${API_URL}/staff/stats/active-count`, {
@@ -40,14 +43,18 @@ export const staffApi = {
     const response = await axios.get(`${API_URL}/staff`, {
       headers: getAuthHeaders(),
     });
-    return response.data.data as StaffMember[];
+    return (response.data.data as StaffMember[]).filter(
+      (member) => !isCustomerRole(member.role_name)
+    );
   },
 
   async getRoles(): Promise<Role[]> {
     const response = await axios.get(`${API_URL}/staff/roles`, {
       headers: getAuthHeaders(),
     });
-    return response.data.data as Role[];
+    return (response.data.data as Role[]).filter(
+      (role) => !isCustomerRole(role.role_name)
+    );
   },
 
   async createStaff(payload: CreateStaffPayload): Promise<StaffMember> {

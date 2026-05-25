@@ -12,6 +12,10 @@ import {
 } from '../../../application/dto/StaffDTO';
 
 const FieldValue = firebaseAdmin.firestore.FieldValue;
+const CUSTOMER_ROLE_NAME = 'CUSTOMER';
+
+const isCustomerRoleName = (roleName?: string): boolean =>
+  (roleName || '').trim().toUpperCase() === CUSTOMER_ROLE_NAME;
 
 export class StaffRepository {
   private readonly usersCollection = db.collection('users');
@@ -19,23 +23,23 @@ export class StaffRepository {
   private readonly rolesCollection = db.collection('role');
 
   async countActiveUsers(): Promise<number> {
-    const snapshot = await this.usersCollection
-      .where('is_active', '==', true)
-      .get();
-    return snapshot.size;
+    const staff = await this.getStaffDirectory();
+    return staff.filter((member) => member.is_active).length;
   }
 
   async findAllRoles(): Promise<RoleDTO[]> {
     const snapshot = await this.rolesCollection.get();
-    return snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        role_name: data.role_name as string,
-        description: data.description as string | undefined,
-        permissions: (data.permissions as string[]) || [],
-      };
-    });
+    return snapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          role_name: data.role_name as string,
+          description: data.description as string | undefined,
+          permissions: (data.permissions as string[]) || [],
+        };
+      })
+      .filter((role) => !isCustomerRoleName(role.role_name));
   }
 
   async getStaffDirectory(): Promise<StaffMemberDTO[]> {
@@ -71,25 +75,27 @@ export class StaffRepository {
       }
     });
 
-    return usersSnap.docs.map((doc) => {
-      const data = doc.data();
-      const userRoleEntry = userRoleByUserId.get(doc.id);
-      const role = userRoleEntry ? roleMap.get(userRoleEntry.role_id) : undefined;
-      const createdAt = data.created_at;
+    return usersSnap.docs
+      .map((doc) => {
+        const data = doc.data();
+        const userRoleEntry = userRoleByUserId.get(doc.id);
+        const role = userRoleEntry ? roleMap.get(userRoleEntry.role_id) : undefined;
+        const createdAt = data.created_at;
 
-      return {
-        id: doc.id,
-        uid: (data.uid as string) || doc.id,
-        full_name: (data.full_name as string) || '',
-        email: (data.email as string) || '',
-        avatar_url: data.avatar_url as string | undefined,
-        is_active: Boolean(data.is_active),
-        created_at: this.serializeTimestamp(createdAt),
-        role_id: userRoleEntry?.role_id,
-        role_name: role?.role_name,
-        user_role_id: userRoleEntry?.user_role_id,
-      };
-    });
+        return {
+          id: doc.id,
+          uid: (data.uid as string) || doc.id,
+          full_name: (data.full_name as string) || '',
+          email: (data.email as string) || '',
+          avatar_url: data.avatar_url as string | undefined,
+          is_active: Boolean(data.is_active),
+          created_at: this.serializeTimestamp(createdAt),
+          role_id: userRoleEntry?.role_id,
+          role_name: role?.role_name,
+          user_role_id: userRoleEntry?.user_role_id,
+        };
+      })
+      .filter((member) => !isCustomerRoleName(member.role_name));
   }
 
   /**
@@ -120,6 +126,9 @@ export class StaffRepository {
     const roleDoc = await this.rolesCollection.doc(dto.role_id).get();
     if (!roleDoc.exists) {
       throw new Error('ROLE_NOT_FOUND');
+    }
+    if (isCustomerRoleName(roleDoc.data()?.role_name as string | undefined)) {
+      throw new Error('ROLE_NOT_STAFF');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
@@ -208,6 +217,9 @@ export class StaffRepository {
     const roleDoc = await this.rolesCollection.doc(roleId).get();
     if (!roleDoc.exists) {
       throw new Error('ROLE_NOT_FOUND');
+    }
+    if (isCustomerRoleName(roleDoc.data()?.role_name as string | undefined)) {
+      throw new Error('ROLE_NOT_STAFF');
     }
 
     const userDoc = await this.usersCollection.doc(userId).get();

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useSearchParams } from 'react-router-dom'
-import { CheckCircle, ChefHat, Clock, MessageSquare, Wifi, WifiOff, XCircle } from 'lucide-react'
+import { CheckCircle, ChefHat, Clock, CreditCard, MessageSquare, Wifi, WifiOff, XCircle } from 'lucide-react'
 import { useWebSocket } from '../../../hooks/useWebSocket'
+import { broadcastReportUpdated } from '../../reports/utils/reportRealtime'
 
 type KitchenStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served' | 'cancelled'
 type PaymentStatus = 'unpaid' | 'payment_pending_confirmation' | 'paid'
@@ -10,6 +11,8 @@ type PaymentStatus = 'unpaid' | 'payment_pending_confirmation' | 'paid'
 interface ApiOrderItem {
   id: string
   quantity: number
+  unit_price?: number
+  subtotal?: number
   food?: { name?: string } | null
   notes?: string
   special_instructions?: string
@@ -19,12 +22,22 @@ interface ApiOrder {
   id: string
   order_number: string
   table_session_id?: string
+  table_number?: string
   status: KitchenStatus
   payment_status?: PaymentStatus
+  payment_method?: 'qr' | 'cash' | 'card' | 'e_wallet'
+  total_amount?: number
   notes?: string
   created_at?: string | { _seconds: number; _nanoseconds?: number }
   payment_requested_at?: string | { _seconds: number; _nanoseconds?: number }
   items?: ApiOrderItem[]
+}
+
+interface ApiDiningTable {
+  table_number: string
+  current_session?: {
+    id: string
+  }
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
@@ -86,6 +99,7 @@ function mergeOrder(prev: ApiOrder, incoming: ApiOrder): ApiOrder {
     notes: incoming.notes ?? prev.notes,
     order_number: incoming.order_number || prev.order_number,
     table_session_id: incoming.table_session_id ?? prev.table_session_id,
+    table_number: incoming.table_number ?? prev.table_number,
     created_at: (incoming.created_at as any) ?? prev.created_at,
   }
 }
@@ -95,14 +109,56 @@ function itemNoteText(item: ApiOrderItem): string | undefined {
   return n ? String(n).trim() : undefined
 }
 
+function formatVnd(n?: number): string {
+  const raw = Number(n) || 0
+  return `${Math.round(raw).toLocaleString('vi-VN')}đ`
+}
+
+function normalizeVndAmount(value: unknown): number {
+  const amount = Number(value) || 0
+  return amount > 0 && amount < 1000 ? amount * 1000 : amount
+}
+
+function displayOrderTotal(order: ApiOrder): number {
+  const total = Number(order.total_amount || 0)
+  if (total > 0) return normalizeVndAmount(total)
+
+  const subtotal = (order.items || []).reduce((sum, item) => {
+    const itemSubtotal = Number(item.subtotal || 0)
+    if (itemSubtotal > 0) return sum + normalizeVndAmount(itemSubtotal)
+    return sum + normalizeVndAmount(item.unit_price) * Number(item.quantity || 0)
+  }, 0)
+
+  return subtotal > 0 ? Math.round(subtotal * 1.08) : 0
+}
+
+function paymentMethodLabel(method?: ApiOrder['payment_method']): string {
+  if (method === 'cash') return 'Tiền mặt tại bàn'
+  if (method === 'card') return 'Thẻ'
+  if (method === 'e_wallet') return 'Ví điện tử'
+  if (method === 'qr') return 'Mã QR'
+  return 'Chưa chọn'
+}
+
+function tableLabelFor(order: ApiOrder, tableBySessionId: Record<string, string>): string {
+  return (
+    order.table_number ||
+    (order.table_session_id ? tableBySessionId[order.table_session_id] : '') ||
+    '—'
+  )
+}
+
 export default function OrdersPageWebSocket() {
   const [searchParams, setSearchParams] = useSearchParams()
   const focusOrderId = searchParams.get('orderId') || searchParams.get('focus')
   const focusOrderNo = searchParams.get('orderNo')
 
   const [orders, setOrders] = useState<ApiOrder[]>([])
+  const [tableBySessionId, setTableBySessionId] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [confirmingPaymentIds, setConfirmingPaymentIds] = useState<Set<string>>(() => new Set())
+  const lastScrolledFocusRef = useRef<string | null>(null)
   const { isConnected, on, off } = useWebSocket()
 
   const loadOrders = useCallback(async (showLoading = false) => {
@@ -120,7 +176,13 @@ export default function OrdersPageWebSocket() {
         console.log(`🧹 Admin: Auto-removed ${uniqueById.length - unpaidOrders.length} paid order(s)`)
       }
       
-      setOrders(unpaidOrders)
+      setOrders((prev) => {
+        const prevById = new Map(prev.map((order) => [order.id, order]))
+        return unpaidOrders.map((order) => {
+          const existing = prevById.get(order.id)
+          return existing ? mergeOrder(existing, order) : order
+        })
+      })
       setIsInitialLoad(false)
     } catch (error) {
       console.error('Error loading orders:', error)
@@ -131,6 +193,21 @@ export default function OrdersPageWebSocket() {
       }
     } finally {
       if (showLoading) setLoading(false)
+    }
+  }, [])
+
+  const loadTableSessionMap = useCallback(async () => {
+    try {
+      const res = await client.get('/tables')
+      const rows: ApiDiningTable[] = res.data?.data || []
+      const next: Record<string, string> = {}
+      rows.forEach((table) => {
+        const sessionId = table.current_session?.id
+        if (sessionId) next[sessionId] = table.table_number
+      })
+      setTableBySessionId(next)
+    } catch (error) {
+      console.error('Error loading table session map:', error)
     }
   }, [])
 
@@ -174,6 +251,9 @@ export default function OrdersPageWebSocket() {
   }
 
   const confirmPayment = async (id: string) => {
+    if (confirmingPaymentIds.has(id)) return
+    setConfirmingPaymentIds((prev) => new Set(prev).add(id))
+
     // ✅ XÓA NGAY KHỎI UI TRƯỚC (Optimistic UI)
     setOrders((prev) => prev.filter((o) => o.id !== id))
     console.log(`🧹 Admin: Removed paid order ${id} from UI (optimistic)`)
@@ -181,11 +261,21 @@ export default function OrdersPageWebSocket() {
     try {
       await client.patch(`/orders/${id}/confirm-payment`)
       console.log(`✅ Payment confirmed on server: ${id}`)
+      broadcastReportUpdated({ reason: 'payment_confirmed', orderId: id })
     } catch (error) {
       console.error('Error confirming payment:', error)
-      alert('Không thể xác nhận thanh toán. Vui lòng thử lại.')
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.message || error.response?.data?.error || error.message
+        : 'Vui lòng thử lại.'
+      alert(`Không thể xác nhận thanh toán: ${message}`)
       // Reload để restore nếu có lỗi
       await loadOrders(false)
+    } finally {
+      setConfirmingPaymentIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
     }
   }
 
@@ -194,7 +284,7 @@ export default function OrdersPageWebSocket() {
 
     const init = async () => {
       if (!mounted) return
-      await loadOrders(true)
+      await Promise.all([loadOrders(true), loadTableSessionMap()])
     }
 
     void init()
@@ -259,7 +349,7 @@ export default function OrdersPageWebSocket() {
     const handleReconnect = () => {
       if (!mounted) return
       console.log('🔄 Reconnected, reloading orders...')
-      void loadOrders(false)
+      void Promise.all([loadOrders(false), loadTableSessionMap()])
     }
     on('connect', handleReconnect)
 
@@ -270,7 +360,7 @@ export default function OrdersPageWebSocket() {
       off('order:status_changed', handleOrderStatusChanged)
       off('connect', handleReconnect)
     }
-  }, [])
+  }, [loadOrders, loadTableSessionMap, on, off])
 
   const activeOrders = useMemo(() => orders.filter((o) => o.status !== 'cancelled'), [orders])
 
@@ -296,11 +386,23 @@ export default function OrdersPageWebSocket() {
 
   useEffect(() => {
     if (!resolvedFocusDomId) return
+    if (lastScrolledFocusRef.current === resolvedFocusDomId) return
+    lastScrolledFocusRef.current = resolvedFocusDomId
     const t = window.setTimeout(() => {
       document.getElementById(resolvedFocusDomId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 400)
     return () => window.clearTimeout(t)
-  }, [resolvedFocusDomId, activeOrders.length])
+  }, [resolvedFocusDomId])
+
+  const paymentRequests = useMemo(() => {
+    return group.served
+      .filter((order) => order.payment_status === 'payment_pending_confirmation')
+      .sort((a, b) => {
+        const at = parseFirestoreDate(a.payment_requested_at)?.getTime() || 0
+        const bt = parseFirestoreDate(b.payment_requested_at)?.getTime() || 0
+        return bt - at
+      })
+  }, [group.served])
 
   const clearFocusParam = useCallback(() => {
     if (!focusOrderId && !focusOrderNo) return
@@ -361,6 +463,7 @@ export default function OrdersPageWebSocket() {
   const renderCard = (order: ApiOrder, actions: JSX.Element, options?: { hidePaymentBadge?: boolean }) => {
     const statusBadge = getStatusBadge(order.status)
     const paymentBadge = getPaymentBadge(order.payment_status)
+    const tableLabel = tableLabelFor(order, tableBySessionId)
     const isFocused =
       (!!focusOrderId && focusOrderId === order.id) ||
       (!!focusOrderNo && focusOrderNo === order.order_number)
@@ -378,7 +481,7 @@ export default function OrdersPageWebSocket() {
             <div className="text-xs font-bold text-[#AD2C00] mb-1 truncate">{order.order_number || order.id}</div>
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1">
               <span className="text-xs font-medium text-indigo-600">Bàn</span>
-              <span className="text-sm font-bold text-indigo-800">{order.table_session_id || '—'}</span>
+              <span className="text-sm font-bold text-indigo-800">{tableLabel}</span>
             </div>
           </div>
           <div className="text-right shrink-0">
@@ -393,6 +496,18 @@ export default function OrdersPageWebSocket() {
           <span className={`text-xs font-medium px-2 py-1 rounded-md border ${statusBadge.color}`}>{statusBadge.text}</span>
           {!options?.hidePaymentBadge && (
             <span className={`text-xs font-medium px-2 py-1 rounded-md border ${paymentBadge.color}`}>{paymentBadge.text}</span>
+          )}
+        </div>
+
+        <div className="mb-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-stone-600">Tổng cần thu</span>
+            <span className="font-bold text-[#AD2C00]">{formatVnd(displayOrderTotal(order))}</span>
+          </div>
+          {order.payment_status === 'payment_pending_confirmation' && (
+            <div className="mt-1 text-xs font-semibold text-amber-800">
+              Khách chọn: {paymentMethodLabel(order.payment_method)}
+            </div>
           )}
         </div>
 
@@ -431,6 +546,55 @@ export default function OrdersPageWebSocket() {
 
   return (
     <div className="h-full flex flex-col">
+      {paymentRequests.length > 0 && (
+        <aside className="fixed right-6 top-28 z-[70] w-72 rounded-xl border border-amber-200 bg-white shadow-xl pointer-events-auto">
+          <div className="flex items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-[#AD2C00]" />
+              <span className="text-sm font-bold text-stone-900">Yêu cầu thanh toán</span>
+            </div>
+            <span className="rounded-full bg-[#AD2C00] px-2 py-0.5 text-xs font-bold text-white">
+              {paymentRequests.length}
+            </span>
+          </div>
+          <div className="max-h-[360px] overflow-y-auto p-3 space-y-2">
+            {paymentRequests.slice(0, 5).map((order) => (
+              <div key={order.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-bold text-[#AD2C00]">
+                      Bàn {tableLabelFor(order, tableBySessionId)}
+                    </div>
+                    <div className="text-[11px] text-stone-500">
+                      {formatOrderTime(order.payment_requested_at)}
+                    </div>
+                  </div>
+                  <div className="text-xs font-bold text-stone-900">
+                    {formatVnd(displayOrderTotal(order))}
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] font-semibold text-amber-800">
+                  {paymentMethodLabel(order.payment_method)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void confirmPayment(order.id)}
+                  disabled={confirmingPaymentIds.has(order.id)}
+                  className="mt-3 w-full rounded-lg bg-[#006A35] px-3 py-2 text-xs font-bold text-white hover:bg-[#005028] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {confirmingPaymentIds.has(order.id) ? 'Đang xác nhận...' : 'Xác nhận thanh toán'}
+                </button>
+              </div>
+            ))}
+            {paymentRequests.length > 5 && (
+              <div className="text-center text-xs text-stone-500">
+                +{paymentRequests.length - 5} yêu cầu khác trong cột Đã phục vụ
+              </div>
+            )}
+          </div>
+        </aside>
+      )}
+
       <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Vận hành đơn hàng</h1>
@@ -602,10 +766,15 @@ export default function OrdersPageWebSocket() {
                   <button
                     type="button"
                     onClick={() => void confirmPayment(o.id)}
-                    className="w-full py-2.5 rounded-lg bg-[#006A35] text-white text-sm font-semibold hover:bg-[#005028]"
+                    disabled={confirmingPaymentIds.has(o.id)}
+                    className="w-full py-2.5 rounded-lg bg-[#006A35] text-white text-sm font-semibold hover:bg-[#005028] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <CheckCircle className="inline w-4 h-4 mr-1 align-text-bottom" />
-                    Xác nhận đã thanh toán
+                    {confirmingPaymentIds.has(o.id)
+                      ? 'Đang xác nhận...'
+                      : o.payment_method === 'cash'
+                        ? 'Xác nhận đã thu tiền mặt'
+                        : 'Xác nhận đã thanh toán'}
                   </button>
                 ) : o.payment_status === 'paid' ? (
                   <div className="text-xs text-center py-2.5 px-3 bg-emerald-50 text-emerald-800 rounded-lg font-semibold border border-emerald-200">

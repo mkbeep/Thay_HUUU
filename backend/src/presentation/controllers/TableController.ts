@@ -164,6 +164,19 @@ export class TableController {
       const { id } = req.params;
       const { customer_count } = req.body;
 
+      const existingSession = await this.tableRepository.findActiveSessionByTableId(id);
+      if (existingSession) {
+        await this.tableRepository.updateStatus(id, TableStatus.OCCUPIED);
+        this.socketManager.notifyTableUpdated(id);
+
+        res.status(200).json({
+          success: true,
+          message: 'Phiên bàn đang hoạt động',
+          data: existingSession,
+        });
+        return;
+      }
+
       // Generate session code
       const sessionCode = uuidv4().substring(0, 8).toUpperCase();
 

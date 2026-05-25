@@ -28,6 +28,7 @@ export interface Order {
   id: string;
   order_number: string;
   table_session_id?: string;
+  table_number?: string;
   customer_id?: string;
   staff_id?: string;
   order_type: OrderType;

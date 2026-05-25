@@ -1,6 +1,5 @@
 import { MenuItem, MenuCategory } from '../../domain/models/MenuItem';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../../utils/apiBaseUrl';
 
 const resolvedBase = getApiBaseUrl();
@@ -9,6 +8,16 @@ const apiClient = axios.create({
   baseURL: resolvedBase,
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
+});
+
+apiClient.interceptors.request.use((config) => {
+  if (config.method?.toLowerCase() === 'get') {
+    config.params = { ...(config.params || {}), _t: Date.now() };
+    config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    config.headers.Pragma = 'no-cache';
+    config.headers.Expires = '0';
+  }
+  return config;
 });
 
 const API_ORIGIN = resolvedBase.replace(/\/api\/v\d+\/?$/, '');
@@ -48,7 +57,7 @@ const categoryToApiValue = (category: MenuCategory): string => {
   return 'special';
 };
 
-const resolveImageUrl = (rawUrl?: string): string => {
+const resolveImageUrl = (rawUrl?: string, version?: string): string => {
   if (!rawUrl) {
     return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800';
   }
@@ -58,101 +67,48 @@ const resolveImageUrl = (rawUrl?: string): string => {
     return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800';
   }
 
+  const appendVersion = (value: string) => {
+    if (!version) return value;
+    const separator = value.includes('?') ? '&' : '?';
+    return `${value}${separator}v=${encodeURIComponent(version)}`;
+  };
+
   if (/^https?:\/\//i.test(url) || url.startsWith('//')) {
-    return url;
+    return appendVersion(url);
   }
 
   if (url.startsWith('/images/')) {
-    return `${API_ORIGIN}${url}`;
+    return appendVersion(`${API_ORIGIN}${url}`);
   }
 
   if (url.startsWith('menu/')) {
-    return `${API_ORIGIN}/images/${url}`;
+    return appendVersion(`${API_ORIGIN}/images/${url}`);
   }
 
-  return `${API_ORIGIN}/images/menu/${url.replace(/^\/+/, '')}`;
+  return appendVersion(`${API_ORIGIN}/images/menu/${url.replace(/^\/+/, '')}`);
 };
 
-const CACHE_KEY = '@menu_items_cache';
-const CACHE_TIMESTAMP_KEY = '@menu_items_cache_timestamp';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 phút
+const normalizeVndPrice = (value: unknown): number => {
+  return Number(value) || 0;
+};
 
 export class MenuRepository {
   async getAllMenuItems(): Promise<MenuItem[]> {
     try {
-      // Kiểm tra cache trước
-      const cachedData = await this.getCachedMenuItems();
-      if (cachedData) {
-        console.log('✅ Load menu từ cache');
-        return cachedData;
-      }
-
-      // Nếu không có cache, fetch từ API
       console.log('🌐 Fetch menu từ API');
       const response = await apiClient.get('/foods', {
         params: { is_available: true }
       });
       const menuItems = response.data.data.map(this.mapToMenuItem);
-      
-      // Lưu vào cache
-      await this.cacheMenuItems(menuItems);
-      
       return menuItems;
     } catch (error) {
       console.error('Error fetching menu items:', error);
-      
-      // Nếu lỗi, thử load từ cache cũ (dù đã hết hạn)
-      const oldCache = await AsyncStorage.getItem(CACHE_KEY);
-      if (oldCache) {
-        console.log('⚠️ Load menu từ cache cũ do lỗi API');
-        return JSON.parse(oldCache);
-      }
-      
       return [];
     }
   }
 
-  private async getCachedMenuItems(): Promise<MenuItem[] | null> {
-    try {
-      const cachedData = await AsyncStorage.getItem(CACHE_KEY);
-      const cachedTimestamp = await AsyncStorage.getItem(CACHE_TIMESTAMP_KEY);
-      
-      if (!cachedData || !cachedTimestamp) {
-        return null;
-      }
-
-      const timestamp = parseInt(cachedTimestamp, 10);
-      const now = Date.now();
-      
-      // Kiểm tra cache còn hạn không
-      if (now - timestamp < CACHE_DURATION) {
-        return JSON.parse(cachedData);
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Error reading cache:', error);
-      return null;
-    }
-  }
-
-  private async cacheMenuItems(items: MenuItem[]): Promise<void> {
-    try {
-      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(items));
-      await AsyncStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
-    } catch (error) {
-      console.error('Error caching menu items:', error);
-    }
-  }
-
   async clearCache(): Promise<void> {
-    try {
-      await AsyncStorage.removeItem(CACHE_KEY);
-      await AsyncStorage.removeItem(CACHE_TIMESTAMP_KEY);
-      console.log('🗑️ Cache đã được xóa');
-    } catch (error) {
-      console.error('Error clearing cache:', error);
-    }
+    console.log('Menu cache is disabled for live customer updates');
   }
 
   async getMenuItemById(id: string): Promise<MenuItem | undefined> {
@@ -196,7 +152,8 @@ export class MenuRepository {
   private mapToMenuItem = (data: any): MenuItem => {
     // Chấp nhận cả URL cloud và path tương đối từ backend scripts cũ
     let imageSource: any;
-    const imageUrl = resolveImageUrl(data.images?.[0]?.image_url);
+    const primaryImage = data.images?.find((img: any) => img.is_primary) || data.images?.[0];
+    const imageUrl = resolveImageUrl(primaryImage?.image_url, data.updated_at || primaryImage?.updated_at);
     
     if (imageUrl) {
       imageSource = { uri: imageUrl };
@@ -209,7 +166,7 @@ export class MenuRepository {
       id: data.id,
       name: data.name,
       description: data.description || '',
-      price: data.base_price,
+      price: normalizeVndPrice(data.base_price),
       category: normalizeCategoryToVi(data.category),
       available: data.is_available,
       image: imageSource,

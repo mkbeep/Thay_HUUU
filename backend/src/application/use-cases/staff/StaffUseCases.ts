@@ -73,6 +73,9 @@ export class CreateStaffUseCase {
       if (message === 'ROLE_NOT_FOUND') {
         throw new AppError('Vai trò không tồn tại', 404);
       }
+      if (message === 'ROLE_NOT_STAFF') {
+        throw new AppError('Vai trò CUSTOMER không dùng cho nhân viên', 400);
+      }
       if (firebaseCode === 'auth/invalid-password') {
         throw new AppError('Mật khẩu không hợp lệ', 400);
       }
@@ -112,6 +115,9 @@ export class UpdateStaffRoleUseCase {
       const message = error instanceof Error ? error.message : '';
       if (message === 'ROLE_NOT_FOUND') {
         throw new AppError('Vai trò không tồn tại', 404);
+      }
+      if (message === 'ROLE_NOT_STAFF') {
+        throw new AppError('Vai trò CUSTOMER không dùng cho nhân viên', 400);
       }
       if (message === 'USER_NOT_FOUND') {
         throw new AppError('Nhân viên không tồn tại', 404);

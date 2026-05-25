@@ -38,7 +38,7 @@ async function seedAdmin() {
     }
 
     // 2. Tạo Admin User
-    const adminEmail = 'admin@gourmet.com';
+    const adminEmail = 'admin@restaurant.com';
     const existingAdmin = await db.collection('users')
       .where('email', '==', adminEmail)
       .limit(1)
@@ -47,7 +47,7 @@ async function seedAdmin() {
     let adminUserId: string;
 
     if (existingAdmin.empty) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
+      const hashedPassword = await bcrypt.hash('Admin@123456', 10);
       const adminData = {
         email: adminEmail,
         password: hashedPassword,
@@ -64,7 +64,7 @@ async function seedAdmin() {
       adminUserId = docRef.id;
       console.log('✅ Admin user created!');
       console.log('📧 Email:', adminEmail);
-      console.log('🔑 Password: admin123');
+      console.log('🔑 Password: Admin@123456');
       console.log('🆔 User ID:', adminUserId);
     } else {
       adminUserId = existingAdmin.docs[0].id;
@@ -190,7 +190,7 @@ async function seedAdmin() {
 
     console.log('\n🎉 All users seeded successfully!');
     console.log('\n📝 Login credentials:');
-    console.log('Admin: admin@gourmet.com / admin123');
+    console.log('Admin: admin@restaurant.com / Admin@123456');
     console.log('Manager: manager@gourmet.com / manager123');
     console.log('Staff: staff@gourmet.com / staff123');
 

@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { BestSellersModal } from '../components/BestSellersModal';
 import { PeakHoursHeatmap } from '../components/PeakHoursHeatmap';
 import { RevenueLineChart } from '../components/RevenueLineChart';
 import { useReportsAnalytics } from '../hooks/useReports';
+import { useWebSocket } from '../../../hooks/useWebSocket';
 import type { BestSellerItem, ReportPeriod } from '../types/report.types';
 import { formatCurrency, formatGrowth } from '../utils/formatCurrency';
+import { subscribeReportUpdated } from '../utils/reportRealtime';
 
 const TOP_SELLERS_PREVIEW = 4;
 
@@ -36,6 +38,40 @@ export default function ReportsPage() {
 
   const { data, isLoading, isError, error, refetch, isFetching } =
     useReportsAnalytics(queryParams);
+  const { on, off } = useWebSocket();
+
+  useEffect(() => {
+    const refetchReports = () => {
+      void refetch();
+      window.setTimeout(() => void refetch(), 500);
+    };
+
+    const handleOrderUpdated = (order: { payment_status?: string }) => {
+      if (order?.payment_status === 'paid') {
+        refetchReports();
+      }
+    };
+
+    const handleOrderStatusChanged = ({ order }: { order?: { payment_status?: string } }) => {
+      if (order?.payment_status === 'paid') {
+        refetchReports();
+      }
+    };
+
+    on('order:updated', handleOrderUpdated);
+    on('order:status_changed', handleOrderStatusChanged);
+    on('report:updated', refetchReports);
+    on('connect', refetchReports);
+    const unsubscribeLocal = subscribeReportUpdated(refetchReports);
+
+    return () => {
+      off('order:updated', handleOrderUpdated);
+      off('order:status_changed', handleOrderStatusChanged);
+      off('report:updated', refetchReports);
+      off('connect', refetchReports);
+      unsubscribeLocal();
+    };
+  }, [on, off, refetch]);
 
   const bestSellersPreview = data?.bestSellers.slice(0, TOP_SELLERS_PREVIEW) ?? [];
 

@@ -13,7 +13,7 @@
     "seed:50foods": "ts-node scripts/seed-50-foods.ts",
     "seed:foods-firebase": "ts-node scripts/seed-foods-with-firebase-images.ts",
     "seed:foods-backend": "ts-node scripts/seed-foods-backend-images.ts",
-    "seed:foods-cloudinary": "cross-env IMAGE_PROVIDER=cloudinary ts-node scripts/seed-foods-backend-images.ts",
+    "seed:foods-cloudinary": "ts-node scripts/seed-foods-cloudinary.ts",
     "auto-seed": "ts-node scripts/auto-seed.ts",
     "upload:images": "ts-node scripts/upload-menu-images.ts",
     "upload:images:cloudinary": "ts-node scripts/upload-menu-images.ts",
