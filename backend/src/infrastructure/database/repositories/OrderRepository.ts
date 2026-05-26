@@ -5,6 +5,7 @@
 import { db } from '../../config/firebase.config';
 import { IOrderRepository } from '../../../domain/repositories/IOrderRepository';
 import { Order, OrderWithItems, OrderStatus, OrderType, OrderItem, PaymentStatus } from '../../../domain/entities/Order';
+import { BillRepository } from './BillRepository';
 
 export class OrderRepository implements IOrderRepository {
   private readonly collection = db.collection('orders');
@@ -70,6 +71,56 @@ export class OrderRepository implements IOrderRepository {
     return { id: doc.id, ...doc.data() } as Order;
   }
 
+  private async getFoodSummary(foodId: string): Promise<{ id: string; name?: string; image_url?: string } | null> {
+    const foodDoc = await db.collection('food').doc(foodId).get();
+    if (!foodDoc.exists) return null;
+    const foodData = foodDoc.data() as { name?: string; image_url?: string };
+    let imageUrl = foodData.image_url || '';
+    if (!imageUrl) {
+      const imagesSnap = await db.collection('food_image').where('food_id', '==', foodId).get();
+      const primary =
+        imagesSnap.docs.find((d) => d.data().is_primary) || imagesSnap.docs[0];
+      imageUrl = primary?.data()?.image_url || '';
+    }
+    return { id: foodDoc.id, name: foodData.name, image_url: imageUrl || undefined };
+  }
+
+  private itemStatusToOrderStatus(itemStatus: OrderItem['status']): OrderStatus {
+    const map: Record<string, OrderStatus> = {
+      pending: OrderStatus.PENDING,
+      confirmed: OrderStatus.CONFIRMED,
+      preparing: OrderStatus.PREPARING,
+      ready: OrderStatus.READY,
+      served: OrderStatus.SERVED,
+      cancelled: OrderStatus.CANCELLED,
+    };
+    return map[itemStatus] || OrderStatus.PENDING;
+  }
+
+  async findAllWithItems(filters?: {
+    status?: OrderStatus;
+    order_type?: OrderType;
+    table_session_id?: string;
+    customer_id?: string;
+    from_date?: Date;
+    to_date?: Date;
+  }): Promise<OrderWithItems[]> {
+    const orders = await this.findAll(filters);
+    return Promise.all(
+      orders.map(async (order) => {
+        const itemsSnap = await this.itemsCollection.where('order_id', '==', order.id).get();
+        const items = await Promise.all(
+          itemsSnap.docs.map(async (doc) => {
+            const itemData = doc.data() as OrderItem;
+            const food = itemData.food_id ? await this.getFoodSummary(itemData.food_id) : null;
+            return { ...itemData, id: doc.id, food };
+          })
+        );
+        return { ...order, items } as OrderWithItems;
+      })
+    );
+  }
+
   async findAll(filters?: {
     status?: OrderStatus;
     order_type?: OrderType;
@@ -133,6 +184,10 @@ export class OrderRepository implements IOrderRepository {
     } as Order));
   }
 
+  async hasPendingPaymentInSession(tableSessionId: string): Promise<boolean> {
+    return new BillRepository().hasPendingBill(tableSessionId);
+  }
+
   async create(orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'>): Promise<Order> {
     const now = new Date();
     const rawItems = Array.isArray((orderData as any).items) ? (orderData as any).items : [];
@@ -182,6 +237,7 @@ export class OrderRepository implements IOrderRepository {
           subtotal: quantity * unitPrice,
           special_instructions: item.notes || item.special_instructions || '',
           status: 'pending',
+          payment_status: PaymentStatus.UNPAID,
           created_at: now,
           updated_at: now,
         });
@@ -214,9 +270,243 @@ export class OrderRepository implements IOrderRepository {
     }
 
     await this.collection.doc(id).update(updateData);
+
+    const itemStatusMap: Partial<Record<OrderStatus, OrderItem['status']>> = {
+      [OrderStatus.PENDING]: 'pending',
+      [OrderStatus.CONFIRMED]: 'pending',
+      [OrderStatus.PREPARING]: 'preparing',
+      [OrderStatus.READY]: 'ready',
+      [OrderStatus.SERVED]: 'served',
+      [OrderStatus.CANCELLED]: 'cancelled',
+      [OrderStatus.COMPLETED]: 'served',
+    };
+    const itemStatus = itemStatusMap[status];
+    if (itemStatus) {
+      const itemsSnap = await this.itemsCollection.where('order_id', '==', id).get();
+      const batch = db.batch();
+      itemsSnap.docs.forEach((doc) => {
+        batch.update(doc.ref, { status: itemStatus, updated_at: new Date() });
+      });
+      if (!itemsSnap.empty) await batch.commit();
+    }
+
     const updated = await this.findById(id);
     if (!updated) throw new Error('Order not found after update');
     return updated;
+  }
+
+  /** Đơn + order_item cho app khách (theo session, không query toàn collection) */
+  async findItemById(itemId: string): Promise<(OrderItem & { order?: Order }) | null> {
+    const doc = await this.itemsCollection.doc(itemId).get();
+    if (!doc.exists) return null;
+    const item = { id: doc.id, ...doc.data() } as OrderItem;
+    const order = await this.findById(item.order_id);
+    return { ...item, order: order || undefined };
+  }
+
+  async updateItemStatus(
+    itemId: string,
+    status: OrderItem['status']
+  ): Promise<OrderItem & { order_id: string; table_session_id?: string }> {
+    const doc = await this.itemsCollection.doc(itemId).get();
+    if (!doc.exists) throw new Error('ORDER_ITEM_NOT_FOUND');
+    const data = doc.data() as OrderItem;
+    await this.itemsCollection.doc(itemId).update({ status, updated_at: new Date() });
+    const orderStatus = this.itemStatusToOrderStatus(status);
+    await this.collection.doc(data.order_id).update({
+      status: orderStatus,
+      updated_at: new Date(),
+    });
+    const order = await this.findById(data.order_id);
+    return {
+      ...data,
+      id: itemId,
+      status,
+      order_id: data.order_id,
+      table_session_id: order?.table_session_id,
+    };
+  }
+
+  async updateItemPayment(
+    itemId: string,
+    paymentMethod?: 'qr' | 'cash' | 'card' | 'e_wallet'
+  ): Promise<OrderItem & { order_id: string; table_session_id?: string }> {
+    const doc = await this.itemsCollection.doc(itemId).get();
+    if (!doc.exists) throw new Error('ORDER_ITEM_NOT_FOUND');
+    const data = doc.data() as OrderItem;
+    const update: Record<string, unknown> = {
+      payment_status: PaymentStatus.PAID,
+      paid_at: new Date(),
+      updated_at: new Date(),
+    };
+    if (paymentMethod) update.payment_method = paymentMethod;
+    await this.itemsCollection.doc(itemId).update(update);
+    const order = await this.findById(data.order_id);
+    return {
+      ...data,
+      id: itemId,
+      payment_status: PaymentStatus.PAID,
+      order_id: data.order_id,
+      table_session_id: order?.table_session_id,
+    };
+  }
+
+  async findAllItemsBySession(
+    tableSessionId: string,
+    options?: { includeCancelledOrders?: boolean }
+  ): Promise<OrderItem[]> {
+    const orders = await this.findByTableSession(tableSessionId);
+    const items: OrderItem[] = [];
+    for (const order of orders) {
+      if (!options?.includeCancelledOrders && order.status === OrderStatus.CANCELLED) continue;
+      const snap = await this.itemsCollection.where('order_id', '==', order.id).get();
+      snap.docs.forEach((doc) => {
+        items.push({ id: doc.id, ...doc.data() } as OrderItem);
+      });
+    }
+    return items;
+  }
+
+  async areAllSessionItemsPaid(tableSessionId: string): Promise<boolean> {
+    const items = await this.findAllItemsBySession(tableSessionId);
+    if (items.length === 0) return false;
+    return items.every((i) => i.payment_status === PaymentStatus.PAID);
+  }
+
+  async hasSessionPendingOrPreparingItems(tableSessionId: string): Promise<boolean> {
+    const items = await this.findAllItemsBySession(tableSessionId);
+    const kitchenPending = new Set(['pending', 'confirmed', 'preparing']);
+    return items.some(
+      (i) => i.status !== 'cancelled' && kitchenPending.has(i.status)
+    );
+  }
+
+  async areAllSessionItemsCancelled(tableSessionId: string): Promise<boolean> {
+    const items = await this.findAllItemsBySession(tableSessionId, {
+      includeCancelledOrders: true,
+    });
+    return items.length > 0 && items.every((i) => i.status === 'cancelled');
+  }
+
+  async findUnpaidItemsForBill(
+    tableSessionId: string
+  ): Promise<
+    Array<
+      OrderItem & {
+        food_name?: string;
+        table_session_id?: string;
+        table_number?: string;
+        table_id?: string;
+      }
+    >
+  > {
+    const orders = await this.findByTableSession(tableSessionId);
+    const lines: Array<
+      OrderItem & {
+        food_name?: string;
+        table_session_id?: string;
+        table_number?: string;
+        table_id?: string;
+      }
+    > = [];
+
+    for (const order of orders) {
+      if (order.status === OrderStatus.CANCELLED) continue;
+      const snap = await this.itemsCollection.where('order_id', '==', order.id).get();
+      for (const doc of snap.docs) {
+        const item = { id: doc.id, ...doc.data() } as OrderItem;
+        if (item.status === 'cancelled') continue;
+        if (item.payment_status === PaymentStatus.PAID) continue;
+        let foodName: string | undefined;
+        if (item.food_id) {
+          const food = await this.getFoodSummary(item.food_id);
+          foodName = food?.name;
+        }
+        lines.push({
+          ...item,
+          food_name: foodName,
+          table_session_id: order.table_session_id,
+          table_number: order.table_number,
+        });
+      }
+    }
+    return lines;
+  }
+
+  async markItemsPaid(itemIds: string[], paymentMethod?: string): Promise<void> {
+    if (itemIds.length === 0) return;
+    const now = new Date();
+    const batch = db.batch();
+    for (const itemId of itemIds) {
+      const update: Record<string, unknown> = {
+        payment_status: PaymentStatus.PAID,
+        paid_at: now,
+        updated_at: now,
+      };
+      if (paymentMethod) update.payment_method = paymentMethod;
+      batch.update(this.itemsCollection.doc(itemId), update);
+    }
+    await batch.commit();
+  }
+
+  async countSessionPendingKitchenItems(tableSessionId: string): Promise<number> {
+    const items = await this.findAllItemsBySession(tableSessionId);
+    const kitchenPending = new Set(['pending', 'confirmed', 'preparing']);
+    return items.filter(
+      (i) => i.status !== 'cancelled' && kitchenPending.has(i.status)
+    ).length;
+  }
+
+  async getSessionUnpaidTotal(tableSessionId: string): Promise<number> {
+    const items = await this.findAllItemsBySession(tableSessionId);
+    let total = 0;
+    for (const item of items) {
+      if (item.payment_status === PaymentStatus.PAID) continue;
+      if (item.status === 'cancelled') continue;
+      total += this.normalizeVndAmount(item.subtotal || item.unit_price * item.quantity);
+    }
+    return total;
+  }
+
+  async findPublicOrdersWithItems(tableSessionId: string): Promise<any[]> {
+    const orders = await this.findByTableSession(tableSessionId);
+    const active = orders.filter((o) => o.status !== OrderStatus.CANCELLED);
+
+    return Promise.all(
+      active.map(async (order) => {
+        const itemsSnap = await this.itemsCollection.where('order_id', '==', order.id).get();
+        const items = await Promise.all(
+          itemsSnap.docs.map(async (doc) => {
+            const itemData = doc.data() as OrderItem;
+            const food = itemData.food_id
+              ? await this.getFoodSummary(itemData.food_id)
+              : null;
+            return {
+              ...itemData,
+              id: doc.id,
+              food,
+            };
+          })
+        );
+        const visibleItems = items.filter(
+          (i) => i.status !== 'cancelled' && i.payment_status !== PaymentStatus.PAID
+        );
+        if (visibleItems.length === 0) return null;
+        return { ...order, items: visibleItems };
+      })
+    ).then((rows) => rows.filter(Boolean));
+  }
+
+  async requestPaymentForOrders(
+    orderIds: string[],
+    paymentMethod: 'qr' | 'cash' | 'card' | 'e_wallet'
+  ): Promise<Order[]> {
+    const results: Order[] = [];
+    for (const id of orderIds) {
+      const order = await this.requestPayment(id, paymentMethod);
+      results.push(order);
+    }
+    return results;
   }
 
   /**
@@ -259,11 +549,25 @@ export class OrderRepository implements IOrderRepository {
   }
 
   async confirmPayment(id: string): Promise<Order> {
+    const now = new Date();
     await this.collection.doc(id).update({
       payment_status: PaymentStatus.PAID,
-      paid_at: new Date(),
-      updated_at: new Date(),
+      paid_at: now,
+      updated_at: now,
     });
+
+    const itemsSnapshot = await this.itemsCollection.where('order_id', '==', id).get();
+    if (!itemsSnapshot.empty) {
+      const batch = db.batch();
+      itemsSnapshot.docs.forEach((doc) => {
+        batch.update(doc.ref, {
+          payment_status: PaymentStatus.PAID,
+          paid_at: now,
+          updated_at: now,
+        });
+      });
+      await batch.commit();
+    }
 
     const updated = await this.findById(id);
     if (!updated) throw new Error('Order not found after payment confirm');

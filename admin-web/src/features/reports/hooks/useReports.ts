@@ -15,5 +15,7 @@ export function useReportsAnalytics(params: ReportsQueryParams) {
     queryFn: () => reportsApi.getAnalytics(params),
     enabled,
     refetchOnWindowFocus: true,
+    staleTime: 0,
+    refetchInterval: params.period === 'today' ? 15_000 : false,
   });
 }

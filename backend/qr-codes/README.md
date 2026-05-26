@@ -2,8 +2,8 @@
 
 ## Thông tin
 - **Tổng số bàn**: 20
-- **Web Base URL**: http://192.168.1.2:8081
-- **Ngày tạo**: 14:36:05 25/5/2026
+- **Web Base URL**: http://192.168.1.3:8081
+- **Ngày tạo**: 07:23:40 26/5/2026
 
 ## Danh sách bàn
 - **G01** - Sân vườn (4 chỗ)

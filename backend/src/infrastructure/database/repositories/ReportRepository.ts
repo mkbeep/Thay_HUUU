@@ -18,12 +18,10 @@ export class ReportRepository {
    * Items: embedded `items[]` on order doc, else loaded from order_item collection.
    */
   async findOrdersInRange(range: DateRange): Promise<ReportOrder[]> {
-    const snapshot = await this.ordersCollection
-      .where('payment_status', '==', 'paid')
-      .get();
+    const snapshot = await this.ordersCollection.get();
     const rawOrders: Array<{
       id: string;
-      created_at: Date;
+      created_at?: Date;
       status?: string;
       payment_status?: string;
       embeddedItems?: ReportOrderItem[];
@@ -34,13 +32,13 @@ export class ReportRepository {
     for (const doc of snapshot.docs) {
       const data = doc.data();
       const paymentStatus = String(data.payment_status || '');
-      const reportDate = paymentStatus === 'paid'
-        ? toDate(data.paid_at || data.created_at)
-        : toDate(data.created_at);
-      if (reportDate < range.start || reportDate > range.end) continue;
+      const reportDate = paymentStatus === 'paid' ? toDate(data.paid_at || data.created_at) : undefined;
 
       const embedded = this.parseEmbeddedItems(data.items);
       if (embedded.length > 0) {
+        if (paymentStatus !== 'paid' || !reportDate || reportDate < range.start || reportDate > range.end) {
+          continue;
+        }
         rawOrders.push({
           id: doc.id,
           created_at: reportDate,
@@ -61,13 +59,42 @@ export class ReportRepository {
 
     const itemsByOrderId = await this.loadOrderItemsBatch(needsSubcollection);
 
-    return rawOrders.map((o) => ({
-      id: o.id,
-      created_at: o.created_at,
-      status: o.status,
-      payment_status: o.payment_status,
-      items: o.embeddedItems ?? itemsByOrderId.get(o.id) ?? [],
-    }));
+    const rows: ReportOrder[] = [];
+    for (const o of rawOrders) {
+      const items = o.embeddedItems ?? itemsByOrderId.get(o.id) ?? [];
+      if (o.payment_status === 'paid' && o.created_at) {
+        const reportItems = items.filter((item) => item.payment_status !== 'unpaid');
+        if (reportItems.length > 0) {
+          rows.push({
+            id: o.id,
+            created_at: o.created_at,
+            status: o.status,
+            payment_status: o.payment_status,
+            items: reportItems,
+          });
+        }
+        continue;
+      }
+
+      const paidItems = items.filter((item) => {
+        if (item.payment_status !== 'paid' || !item.paid_at) return false;
+        return item.paid_at >= range.start && item.paid_at <= range.end;
+      });
+      const reportDate = paidItems
+        .map((item) => item.paid_at!)
+        .sort((a, b) => b.getTime() - a.getTime())[0];
+      if (!reportDate) continue;
+
+      rows.push({
+        id: o.id,
+        created_at: reportDate,
+        status: o.status,
+        payment_status: 'paid',
+        items: paidItems,
+      });
+    }
+
+    return rows;
   }
 
   async getFoodNamesByIds(ids: string[]): Promise<Map<string, string>> {
@@ -122,6 +149,8 @@ export class ReportRepository {
           food_id: String(data.food_id || ''),
           quantity: Number(data.quantity || 0),
           unit_price: Number(data.unit_price || 0),
+          payment_status: String(data.payment_status || ''),
+          paid_at: data.paid_at ? toDate(data.paid_at) : undefined,
         };
 
         if (!result.has(orderId)) result.set(orderId, []);

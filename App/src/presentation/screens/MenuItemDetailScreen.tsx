@@ -131,9 +131,9 @@ export default function MenuItemDetailScreen({
     // Thêm từng món với số lượng
     for (let i = 0; i < quantity; i++) {
       addItem({
-        id: `${item.id}_${Date.now()}_${i}`, // Unique ID cho mỗi món
+        id: item.id,
         name: item.name,
-        price: calculateTotal() / quantity, // Giá cho 1 món (bao gồm topping)
+        price: calculateTotal() / quantity,
         priceDisplay: formatCurrency(calculateTotal() / quantity),
         image: item.image,
         category: item.category,

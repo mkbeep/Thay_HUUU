@@ -18,6 +18,7 @@ export const config = {
   // Firebase
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || '',
+    serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
     privateKey: process.env.FIREBASE_PRIVATE_KEY || '',
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
     databaseUrl: process.env.FIREBASE_DATABASE_URL || '',
@@ -73,12 +74,15 @@ export const config = {
 export const validateEnv = (): void => {
   const required = [
     'FIREBASE_PROJECT_ID',
-    'FIREBASE_PRIVATE_KEY',
     'FIREBASE_CLIENT_EMAIL',
     'JWT_SECRET',
   ];
 
   const missing = required.filter((key) => !process.env[key]);
+
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT_PATH && !process.env.FIREBASE_PRIVATE_KEY) {
+    missing.push('FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_PRIVATE_KEY');
+  }
 
   if (missing.length > 0) {
     throw new Error(

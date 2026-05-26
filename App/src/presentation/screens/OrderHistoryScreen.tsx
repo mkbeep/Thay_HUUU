@@ -38,15 +38,13 @@ export default function OrderHistoryScreen({
   onSupport,
   tableNumber = 12,
 }: OrderHistoryScreenProps) {
-  const { orders, currentOrder, cancelCustomerOrder } = useOrder();
+  const { orders, currentOrder, cancelCustomerOrder, hasUnpaidServedOrders } = useOrder();
   const [showNotification, setShowNotification] = useState(true);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
-  const selectedOrder =
-    orders.find((order) => order.id === selectedOrderId) ||
-    currentOrder ||
-    orders.find((order) => order.status !== 'served' && order.status !== 'cancelled') ||
-    orders[0];
+  const expandedOrder = expandedItemId
+    ? orders.find((order) => order.id === expandedItemId)
+    : null;
 
   const getStatusProgress = (status: OrderStatus): number => {
     if (status === 'cancelled') return -1;
@@ -148,11 +146,16 @@ export default function OrderHistoryScreen({
           isSelected && styles.orderCardSelected,
         ]}
         activeOpacity={0.85}
-        onPress={() => setSelectedOrderId(order.id)}
+        onPress={() =>
+          setExpandedItemId((prev) => (prev === order.id ? null : order.id))
+        }
       >
         <View style={styles.orderCardContent}>
           <Image
-            source={order.items[0]?.image}
+            source={
+              order.items[0]?.image ||
+              { uri: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400' }
+            }
             style={[
               styles.orderImage,
               isCompleted && styles.orderImageCompleted,
@@ -211,6 +214,38 @@ export default function OrderHistoryScreen({
             </View>
           </View>
         </View>
+        {isSelected && (
+          <View style={styles.inlineStepper}>
+            {renderProgressStepper(order.status)}
+            {(order.status === 'pending' || order.status === 'confirmed') && (
+              <TouchableOpacity
+                style={styles.cancelOrderButton}
+                onPress={() =>
+                  Alert.alert(
+                    'Hủy món?',
+                    'Chỉ hủy được trước khi bếp bắt đầu nấu.',
+                    [
+                      { text: 'Không', style: 'cancel' },
+                      {
+                        text: 'Hủy',
+                        style: 'destructive',
+                        onPress: async () => {
+                          const ok = await cancelCustomerOrder(order.id);
+                          if (!ok) {
+                            Alert.alert('Không thể hủy', 'Món có thể đã vào bếp.');
+                          }
+                        },
+                      },
+                    ]
+                  )
+                }
+              >
+                <Ionicons name="close-circle-outline" size={18} color="#B91C1C" />
+                <Text style={styles.cancelOrderButtonText}>Hủy món (trước khi nấu)</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -260,56 +295,6 @@ export default function OrderHistoryScreen({
           </View>
         )}
 
-        {/* Current Order Status */}
-        {selectedOrder && (
-          <View style={styles.currentOrderSection}>
-            <Text style={styles.currentOrderLabel}>Theo dõi món</Text>
-            <View style={styles.currentOrderTitleRow}>
-              <Text style={styles.currentOrderNumber} numberOfLines={1}>
-                {selectedOrder.items[0]?.name || `#${selectedOrder.orderNumber}`}
-              </Text>
-              <View style={styles.statusChip}>
-                <Text style={styles.statusChipText} numberOfLines={1}>
-                  {STATUS_CONFIG[selectedOrder.status]?.label ?? '—'}
-                </Text>
-              </View>
-            </View>
-
-            {renderProgressStepper(selectedOrder.status)}
-
-            {(selectedOrder.status === 'pending' || selectedOrder.status === 'confirmed') && (
-              <TouchableOpacity
-                style={styles.cancelOrderButton}
-                onPress={() =>
-                  Alert.alert(
-                    'Hủy đơn hàng?',
-                    'Chỉ hủy được trước khi bếp bắt đầu nấu. Sau khi hủy, nhà hàng sẽ không chuẩn bị món này.',
-                    [
-                      { text: 'Không', style: 'cancel' },
-                      {
-                        text: 'Hủy đơn',
-                        style: 'destructive',
-                        onPress: async () => {
-                          const ok = await cancelCustomerOrder(selectedOrder.id);
-                          Alert.alert(
-                            ok ? 'Đã hủy đơn' : 'Không thể hủy',
-                            ok
-                              ? 'Đơn của bạn đã được hủy.'
-                              : 'Đơn có thể đã vào bếp hoặc có lỗi kết nối. Vui lòng gọi nhân viên.'
-                          );
-                        },
-                      },
-                    ]
-                  )
-                }
-              >
-                <Ionicons name="close-circle-outline" size={20} color="#B91C1C" />
-                <Text style={styles.cancelOrderButtonText}>Hủy đơn (trước khi nấu)</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
         {/* Order History */}
         <View style={styles.historySection}>
           <Text style={styles.historyTitle}>Lịch sử đơn hàng tại bàn</Text>
@@ -320,7 +305,7 @@ export default function OrderHistoryScreen({
                 renderOrderCard(
                   order,
                   index === 0 && order.status !== 'served',
-                  selectedOrder?.id === order.id
+                  expandedItemId === order.id
                 )
               )
             ) : (
@@ -349,8 +334,8 @@ export default function OrderHistoryScreen({
           </TouchableOpacity>
         </View>
 
-        {/* Payment Button */}
-        {orders.some((order) => order.status === 'served') && onPayment && (
+        {/* Payment — chỉ hiện khi còn món đã phục vụ chưa thanh toán */}
+        {hasUnpaidServedOrders() && onPayment && (
           <TouchableOpacity
             style={styles.paymentCard}
             onPress={onPayment}
@@ -594,6 +579,12 @@ const styles = StyleSheet.create({
   orderCardSelected: {
     borderWidth: 2,
     borderColor: '#AD2C00',
+  },
+  inlineStepper: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F5F4',
   },
   orderCardContent: {
     flexDirection: 'row',

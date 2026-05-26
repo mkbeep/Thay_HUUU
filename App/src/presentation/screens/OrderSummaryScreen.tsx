@@ -25,13 +25,19 @@ export default function OrderSummaryScreen({
   tableNumber = 12,
 }: OrderSummaryScreenProps) {
   const insets = useSafeAreaInsets();
-  const { orders, hasPendingPaymentConfirmation, isTableFullyPaid } = useOrder();
+  const {
+    orders,
+    hasPendingPaymentConfirmation,
+    hasUnpaidServedOrders,
+    isTableFullyPaid,
+  } = useOrder();
 
-  // Lấy tất cả đơn đã phục vụ
+  const unpaidServedOrders = orders.filter(
+    (order) => order.status === 'served' && order.paymentStatus === 'unpaid'
+  );
   const servedOrders = orders.filter((order) => order.status === 'served');
 
-  // Tính tổng từ order.total (đã bao gồm thuế khi tạo order)
-  const total = servedOrders.reduce((sum, order) => sum + order.total, 0);
+  const total = unpaidServedOrders.reduce((sum, order) => sum + order.total, 0);
   
   // Tính ngược lại subtotal và tax từ total
   // total = subtotal + tax
@@ -134,14 +140,18 @@ export default function OrderSummaryScreen({
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Chi tiết đơn hàng</Text>
           <Text style={styles.sectionCount}>
-            {servedOrders.length} Đơn hàng
+            {unpaidServedOrders.length > 0
+              ? `${unpaidServedOrders.length} chưa thanh toán`
+              : isTableFullyPaid()
+              ? 'Đã thanh toán xong'
+              : `${servedOrders.length} đơn`}
           </Text>
         </View>
 
         {/* Orders List */}
         <View style={styles.ordersList}>
-          {servedOrders.length > 0 ? (
-            servedOrders.map((order, index) => (
+          {unpaidServedOrders.length > 0 ? (
+            unpaidServedOrders.map((order, index) => (
               <View
                 key={order.id}
                 style={[
@@ -166,7 +176,7 @@ export default function OrderSummaryScreen({
                     </View>
                     <View>
                       <Text style={styles.orderNumber}>
-                        Đơn hàng #{servedOrders.length - index}
+                        Đơn hàng #{unpaidServedOrders.length - index}
                       </Text>
                       <Text style={styles.orderTime}>
                         Đặt lúc {formatTime(order.createdAt)}
@@ -212,7 +222,7 @@ export default function OrderSummaryScreen({
                 {/* Order Total */}
                 <View style={styles.orderFooter}>
                   <Text style={styles.orderFooterLabel}>
-                    Tổng đơn #{servedOrders.length - index}
+                    Tổng đơn #{unpaidServedOrders.length - index}
                   </Text>
                   <Text style={styles.orderFooterValue}>
                     {formatCurrency(order.total)}
@@ -222,10 +232,24 @@ export default function OrderSummaryScreen({
             ))
           ) : (
             <View style={styles.emptyState}>
-              <Ionicons name="receipt-outline" size={64} color="#D4D4D4" />
-              <Text style={styles.emptyStateText}>Chưa có đơn hàng nào</Text>
+              <Ionicons
+                name={isTableFullyPaid() ? 'checkmark-circle' : 'receipt-outline'}
+                size={64}
+                color={isTableFullyPaid() ? '#006A35' : '#D4D4D4'}
+              />
+              <Text style={styles.emptyStateText}>
+                {isTableFullyPaid()
+                  ? 'Đã thanh toán xong'
+                  : hasPendingPaymentConfirmation()
+                  ? 'Đang chờ nhân viên xác nhận'
+                  : 'Chưa có đơn cần thanh toán'}
+              </Text>
               <Text style={styles.emptyStateSubtext}>
-                Các đơn đã phục vụ sẽ hiển thị ở đây
+                {isTableFullyPaid()
+                  ? 'Các món đã thanh toán không hiển thị ở đây nữa.'
+                  : hasPendingPaymentConfirmation()
+                  ? 'Vui lòng chờ thu ngân xác nhận đã nhận tiền.'
+                  : 'Các đơn đã phục vụ và chưa trả tiền sẽ hiển thị ở đây'}
               </Text>
             </View>
           )}
@@ -234,8 +258,8 @@ export default function OrderSummaryScreen({
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      {/* Bottom Payment Action */}
-      {servedOrders.length > 0 && (
+      {/* Bottom Payment Action — chỉ khi còn đơn chưa thanh toán */}
+      {hasUnpaidServedOrders() && (
         <View style={[styles.bottomAction, { paddingBottom: Math.max(insets.bottom + 16, 28) }]}>
           <View style={styles.bottomContent}>
             <View style={styles.bottomSummary}>

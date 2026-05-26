@@ -46,27 +46,23 @@ export default function ReportsPage() {
       window.setTimeout(() => void refetch(), 500);
     };
 
-    const handleOrderUpdated = (order: { payment_status?: string }) => {
-      if (order?.payment_status === 'paid') {
-        refetchReports();
-      }
-    };
-
-    const handleOrderStatusChanged = ({ order }: { order?: { payment_status?: string } }) => {
-      if (order?.payment_status === 'paid') {
-        refetchReports();
-      }
-    };
-
-    on('order:updated', handleOrderUpdated);
-    on('order:status_changed', handleOrderStatusChanged);
+    on('order:created', refetchReports);
+    on('order:updated', refetchReports);
+    on('order:status_changed', refetchReports);
+    on('order:item_payment_updated', refetchReports);
+    on('payment:requested', refetchReports);
+    on('payment:confirmed', refetchReports);
     on('report:updated', refetchReports);
     on('connect', refetchReports);
     const unsubscribeLocal = subscribeReportUpdated(refetchReports);
 
     return () => {
-      off('order:updated', handleOrderUpdated);
-      off('order:status_changed', handleOrderStatusChanged);
+      off('order:created', refetchReports);
+      off('order:updated', refetchReports);
+      off('order:status_changed', refetchReports);
+      off('order:item_payment_updated', refetchReports);
+      off('payment:requested', refetchReports);
+      off('payment:confirmed', refetchReports);
       off('report:updated', refetchReports);
       off('connect', refetchReports);
       unsubscribeLocal();

@@ -13,11 +13,12 @@ import { PaymentStatus } from '../../domain/entities/Order';
 import { TableStatus } from '../../domain/entities/Table';
 import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 import { TableRepository } from '../../infrastructure/database/repositories/TableRepository';
+import { getSessionAutoCloseService } from '../../application/services/SessionAutoCloseService';
 
 export class OrderController {
   private orderRepository: OrderRepository;
   private notificationService: NotificationService;
-  private readonly operationRoles = ['staff', 'manager', 'admin', 'chef'] as const;
+  private readonly operationRoles = ['staff', 'manager', 'admin', 'chef', 'cashier'] as const;
 
   constructor() {
     this.orderRepository = new OrderRepository();
@@ -40,6 +41,28 @@ export class OrderController {
     );
   }
 
+  private async markSessionBilling(tableSessionId?: string): Promise<void> {
+    if (!tableSessionId) return;
+
+    const tableRepository = new TableRepository();
+    const session = await tableRepository.findSessionById(tableSessionId);
+    if (!session?.is_active) return;
+
+    await tableRepository.updateStatus(session.table_id, TableStatus.RESERVED);
+
+    try {
+      const socketManager = SocketManager.getInstance();
+      socketManager.notifyTableStatusChanged(session.table_id, TableStatus.RESERVED);
+      socketManager.notifyTableUpdated(session.table_id);
+    } catch (error) {
+      console.error('WebSocket emit error (table billing):', error);
+    }
+  }
+
+  private async scheduleAutoCloseIfFullyPaid(tableSessionId?: string): Promise<void> {
+    await getSessionAutoCloseService().evaluateAutoClose(tableSessionId);
+  }
+
   /**
    * GET /api/v1/orders
    */
@@ -47,7 +70,7 @@ export class OrderController {
     try {
       const { status, order_type, table_session_id, from_date, to_date } = req.query;
 
-      const orders = await this.orderRepository.findAll({
+      const orders = await this.orderRepository.findAllWithItems({
         status: status as any,
         order_type: order_type as any,
         table_session_id: table_session_id as string,
@@ -80,9 +103,9 @@ export class OrderController {
         return;
       }
 
-      const orders = await this.orderRepository.findAll({
-        table_session_id: table_session_id as string,
-      });
+      const orders = await this.orderRepository.findPublicOrdersWithItems(
+        table_session_id as string
+      );
 
       res.status(200).json({
         success: true,
@@ -126,6 +149,12 @@ export class OrderController {
       if (!tableNumber && req.body.table_session_id) {
         const tableRepository = new TableRepository();
         const session = await tableRepository.findSessionById(req.body.table_session_id);
+        if (!session?.is_active) {
+          throw new AppError('Phiên bàn đã kết thúc. Vui lòng quét lại QR hoặc gọi nhân viên.', 409);
+        }
+        if (await this.orderRepository.hasPendingPaymentInSession(req.body.table_session_id)) {
+          throw new AppError('Bàn đang chờ xác nhận thanh toán. Vui lòng gọi nhân viên nếu muốn gọi thêm món.', 409);
+        }
         if (session?.table_id) {
           const table = await tableRepository.findById(session.table_id);
           tableNumber = table?.table_number;
@@ -149,10 +178,17 @@ export class OrderController {
         priority: NotificationPriority.HIGH,
       });
 
+      const orderWithItems = await this.orderRepository.findByIdWithItems(order.id);
+
+      if (req.body.table_session_id) {
+        await getSessionAutoCloseService().onSessionActivity(req.body.table_session_id);
+      }
+
       // 🔥 Emit WebSocket event
       try {
         const socketManager = SocketManager.getInstance();
-        socketManager.notifyOrderCreated(order);
+        socketManager.notifyOrderCreated(orderWithItems || order);
+        socketManager.notifyReportsUpdated({ reason: 'order_created', order_id: order.id });
       } catch (error) {
         console.error('WebSocket emit error:', error);
       }
@@ -160,7 +196,107 @@ export class OrderController {
       res.status(201).json({
         success: true,
         message: 'Tạo đơn hàng thành công',
-        data: order,
+        data: orderWithItems || order,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * PATCH /api/v1/orders/items/:itemId/status
+   */
+  updateItemStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { itemId } = req.params;
+      const { status } = req.body;
+      let item;
+      try {
+        item = await this.orderRepository.updateItemStatus(itemId, status);
+      } catch (e: any) {
+        if (e?.message === 'ORDER_ITEM_NOT_FOUND') {
+          throw new NotFoundError('Món không tồn tại');
+        }
+        throw e;
+      }
+
+      try {
+        const socketManager = SocketManager.getInstance();
+        socketManager.notifyOrderItemStatusUpdated(itemId, status, { ...item });
+        const orderWithItems = await this.orderRepository.findByIdWithItems(item.order_id);
+        if (orderWithItems) socketManager.notifyOrderUpdated(orderWithItems);
+      } catch (error) {
+        console.error('WebSocket emit error:', error);
+      }
+
+      if (item.table_session_id) {
+        try {
+          await this.scheduleAutoCloseIfFullyPaid(item.table_session_id);
+        } catch (error) {
+          console.error('❌ Error evaluating auto-close after item status:', error);
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Cập nhật trạng thái món thành công',
+        data: item,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * PATCH /api/v1/orders/items/:itemId/payment
+   */
+  updateItemPayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { itemId } = req.params;
+      const paymentMethod = req.body.payment_method as
+        | 'qr'
+        | 'cash'
+        | 'card'
+        | 'e_wallet'
+        | undefined;
+
+      let item;
+      try {
+        item = await this.orderRepository.updateItemPayment(itemId, paymentMethod);
+      } catch (e: any) {
+        if (e?.message === 'ORDER_ITEM_NOT_FOUND') {
+          throw new NotFoundError('Món không tồn tại');
+        }
+        throw e;
+      }
+
+      const order = await this.orderRepository.findById(item.order_id);
+
+      try {
+        const socketManager = SocketManager.getInstance();
+        if (order) socketManager.notifyOrderUpdated(order);
+        socketManager.notifyOrderItemPaymentUpdated(itemId, { ...item });
+      } catch (error) {
+        console.error('WebSocket emit error:', error);
+      }
+
+      if (item.table_session_id) {
+        await this.scheduleAutoCloseIfFullyPaid(item.table_session_id);
+      }
+
+      try {
+        SocketManager.getInstance().notifyReportsUpdated({
+          reason: 'item_payment_updated',
+          item_id: itemId,
+        });
+      } catch {
+        /* ignore */
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã đánh dấu món đã thanh toán',
+        data: item,
       });
     } catch (error) {
       next(error);
@@ -197,10 +333,82 @@ export class OrderController {
         console.error('WebSocket emit error:', error);
       }
 
+      if (order.table_session_id) {
+        try {
+          await this.scheduleAutoCloseIfFullyPaid(order.table_session_id);
+        } catch (error) {
+          console.error('❌ Error evaluating auto-close after order status:', error);
+        }
+      }
+
       res.status(200).json({
         success: true,
         message: 'Cập nhật trạng thái thành công',
         data: order,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * POST /api/v1/orders/request-payment-batch
+   * Thanh toán một phần — chỉ các order id được chọn
+   */
+  requestPaymentBatch = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { order_ids, payment_method = 'qr' } = req.body as {
+        order_ids?: string[];
+        payment_method?: 'qr' | 'cash' | 'card' | 'e_wallet';
+      };
+      if (!Array.isArray(order_ids) || order_ids.length === 0) {
+        res.status(400).json({ success: false, message: 'order_ids bắt buộc' });
+        return;
+      }
+
+      const orders = await this.orderRepository.requestPaymentForOrders(
+        order_ids,
+        payment_method
+      );
+
+      const methodLabel: Record<string, string> = {
+        cash: 'tiền mặt tại bàn',
+        qr: 'mã QR',
+        card: 'thẻ',
+        e_wallet: 'ví điện tử',
+      };
+
+      for (const order of orders) {
+        await this.markSessionBilling(order.table_session_id);
+
+        await this.notifyOperationRoles({
+          type: NotificationType.PAYMENT_REQUEST,
+          title: 'Yêu cầu thanh toán',
+          message: `Đơn ${order.order_number} yêu cầu thanh toán ${methodLabel[payment_method] || payment_method} - ${Number(order.total_amount || 0).toLocaleString('vi-VN')}đ`,
+          data: {
+            order_id: order.id,
+            payment_method,
+            total_amount: order.total_amount,
+            table_session_id: order.table_session_id,
+          },
+          priority: NotificationPriority.HIGH,
+        });
+
+        if (order.table_session_id) {
+          try {
+            const socketManager = SocketManager.getInstance();
+            socketManager.notifyOrderUpdated(order);
+            socketManager.notifyPaymentRequested(order);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã gửi yêu cầu thanh toán',
+        data: orders,
       });
     } catch (error) {
       next(error);
@@ -217,19 +425,7 @@ export class OrderController {
       const paymentMethod = req.body.payment_method || 'qr';
       const order = await this.orderRepository.requestPayment(id, paymentMethod);
 
-      if (order.table_session_id) {
-        const tableRepository = new TableRepository();
-        const session = await tableRepository.findSessionById(order.table_session_id);
-        if (session?.is_active) {
-          await tableRepository.updateStatus(session.table_id, TableStatus.RESERVED);
-          try {
-            const socketManager = SocketManager.getInstance();
-            socketManager.notifyTableUpdated(session.table_id);
-          } catch (error) {
-            console.error('WebSocket emit error (table billing):', error);
-          }
-        }
-      }
+      await this.markSessionBilling(order.table_session_id);
 
       const methodLabel: Record<string, string> = {
         cash: 'tiền mặt tại bàn',
@@ -254,6 +450,7 @@ export class OrderController {
       try {
         const socketManager = SocketManager.getInstance();
         socketManager.notifyOrderUpdated(order);
+        socketManager.notifyPaymentRequested(order);
       } catch (error) {
         console.error('WebSocket emit error (request-payment):', error);
       }
@@ -303,6 +500,14 @@ export class OrderController {
         console.error('WebSocket emit error (cancel):', error);
       }
 
+      if (order.table_session_id) {
+        try {
+          await this.scheduleAutoCloseIfFullyPaid(order.table_session_id);
+        } catch (error) {
+          console.error('❌ Error evaluating auto-close after cancel:', error);
+        }
+      }
+
       res.status(200).json({
         success: true,
         message: 'Đã hủy đơn hàng',
@@ -321,11 +526,20 @@ export class OrderController {
     try {
       const { id } = req.params;
       const order = await this.orderRepository.confirmPayment(id);
+      const orderWithItems = await this.orderRepository.findByIdWithItems(id);
 
       // 🔥 Emit WebSocket event trước khi xóa
       try {
         const socketManager = SocketManager.getInstance();
-        socketManager.notifyOrderUpdated(order);
+        socketManager.notifyOrderUpdated(orderWithItems || order);
+        socketManager.notifyPaymentConfirmed(orderWithItems || order);
+        for (const item of orderWithItems?.items || []) {
+          socketManager.notifyOrderItemPaymentUpdated(item.id, {
+            ...item,
+            order_id: order.id,
+            table_session_id: order.table_session_id,
+          });
+        }
         socketManager.notifyReportsUpdated({
           reason: 'payment_confirmed',
           order_id: order.id,
@@ -336,38 +550,10 @@ export class OrderController {
         console.error('WebSocket emit error:', error);
       }
 
-      // ✅ Kiểm tra xem còn order nào chưa thanh toán của session này không
-      if (order.table_session_id) {
-        const remainingOrders = await this.orderRepository.findByTableSession(order.table_session_id);
-        const unpaidOrders = remainingOrders.filter(o => 
-          o.id !== order.id && o.payment_status !== 'paid'
-        );
-
-        console.log(`📊 Session ${order.table_session_id}: ${unpaidOrders.length} unpaid orders remaining`);
-
-        // Nếu không còn order nào chưa thanh toán → Cập nhật bàn về available
-        if (unpaidOrders.length === 0) {
-          try {
-            const tableRepository = new TableRepository();
-            const session = await tableRepository.findSessionById(order.table_session_id);
-            
-            if (session && session.is_active) {
-              // End session
-              await tableRepository.endSession(order.table_session_id);
-              
-              // Update table status to available
-              await tableRepository.updateStatus(session.table_id, TableStatus.AVAILABLE);
-              
-              console.log(`✅ Table ${session.table_id} set to available - all orders paid`);
-              
-              // Notify table status changed
-              const socketManager = SocketManager.getInstance();
-              socketManager.notifyTableUpdated(session.table_id);
-            }
-          } catch (error) {
-            console.error('❌ Error updating table status:', error);
-          }
-        }
+      try {
+        await this.scheduleAutoCloseIfFullyPaid(order.table_session_id);
+      } catch (error) {
+        console.error('❌ Error closing paid session:', error);
       }
 
       res.status(200).json({

@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "seed": "ts-node src/infrastructure/database/seeders/index.ts",
+    "seed:active": "ts-node scripts/seed-active-data.ts",
     "seed:admin": "ts-node scripts/seed-admin.ts",
     "seed:tables": "ts-node scripts/seed-tables.ts",
     "seed:50foods": "ts-node scripts/seed-50-foods.ts",

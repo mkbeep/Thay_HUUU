@@ -2,26 +2,7 @@
  * Script kiểm tra tất cả dữ liệu trong Firebase
  */
 
-import * as admin from 'firebase-admin';
-import * as dotenv from 'dotenv';
-import * as path from 'path';
-
-// Load environment variables
-dotenv.config({ path: path.join(__dirname, '../.env') });
-
-// Initialize Firebase Admin
-const serviceAccount = {
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-};
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-  databaseURL: process.env.FIREBASE_DATABASE_URL,
-});
-
-const db = admin.firestore();
+import { db } from '../src/infrastructure/config/firebase.config';
 
 async function checkAllData() {
   console.log('🔍 Đang kiểm tra dữ liệu Firebase...\n');
@@ -34,27 +15,16 @@ async function checkAllData() {
     
     if (foodsSnapshot.size > 0) {
       const categories: Record<string, number> = {};
-      const vegetarianCount = { total: 0, beverages: 0 };
-      
       foodsSnapshot.docs.forEach(doc => {
         const data = doc.data();
         const category = data.category || 'Unknown';
         categories[category] = (categories[category] || 0) + 1;
-        
-        if (data.is_vegetarian) {
-          vegetarianCount.total++;
-          if (category === 'Đồ uống') {
-            vegetarianCount.beverages++;
-          }
-        }
       });
       
       console.log('   Phân loại:');
       Object.entries(categories).forEach(([cat, count]) => {
         console.log(`      - ${cat}: ${count} món`);
       });
-      console.log(`   Vegetarian: ${vegetarianCount.total} món`);
-      console.log(`   Đồ uống vegetarian: ${vegetarianCount.beverages}/${categories['Đồ uống'] || 0}`);
     }
     console.log('');
 
@@ -108,9 +78,15 @@ async function checkAllData() {
     console.log(`   Tổng số users: ${usersSnapshot.size}`);
     
     if (usersSnapshot.size > 0) {
+      const roleSnapshot = await db.collection('role').get();
+      const roleById = new Map(roleSnapshot.docs.map((doc) => [doc.id, doc.data().role_name || doc.data().name || doc.id]));
+      const userRoleSnapshot = await db.collection('user_role').get();
+      const roleByUserId = new Map(
+        userRoleSnapshot.docs.map((doc) => [doc.data().user_id, roleById.get(doc.data().role_id) || 'unknown'])
+      );
       const roles: Record<string, number> = {};
       usersSnapshot.docs.forEach(doc => {
-        const role = doc.data().role || 'unknown';
+        const role = doc.data().role || roleByUserId.get(doc.id) || 'unknown';
         roles[role] = (roles[role] || 0) + 1;
       });
       
@@ -127,10 +103,38 @@ async function checkAllData() {
     console.log(`   Tổng số thông báo: ${notificationsSnapshot.size}`);
     console.log('');
 
-    // 7. Kiểm tra Inventory
-    console.log('📦 INVENTORY COLLECTION:');
-    const inventorySnapshot = await db.collection('inventory').get();
-    console.log(`   Tổng số items: ${inventorySnapshot.size}`);
+    // 7. Kiểm tra Material Inventory
+    console.log('📦 MATERIAL COLLECTION:');
+    const materialSnapshot = await db.collection('material').get();
+    console.log(`   Tổng số nguyên liệu: ${materialSnapshot.size}`);
+
+    if (materialSnapshot.size > 0) {
+      const materialCategories: Record<string, number> = {};
+      const statusCount: Record<string, number> = {};
+      materialSnapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const category = data.category || 'unknown';
+        const quantity = Number(data.quantity || 0);
+        const minimum = Number(data.minimum || 0);
+        const status = quantity <= 0 ? 'out-of-stock' : quantity <= minimum ? 'low-stock' : 'in-stock';
+        materialCategories[category] = (materialCategories[category] || 0) + 1;
+        statusCount[status] = (statusCount[status] || 0) + 1;
+      });
+
+      console.log('   Phân loại:');
+      Object.entries(materialCategories).forEach(([category, count]) => {
+        console.log(`      - ${category}: ${count} nguyên liệu`);
+      });
+      console.log('   Tồn kho:');
+      Object.entries(statusCount).forEach(([status, count]) => {
+        console.log(`      - ${status}: ${count}`);
+      });
+    }
+
+    const legacyInventorySnapshot = await db.collection('inventory').get();
+    if (legacyInventorySnapshot.size > 0) {
+      console.log(`   ⚠️  Legacy inventory collection còn ${legacyInventorySnapshot.size} docs (API hiện dùng material)`);
+    }
     console.log('');
 
     // Tổng kết
@@ -142,7 +146,7 @@ async function checkAllData() {
     console.log(`   ✅ Support Requests: ${supportSnapshot.size} yêu cầu`);
     console.log(`   ✅ Users: ${usersSnapshot.size} users`);
     console.log(`   ✅ Notifications: ${notificationsSnapshot.size} thông báo`);
-    console.log(`   ✅ Inventory: ${inventorySnapshot.size} items`);
+    console.log(`   ✅ Material: ${materialSnapshot.size} nguyên liệu`);
     console.log('=' .repeat(50));
 
     // Đề xuất

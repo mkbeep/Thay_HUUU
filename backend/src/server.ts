@@ -15,6 +15,9 @@ import { config, validateEnv } from './infrastructure/config/env.config';
 import createRoutes from './presentation/routes';
 import { errorMiddleware } from './presentation/middlewares/errorMiddleware';
 import { SocketManager } from './infrastructure/websocket/SocketManager';
+import { getSessionAutoCloseService } from './application/services/SessionAutoCloseService';
+import { FirestoreRealtimeService } from './application/services/FirestoreRealtimeService';
+import { getCorsOriginCallback } from './infrastructure/config/corsOrigins';
 
 // Validate environment variables
 try {
@@ -31,6 +34,8 @@ const httpServer = createServer(app);
 
 // Initialize WebSocket
 const socketManager = SocketManager.initialize(httpServer);
+getSessionAutoCloseService().start(socketManager);
+new FirestoreRealtimeService().start(socketManager);
 
 // Dynamic API data should not use ETag/304 in admin polling screens
 app.set('etag', false);
@@ -42,33 +47,16 @@ app.use(helmet({
 }));
 
 // CORS — cho phép LAN (192.168.x / 10.x) khi dev để điện thoại mở http://IP:8081 vẫn gọi được API
-const corsStaticOrigins = Array.isArray(config.cors.origin)
-  ? config.cors.origin
-  : [config.cors.origin].filter(Boolean) as string[];
-
-function isLanHttpOrigin(origin: string): boolean {
-  return /^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(
-    origin
-  );
-}
+app.use((_req, res, next) => {
+  if (config.server.env !== 'production') {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      if (corsStaticOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-      if (config.server.env !== 'production' && isLanHttpOrigin(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(null, false);
-    },
+    origin: getCorsOriginCallback(),
     credentials: true,
   })
 );
@@ -151,8 +139,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🌍 Environment: ${config.server.env}`);
   console.log(`📝 API Version: ${config.server.apiVersion}`);
   console.log(`🔗 Local: http://localhost:${PORT}`);
-  console.log(`🔗 Network: http://192.168.1.2:${PORT}`);
-  console.log(`🏥 Health check: http://192.168.1.2:${PORT}/api/${config.server.apiVersion}/health`);
+  console.log(`🔗 Network: http://192.168.1.3:${PORT}`);
+  console.log(`🏥 Health check: http://192.168.1.3:${PORT}/api/${config.server.apiVersion}/health`);
   console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   console.log('='.repeat(50));
 });

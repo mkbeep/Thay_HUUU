@@ -54,7 +54,7 @@ npm install @react-native-async-storage/async-storage
 ### QR Scanner không hoạt động
 - Đảm bảo backend đang chạy: `cd backend && npm run dev`
 - Kiểm tra API_URL trong `.env` file
-- Test API: `curl http://192.168.1.100:3000/api/v1/tables`
+- Test API: `curl http://192.168.1.3:3000/api/v1/tables`
 
 ## 🎯 Next Steps
 

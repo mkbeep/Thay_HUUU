@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { useSearchParams } from 'react-router-dom'
-import { CheckCircle, ChefHat, Clock, CreditCard, MessageSquare, Wifi, WifiOff, XCircle } from 'lucide-react'
+import { ChefHat, Clock, CreditCard, MessageSquare, Wifi, WifiOff, XCircle } from 'lucide-react'
 import { useWebSocket } from '../../../hooks/useWebSocket'
 import { broadcastReportUpdated } from '../../reports/utils/reportRealtime'
 
@@ -13,6 +13,8 @@ interface ApiOrderItem {
   quantity: number
   unit_price?: number
   subtotal?: number
+  status?: KitchenStatus
+  payment_status?: PaymentStatus
   food?: { name?: string } | null
   notes?: string
   special_instructions?: string
@@ -38,6 +40,28 @@ interface ApiDiningTable {
   current_session?: {
     id: string
   }
+}
+
+interface ApiBillLine {
+  order_item_id: string
+  order_id: string
+  food_id: string
+  food_name?: string
+  quantity: number
+  unit_price: number
+  subtotal: number
+}
+
+interface ApiBill {
+  id: string
+  session_id: string
+  table_id?: string
+  table_number?: string
+  status: 'pending' | 'paid' | 'cancelled'
+  payment_method?: ApiOrder['payment_method']
+  items: ApiBillLine[]
+  total: number
+  requested_at?: string | { _seconds: number }
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
@@ -90,11 +114,14 @@ function mergeOrder(prev: ApiOrder, incoming: ApiOrder): ApiOrder {
   const incomingItems = incoming.items
   const keepItems =
     Array.isArray(incomingItems) && incomingItems.length > 0 ? incomingItems : prev.items
+  const itemStatus = keepItems?.[0]?.status as KitchenStatus | undefined
+  const resolvedStatus = itemStatus || incoming.status || prev.status
 
   return {
     ...prev,
     ...incoming,
     items: keepItems,
+    status: resolvedStatus,
     payment_status: incoming.payment_status ?? prev.payment_status,
     notes: incoming.notes ?? prev.notes,
     order_number: incoming.order_number || prev.order_number,
@@ -120,6 +147,17 @@ function normalizeVndAmount(value: unknown): number {
 }
 
 function displayOrderTotal(order: ApiOrder): number {
+  const items = order.items || []
+  if (items.length > 0) {
+    const subtotal = items
+      .filter((it) => it.payment_status !== 'paid')
+      .reduce(
+        (sum, it) =>
+          sum + normalizeVndAmount(it.subtotal ?? (Number(it.unit_price) || 0) * (it.quantity || 1)),
+        0
+      )
+    return Math.round(subtotal * 1.08)
+  }
   const total = Number(order.total_amount || 0)
   if (total > 0) return normalizeVndAmount(total)
 
@@ -130,6 +168,12 @@ function displayOrderTotal(order: ApiOrder): number {
   }, 0)
 
   return subtotal > 0 ? Math.round(subtotal * 1.08) : 0
+}
+
+function hasVisibleUnpaidItems(order: ApiOrder): boolean {
+  const items = order.items || []
+  if (items.length === 0) return order.payment_status !== 'paid'
+  return items.some((item) => item.status !== 'cancelled' && item.payment_status !== 'paid')
 }
 
 function paymentMethodLabel(method?: ApiOrder['payment_method']): string {
@@ -154,10 +198,11 @@ export default function OrdersPageWebSocket() {
   const focusOrderNo = searchParams.get('orderNo')
 
   const [orders, setOrders] = useState<ApiOrder[]>([])
+  const [pendingBills, setPendingBills] = useState<ApiBill[]>([])
   const [tableBySessionId, setTableBySessionId] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
-  const [confirmingPaymentIds, setConfirmingPaymentIds] = useState<Set<string>>(() => new Set())
+  const [confirmingBillIds, setConfirmingBillIds] = useState<Set<string>>(() => new Set())
   const lastScrolledFocusRef = useRef<string | null>(null)
   const { isConnected, on, off } = useWebSocket()
 
@@ -170,7 +215,9 @@ export default function OrdersPageWebSocket() {
       const uniqueById = Array.from(new Map(merged.map((o: ApiOrder) => [o.id, o])).values())
       
       // ✅ TỰ ĐỘNG XÓA CÁC ĐƠN ĐÃ THANH TOÁN
-      const unpaidOrders = uniqueById.filter((o: ApiOrder) => o.payment_status !== 'paid')
+      const unpaidOrders = uniqueById.filter(
+        (o: ApiOrder) => o.payment_status !== 'paid' && hasVisibleUnpaidItems(o)
+      )
       
       if (unpaidOrders.length < uniqueById.length) {
         console.log(`🧹 Admin: Auto-removed ${uniqueById.length - unpaidOrders.length} paid order(s)`)
@@ -196,6 +243,15 @@ export default function OrdersPageWebSocket() {
     }
   }, [])
 
+  const loadPendingBills = useCallback(async () => {
+    try {
+      const res = await client.get('/bills/pending')
+      setPendingBills(res.data?.data || [])
+    } catch (error) {
+      console.error('Error loading pending bills:', error)
+    }
+  }, [])
+
   const loadTableSessionMap = useCallback(async () => {
     try {
       const res = await client.get('/tables')
@@ -211,20 +267,28 @@ export default function OrdersPageWebSocket() {
     }
   }, [])
 
-  const updateOrderOptimistic = useCallback((orderId: string, updates: Partial<ApiOrder>) => {
-    setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, ...updates } : order)))
-  }, [])
+  const primaryItemId = (order: ApiOrder) => order.items?.[0]?.id
 
-  const updateStatus = async (id: string, status: KitchenStatus) => {
+  const updateItemStatus = async (order: ApiOrder, status: KitchenStatus) => {
+    const itemId = primaryItemId(order)
+    if (!itemId) return
     const previousOrders = [...orders]
-    updateOrderOptimistic(id, { status })
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id !== order.id) return o
+        const items = (o.items || []).map((it, idx) =>
+          idx === 0 ? { ...it, status } : it
+        )
+        const nextStatus = (items[0]?.status as KitchenStatus) || status
+        return { ...o, status: nextStatus, items }
+      })
+    )
 
     try {
-      await client.patch(`/orders/${id}/status`, { status })
+      await client.patch(`/orders/items/${itemId}/status`, { status })
     } catch (error) {
-      console.error('Error updating status:', error)
+      console.error('Error updating item status:', error)
       setOrders(previousOrders)
-
       if (axios.isAxiosError(error)) {
         const message = error.response?.data?.message || error.message
         alert(`Không thể cập nhật trạng thái: ${message}`)
@@ -250,30 +314,27 @@ export default function OrdersPageWebSocket() {
     }
   }
 
-  const confirmPayment = async (id: string) => {
-    if (confirmingPaymentIds.has(id)) return
-    setConfirmingPaymentIds((prev) => new Set(prev).add(id))
-
-    // ✅ XÓA NGAY KHỎI UI TRƯỚC (Optimistic UI)
-    setOrders((prev) => prev.filter((o) => o.id !== id))
-    console.log(`🧹 Admin: Removed paid order ${id} from UI (optimistic)`)
+  const confirmBillPayment = async (billId: string) => {
+    if (confirmingBillIds.has(billId)) return
+    setConfirmingBillIds((prev) => new Set(prev).add(billId))
+    setPendingBills((prev) => prev.filter((b) => b.id !== billId))
 
     try {
-      await client.patch(`/orders/${id}/confirm-payment`)
-      console.log(`✅ Payment confirmed on server: ${id}`)
-      broadcastReportUpdated({ reason: 'payment_confirmed', orderId: id })
+      await client.patch(`/bills/${billId}/confirm-payment`)
+      console.log(`✅ Bill payment confirmed: ${billId}`)
+      broadcastReportUpdated({ reason: 'bill_payment_confirmed', billId })
+      await loadOrders(false)
     } catch (error) {
-      console.error('Error confirming payment:', error)
+      console.error('Error confirming bill payment:', error)
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message || error.response?.data?.error || error.message
         : 'Vui lòng thử lại.'
       alert(`Không thể xác nhận thanh toán: ${message}`)
-      // Reload để restore nếu có lỗi
-      await loadOrders(false)
+      await loadPendingBills()
     } finally {
-      setConfirmingPaymentIds((prev) => {
+      setConfirmingBillIds((prev) => {
         const next = new Set(prev)
-        next.delete(id)
+        next.delete(billId)
         return next
       })
     }
@@ -284,7 +345,7 @@ export default function OrdersPageWebSocket() {
 
     const init = async () => {
       if (!mounted) return
-      await Promise.all([loadOrders(true), loadTableSessionMap()])
+      await Promise.all([loadOrders(true), loadTableSessionMap(), loadPendingBills()])
     }
 
     void init()
@@ -292,6 +353,7 @@ export default function OrdersPageWebSocket() {
     const handleOrderCreated = (order: ApiOrder) => {
       if (!mounted || order.status === 'cancelled') return
       console.log('📦 New order received:', order)
+      broadcastReportUpdated({ reason: 'order_created', orderId: order.id })
       setOrders((prev) => {
         if (prev.some((o) => o.id === order.id)) return prev
         return [...prev, order]
@@ -320,6 +382,49 @@ export default function OrdersPageWebSocket() {
       })
     }
 
+    const handleItemStatusUpdated = ({
+      itemId,
+      status,
+      item,
+    }: {
+      itemId: string
+      status: KitchenStatus
+      item?: { order_id?: string }
+    }) => {
+      if (!mounted) return
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id !== item?.order_id && !o.items?.some((it) => it.id === itemId)) return o
+          const items = (o.items || []).map((it) =>
+            it.id === itemId ? { ...it, status } : it
+          )
+          const nextStatus = items[0]?.status || status
+          return { ...o, items, status: nextStatus as KitchenStatus }
+        })
+      )
+    }
+
+    const handleItemPaymentUpdated = ({
+      itemId,
+      item,
+    }: {
+      itemId: string
+      item?: { order_id?: string; payment_status?: PaymentStatus }
+    }) => {
+      if (!mounted) return
+      setOrders((prev) =>
+        prev
+          .map((o) => {
+            if (o.id !== item?.order_id && !o.items?.some((it) => it.id === itemId)) return o
+            const items = (o.items || []).map((it) =>
+              it.id === itemId ? { ...it, payment_status: item?.payment_status || 'paid' } : it
+            )
+            return { ...o, items }
+          })
+          .filter((o) => o.payment_status !== 'paid' && hasVisibleUnpaidItems(o))
+      )
+    }
+
     const handleOrderStatusChanged = ({ order }: { orderId: string; status: string; order: ApiOrder }) => {
       if (!mounted) return
       console.log('✅ Order status changed:', order)
@@ -342,15 +447,36 @@ export default function OrdersPageWebSocket() {
       })
     }
 
-    on('order:created', handleOrderCreated)
-    on('order:updated', handleOrderUpdated)
-    on('order:status_changed', handleOrderStatusChanged)
+    const handleBillCreated = (payload: { bill?: ApiBill }) => {
+      if (!mounted || !payload?.bill || payload.bill.status !== 'pending') return
+      setPendingBills((prev) => {
+        if (prev.some((b) => b.id === payload.bill!.id)) return prev
+        return [payload.bill!, ...prev]
+      })
+    }
+
+    const handleBillConfirmed = (payload: { billId?: string; bill?: ApiBill }) => {
+      if (!mounted) return
+      const id = payload.billId || payload.bill?.id
+      if (id) setPendingBills((prev) => prev.filter((b) => b.id !== id))
+      void loadOrders(false)
+    }
 
     const handleReconnect = () => {
       if (!mounted) return
       console.log('🔄 Reconnected, reloading orders...')
-      void Promise.all([loadOrders(false), loadTableSessionMap()])
+      void Promise.all([loadOrders(false), loadTableSessionMap(), loadPendingBills()])
     }
+
+    on('order:created', handleOrderCreated)
+    on('order:updated', handleOrderUpdated)
+    on('order:status_changed', handleOrderStatusChanged)
+    on('order:item_status_updated', handleItemStatusUpdated)
+    on('order:item_payment_updated', handleItemPaymentUpdated)
+    on('bill:created', handleBillCreated)
+    on('bill:confirmed', handleBillConfirmed)
+    on('payment:requested', handleReconnect)
+    on('payment:confirmed', handleReconnect)
     on('connect', handleReconnect)
 
     return () => {
@@ -358,14 +484,23 @@ export default function OrdersPageWebSocket() {
       off('order:created', handleOrderCreated)
       off('order:updated', handleOrderUpdated)
       off('order:status_changed', handleOrderStatusChanged)
+      off('order:item_status_updated', handleItemStatusUpdated)
+      off('order:item_payment_updated', handleItemPaymentUpdated)
+      off('bill:created', handleBillCreated)
+      off('bill:confirmed', handleBillConfirmed)
+      off('payment:requested', handleReconnect)
+      off('payment:confirmed', handleReconnect)
       off('connect', handleReconnect)
     }
-  }, [loadOrders, loadTableSessionMap, on, off])
+  }, [loadOrders, loadTableSessionMap, loadPendingBills, on, off])
 
   const activeOrders = useMemo(() => orders.filter((o) => o.status !== 'cancelled'), [orders])
 
   const group = useMemo(() => {
-    const by = (status: KitchenStatus) => activeOrders.filter((o) => o.status === status)
+    const effectiveStatus = (o: ApiOrder): KitchenStatus =>
+      (o.items?.[0]?.status as KitchenStatus) || o.status
+    const by = (status: KitchenStatus) =>
+      activeOrders.filter((o) => effectiveStatus(o) === status)
     return {
       pending: by('pending'),
       confirmed: by('confirmed'),
@@ -394,15 +529,21 @@ export default function OrdersPageWebSocket() {
     return () => window.clearTimeout(t)
   }, [resolvedFocusDomId])
 
+  const pendingBillBySession = useMemo(() => {
+    const map: Record<string, ApiBill> = {}
+    pendingBills.forEach((bill) => {
+      map[bill.session_id] = bill
+    })
+    return map
+  }, [pendingBills])
+
   const paymentRequests = useMemo(() => {
-    return group.served
-      .filter((order) => order.payment_status === 'payment_pending_confirmation')
-      .sort((a, b) => {
-        const at = parseFirestoreDate(a.payment_requested_at)?.getTime() || 0
-        const bt = parseFirestoreDate(b.payment_requested_at)?.getTime() || 0
-        return bt - at
-      })
-  }, [group.served])
+    return [...pendingBills].sort((a, b) => {
+      const at = parseFirestoreDate(a.requested_at)?.getTime() || 0
+      const bt = parseFirestoreDate(b.requested_at)?.getTime() || 0
+      return bt - at
+    })
+  }, [pendingBills])
 
   const clearFocusParam = useCallback(() => {
     if (!focusOrderId && !focusOrderNo) return
@@ -547,7 +688,7 @@ export default function OrdersPageWebSocket() {
   return (
     <div className="h-full flex flex-col">
       {paymentRequests.length > 0 && (
-        <aside className="fixed right-6 top-28 z-[70] w-72 rounded-xl border border-amber-200 bg-white shadow-xl pointer-events-auto">
+        <aside className="fixed right-6 top-44 z-[70] w-72 rounded-xl border border-amber-200 bg-white shadow-xl pointer-events-auto">
           <div className="flex items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-4 py-3">
             <div className="flex items-center gap-2">
               <CreditCard className="h-4 w-4 text-[#AD2C00]" />
@@ -558,37 +699,37 @@ export default function OrdersPageWebSocket() {
             </span>
           </div>
           <div className="max-h-[360px] overflow-y-auto p-3 space-y-2">
-            {paymentRequests.slice(0, 5).map((order) => (
-              <div key={order.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+            {paymentRequests.slice(0, 5).map((bill) => (
+              <div key={bill.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="text-xs font-bold text-[#AD2C00]">
-                      Bàn {tableLabelFor(order, tableBySessionId)}
+                      Bàn {bill.table_number || tableBySessionId[bill.session_id] || '—'}
                     </div>
                     <div className="text-[11px] text-stone-500">
-                      {formatOrderTime(order.payment_requested_at)}
+                      {formatOrderTime(bill.requested_at)} · {bill.items.length} món
                     </div>
                   </div>
                   <div className="text-xs font-bold text-stone-900">
-                    {formatVnd(displayOrderTotal(order))}
+                    {formatVnd(bill.total)}
                   </div>
                 </div>
                 <div className="mt-2 text-[11px] font-semibold text-amber-800">
-                  {paymentMethodLabel(order.payment_method)}
+                  {paymentMethodLabel(bill.payment_method)}
                 </div>
                 <button
                   type="button"
-                  onClick={() => void confirmPayment(order.id)}
-                  disabled={confirmingPaymentIds.has(order.id)}
+                  onClick={() => void confirmBillPayment(bill.id)}
+                  disabled={confirmingBillIds.has(bill.id)}
                   className="mt-3 w-full rounded-lg bg-[#006A35] px-3 py-2 text-xs font-bold text-white hover:bg-[#005028] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {confirmingPaymentIds.has(order.id) ? 'Đang xác nhận...' : 'Xác nhận thanh toán'}
+                  {confirmingBillIds.has(bill.id) ? 'Đang xác nhận...' : 'Xác nhận thanh toán'}
                 </button>
               </div>
             ))}
             {paymentRequests.length > 5 && (
               <div className="text-center text-xs text-stone-500">
-                +{paymentRequests.length - 5} yêu cầu khác trong cột Đã phục vụ
+                +{paymentRequests.length - 5} hóa đơn khác đang chờ
               </div>
             )}
           </div>
@@ -648,7 +789,7 @@ export default function OrdersPageWebSocket() {
                 <>
                   <button
                     type="button"
-                    onClick={() => void updateStatus(o.id, 'confirmed')}
+                    onClick={() => void updateItemStatus(o, 'confirmed')}
                     className="w-full py-2.5 rounded-lg bg-gradient-to-r from-[#AD2C00] to-[#D83900] text-white text-sm font-semibold shadow-sm hover:opacity-95"
                   >
                     <Clock className="inline w-4 h-4 mr-1 align-text-bottom" />
@@ -683,7 +824,7 @@ export default function OrdersPageWebSocket() {
                 <>
                   <button
                     type="button"
-                    onClick={() => void updateStatus(o.id, 'preparing')}
+                    onClick={() => void updateItemStatus(o, 'preparing')}
                     className="w-full py-2.5 rounded-lg bg-stone-800 text-white text-sm font-semibold hover:bg-stone-900"
                   >
                     <ChefHat className="inline w-4 h-4 mr-1 align-text-bottom" />
@@ -717,7 +858,7 @@ export default function OrdersPageWebSocket() {
                 o,
                 <button
                   type="button"
-                  onClick={() => void updateStatus(o.id, 'ready')}
+                  onClick={() => void updateItemStatus(o, 'ready')}
                   className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
                 >
                   Sẵn sàng
@@ -741,7 +882,7 @@ export default function OrdersPageWebSocket() {
                 o,
                 <button
                   type="button"
-                  onClick={() => void updateStatus(o.id, 'served')}
+                  onClick={() => void updateItemStatus(o, 'served')}
                   className="w-full py-2.5 rounded-lg bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700"
                 >
                   Đã phục vụ
@@ -761,30 +902,23 @@ export default function OrdersPageWebSocket() {
             </div>
           ) : (
             group.served.map((o) => {
-              const paymentAction =
-                o.payment_status === 'payment_pending_confirmation' ? (
-                  <button
-                    type="button"
-                    onClick={() => void confirmPayment(o.id)}
-                    disabled={confirmingPaymentIds.has(o.id)}
-                    className="w-full py-2.5 rounded-lg bg-[#006A35] text-white text-sm font-semibold hover:bg-[#005028] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <CheckCircle className="inline w-4 h-4 mr-1 align-text-bottom" />
-                    {confirmingPaymentIds.has(o.id)
-                      ? 'Đang xác nhận...'
-                      : o.payment_method === 'cash'
-                        ? 'Xác nhận đã thu tiền mặt'
-                        : 'Xác nhận đã thanh toán'}
-                  </button>
-                ) : o.payment_status === 'paid' ? (
-                  <div className="text-xs text-center py-2.5 px-3 bg-emerald-50 text-emerald-800 rounded-lg font-semibold border border-emerald-200">
-                    Hoàn tất thanh toán
-                  </div>
-                ) : (
-                  <div className="text-xs text-center py-2.5 text-stone-500 bg-stone-50 rounded-lg border border-stone-100">
-                    Chưa yêu cầu thanh toán — khách bấm thanh toán trên app sẽ hiện &quot;Chờ xác nhận TT&quot;
-                  </div>
-                )
+              const sessionBill = o.table_session_id
+                ? pendingBillBySession[o.table_session_id]
+                : undefined
+              const itemPaid = (o.items?.[0]?.payment_status === 'paid')
+              const paymentAction = sessionBill ? (
+                <div className="text-xs text-center py-2.5 px-3 bg-amber-50 text-amber-900 rounded-lg font-semibold border border-amber-200">
+                  Chờ xác nhận hóa đơn · {formatVnd(sessionBill.total)} — xác nhận ở panel bên phải
+                </div>
+              ) : itemPaid ? (
+                <div className="text-xs text-center py-2.5 px-3 bg-emerald-50 text-emerald-800 rounded-lg font-semibold border border-emerald-200">
+                  Đã thanh toán
+                </div>
+              ) : (
+                <div className="text-xs text-center py-2.5 text-stone-500 bg-stone-50 rounded-lg border border-stone-100">
+                  Chưa yêu cầu thanh toán — khách bấm thanh toán trên app sẽ tạo một hóa đơn cho bàn
+                </div>
+              )
 
               return renderCard(o, paymentAction, { hidePaymentBadge: false })
             })

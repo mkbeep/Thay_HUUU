@@ -3,29 +3,17 @@
  * Copy logic from check-firebase-tables.ts that works
  */
 
-import * as admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import { buildTableQrPngFileName } from '../src/infrastructure/utils/qrGenerator';
 import { resolveCustomerWebBaseUrl } from './resolve-lan-web-base';
+import { db } from '../src/infrastructure/config/firebase.config';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-// Initialize Firebase Admin
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    }),
-  });
-}
-
-const db = admin.firestore();
 const OUTPUT_DIR = path.join(__dirname, '../qr-codes');
 const WEB_BASE = resolveCustomerWebBaseUrl(process.env.CUSTOMER_WEB_BASE_URL);
 

@@ -170,21 +170,8 @@ export class MenuRepository {
       category: normalizeCategoryToVi(data.category),
       available: data.is_available,
       image: imageSource,
-      // Đồ uống không hiển thị badge "Chay" để tránh gây hiểu nhầm
-      badge: normalizeCategoryToVi(data.category) === MenuCategory.BEVERAGE
-        ? undefined
-        : data.is_spicy
-        ? 'Cay'
-        : data.is_vegetarian
-        ? 'Chay'
-        : undefined,
-      badgeColor: normalizeCategoryToVi(data.category) === MenuCategory.BEVERAGE
-        ? undefined
-        : data.is_spicy
-        ? '#FF6B6B'
-        : data.is_vegetarian
-        ? '#51CF66'
-        : undefined,
+      badge: undefined,
+      badgeColor: undefined,
     };
   }
 }

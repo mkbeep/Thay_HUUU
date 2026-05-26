@@ -8,6 +8,7 @@ import { NotificationService } from '../../application/services/NotificationServ
 import { NotificationRepository } from '../../infrastructure/database/repositories/NotificationRepository';
 import { UserRepository } from '../../infrastructure/database/repositories/UserRepository';
 import { SocketManager } from '../../infrastructure/websocket/SocketManager';
+import { TableRepository } from '../../infrastructure/database/repositories/TableRepository';
 import { NotificationType, NotificationPriority } from '../../domain/entities/Notification';
 import {
   SupportRequestStatus,
@@ -18,6 +19,8 @@ import {
 export class SupportRequestController {
   private supportRequestRepository: SupportRequestRepository;
   private notificationService: NotificationService;
+  private readonly operationRoles = ['staff', 'waiter', 'manager', 'admin', 'chef', 'cashier'] as const;
+  private readonly tableRepository = new TableRepository();
 
   constructor() {
     this.supportRequestRepository = new SupportRequestRepository();
@@ -32,7 +35,7 @@ export class SupportRequestController {
    */
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { table_id, table_number, type, priority, note } = req.body;
+      const { table_id, table_number, table_session_id, type, priority, note } = req.body;
 
       // Validate required fields
       if (!table_id || !table_number || !type) {
@@ -55,6 +58,7 @@ export class SupportRequestController {
       const supportRequest = await this.supportRequestRepository.create({
         table_id,
         table_number,
+        table_session_id,
         type,
         priority: priority || SupportRequestPriority.NORMAL,
         note,
@@ -68,17 +72,25 @@ export class SupportRequestController {
           support_request_id: supportRequest.id,
           table_id,
           table_number,
+          table_session_id,
           type,
         },
         priority: this.mapPriority(supportRequest.priority),
       };
       await Promise.all(
-        (['staff', 'manager', 'admin', 'chef'] as const).map((role) =>
+        this.operationRoles.map((role) =>
           this.notificationService.sendToRole(role, notifyPayload)
         )
       );
 
-      SocketManager.getInstance().notifyNewNotification({
+      const socketManager = SocketManager.getInstance();
+      socketManager.notifySupportRequestCreated({
+        ...supportRequest,
+        title: notifyPayload.title,
+        message: notifyPayload.message,
+        priority: supportRequest.priority,
+      });
+      socketManager.notifyNewNotification({
         id: supportRequest.id,
         ...notifyPayload,
         created_at: new Date(),
@@ -193,6 +205,24 @@ export class SupportRequestController {
         assigned_staff_id,
         note,
       });
+
+      try {
+        const socketManager = SocketManager.getInstance();
+        socketManager.notifySupportRequestUpdated(updatedRequest as unknown as Record<string, unknown>);
+
+        let tableSessionId = updatedRequest.table_session_id;
+        if (!tableSessionId && updatedRequest.table_id) {
+          const activeSession = await this.tableRepository.findActiveSessionByTableId(
+            updatedRequest.table_id
+          );
+          tableSessionId = activeSession?.id;
+        }
+        if (tableSessionId) {
+          socketManager.emitToTable(tableSessionId, 'support:request_updated', updatedRequest);
+        }
+      } catch (error) {
+        console.error('WebSocket emit error (support:request_updated):', error);
+      }
 
       res.status(200).json({
         success: true,

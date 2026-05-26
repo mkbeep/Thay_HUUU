@@ -18,6 +18,8 @@ export interface ReportOrderItem {
   food_id: string;
   quantity: number;
   unit_price: number;
+  payment_status?: string;
+  paid_at?: Date;
 }
 
 export interface ReportOrder {
@@ -29,7 +31,7 @@ export interface ReportOrder {
 }
 
 function isValidOrder(order: ReportOrder): boolean {
-  return order.status !== 'cancelled' && order.payment_status === 'paid';
+  return order.status !== 'cancelled' && order.items.length > 0;
 }
 
 export function orderRevenue(order: ReportOrder): number {

@@ -1,6 +1,7 @@
 import { ReactNode } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import SupportAlertsPanel from '../alerts/SupportAlertsPanel'
 
 interface LayoutProps {
   children: ReactNode
@@ -15,6 +16,7 @@ export default function Layout({ children }: LayoutProps) {
         <main className="flex-1 overflow-y-auto p-8">
           {children}
         </main>
+        <SupportAlertsPanel />
       </div>
     </div>
   )

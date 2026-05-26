@@ -55,7 +55,10 @@ export interface OrderItem {
   unit_price: number;
   subtotal: number;
   special_instructions?: string;
-  status: 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served' | 'cancelled';
+  payment_status?: PaymentStatus;
+  payment_method?: 'qr' | 'cash' | 'card' | 'e_wallet';
+  paid_at?: Date;
   created_at: Date;
   updated_at: Date;
 }

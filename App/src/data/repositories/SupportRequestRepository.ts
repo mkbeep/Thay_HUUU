@@ -10,6 +10,7 @@ const apiClient = axios.create({
 export interface CreateSupportRequestDTO {
   table_id: string;
   table_number: string;
+  table_session_id?: string;
   type: string;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   note?: string;

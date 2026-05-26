@@ -7,6 +7,8 @@ npm-debug.*
 *.p8
 *.p12
 *.key
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
 *.mobileprovision
 *.orig.*
 web-build/

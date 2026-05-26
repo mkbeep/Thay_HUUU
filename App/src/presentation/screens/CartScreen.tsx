@@ -9,6 +9,7 @@ import {
   StatusBar,
   Alert,
   TextInput,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,6 +40,7 @@ export default function CartScreen({
   const { items, removeItem, updateQuantity, getTotal, getTax, getServiceFee, getGrandTotal, clearCart } = useCart();
   const { createOrder } = useOrder();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const subtotal = getTotal();
   const tax = getTax();
@@ -58,33 +60,36 @@ export default function CartScreen({
     showBottomButton: items.length > 0
   });
 
-  const handleRemoveItem = (id: string, name: string) => {
+  const handleRemoveItem = (lineId: string, name: string) => {
+    const doRemove = () => removeItem(lineId);
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(`Xóa "${name}" khỏi giỏ hàng?`)) {
+        doRemove();
+      }
+      return;
+    }
     Alert.alert(
       'Xóa món',
       `Bạn có chắc muốn xóa "${name}" khỏi giỏ hàng?`,
       [
         { text: 'Hủy', style: 'cancel' },
-        { 
-          text: 'Xóa', 
-          style: 'destructive',
-          onPress: () => removeItem(id)
-        },
+        { text: 'Xóa', style: 'destructive', onPress: doRemove },
       ]
     );
   };
 
-  const handleIncreaseQuantity = (id: string, currentQuantity: number) => {
-    updateQuantity(id, currentQuantity + 1);
+  const handleIncreaseQuantity = (lineId: string, currentQuantity: number) => {
+    updateQuantity(lineId, currentQuantity + 1);
   };
 
-  const handleDecreaseQuantity = (id: string, currentQuantity: number) => {
+  const handleDecreaseQuantity = (lineId: string, currentQuantity: number) => {
     if (currentQuantity > 1) {
-      updateQuantity(id, currentQuantity - 1);
+      updateQuantity(lineId, currentQuantity - 1);
     }
   };
 
   const handleSubmitOrder = async () => {
-    console.log('🔍 handleSubmitOrder called');
+    if (isSubmitting) return;
 
     if (items.length === 0) {
       Alert.alert('Giỏ hàng trống', 'Vui lòng thêm món vào giỏ hàng trước khi gửi đơn.');
@@ -99,30 +104,28 @@ export default function CartScreen({
       return;
     }
 
-    console.log('✅ Submitting order...');
-    
-    // OPTIMISTIC UI: Xóa giỏ hàng và chuyển màn hình NGAY LẬP TỨC
-    clearCart();
-    console.log('🗑️ Cart cleared');
-    
-    console.log('� Navigating to order history...');
-    onSubmitOrder();
-    
-    // Gửi API ở background (không đợi)
-    createOrder(items, total, tableNumber).then(result => {
+    setIsSubmitting(true);
+    try {
+      const result = await createOrder(items, total, tableNumber);
       if (!result.success) {
-        console.error('❌ Order submission failed:', result.error);
-        // Có thể thêm toast notification ở đây nếu cần
-      } else {
-        console.log('✅ Order submitted successfully!');
+        const message =
+          result.error?.message ||
+          result.error?.response?.data?.message ||
+          'Không thể gửi đơn. Vui lòng thử lại hoặc gọi nhân viên.';
+        Alert.alert('Không thể gửi đơn', message);
+        return;
       }
-    }).catch(error => {
-      console.error('❌ Unexpected error:', error);
-    });
+      clearCart();
+      onSubmitOrder();
+    } catch {
+      Alert.alert('Không thể gửi đơn', 'Vui lòng thử lại hoặc gọi nhân viên.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const renderCartItem = (item: any) => (
-    <View key={item.id} style={styles.cartItem}>
+    <View key={item.lineId} style={styles.cartItem}>
       <Image source={item.image} style={styles.itemImage} />
       
       <View style={styles.itemContent}>
@@ -150,7 +153,7 @@ export default function CartScreen({
           <View style={styles.quantityControls}>
             <TouchableOpacity
               style={styles.quantityButton}
-              onPress={() => handleDecreaseQuantity(item.id, item.quantity)}
+              onPress={() => handleDecreaseQuantity(item.lineId, item.quantity)}
             >
               <Ionicons name="remove" size={16} color="#AD2C00" />
             </TouchableOpacity>
@@ -161,7 +164,7 @@ export default function CartScreen({
             
             <TouchableOpacity
               style={styles.quantityButton}
-              onPress={() => handleIncreaseQuantity(item.id, item.quantity)}
+              onPress={() => handleIncreaseQuantity(item.lineId, item.quantity)}
             >
               <Ionicons name="add" size={16} color="#AD2C00" />
             </TouchableOpacity>
@@ -169,7 +172,7 @@ export default function CartScreen({
 
           {/* Delete Button */}
           <TouchableOpacity
-            onPress={() => handleRemoveItem(item.id, item.name)}
+            onPress={() => handleRemoveItem(item.lineId, item.name)}
           >
             <Ionicons name="trash-outline" size={18} color="#EF4444" />
           </TouchableOpacity>
@@ -208,9 +211,9 @@ export default function CartScreen({
         {/* Title Section */}
         <View style={styles.titleSection}>
           <Text style={styles.subtitle}>Xác nhận đơn hàng</Text>
-          <Text style={styles.title}>
+          {/* <Text style={styles.title}>
             Gourmet Tech{'\n'}Experience.
-          </Text>
+          </Text> */}
         </View>
 
         {/* Cart Items */}
@@ -278,22 +281,23 @@ export default function CartScreen({
       {items.length > 0 && (
         <View style={styles.bottomAction}>
           <TouchableOpacity 
-            style={styles.submitButton}
-            onPress={() => {
-              console.log('========================================');
-              console.log('🔘 SUBMIT BUTTON PRESSED!');
-              console.log('Timestamp:', new Date().toISOString());
-              console.log('Items count:', items.length);
-              console.log('Table number:', tableNumber);
-              console.log('========================================');
-              handleSubmitOrder();
-            }}
+            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+            onPress={() => void handleSubmitOrder()}
             activeOpacity={0.9}
-            disabled={false}
+            disabled={isSubmitting}
           >
             <View style={styles.submitButtonGradient}>
-              <Ionicons name="restaurant" size={20} color="#FFFFFF" />
-              <Text style={styles.submitButtonText}>Gửi đơn đến bếp</Text>
+              {isSubmitting ? (
+                <>
+                  <Ionicons name="hourglass-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.submitButtonText}>Đang gửi bếp…</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="restaurant" size={20} color="#FFFFFF" />
+                  <Text style={styles.submitButtonText}>Gửi đơn đến bếp</Text>
+                </>
+              )}
             </View>
           </TouchableOpacity>
         </View>
@@ -597,6 +601,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
+  },
+  submitButtonDisabled: {
+    opacity: 0.65,
   },
   submitButtonGradient: {
     flexDirection: 'row',

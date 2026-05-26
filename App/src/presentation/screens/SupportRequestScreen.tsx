@@ -13,12 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SupportRequestRepository } from '../../data/repositories/SupportRequestRepository';
 import { useTable } from '../context/TableContext';
+import { InlineToast } from '../components/InlineToast';
 
 interface SupportRequestScreenProps {
   tableNumber?: number | string;
   onBack: () => void;
   onNavigate?: (screen: string) => void;
-  onRequestSent?: (requestType: string) => void;
+  onRequestSent?: (requestType: string, requestId?: string) => void;
 }
 
 interface SupportOption {
@@ -116,7 +117,9 @@ export default function SupportRequestScreen({
 }: SupportRequestScreenProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { tableNumber: ctxTableNumber, tableId: ctxTableId } = useTable();
+  const [toastMessage, setToastMessage] = useState('');
+  const [showToast, setShowToast] = useState(false);
+  const { tableNumber: ctxTableNumber, tableId: ctxTableId, sessionId } = useTable();
   const supportRequestRepository = new SupportRequestRepository();
 
   const displayTableLabel = String(ctxTableNumber ?? tableNumber ?? '—');
@@ -139,31 +142,27 @@ export default function SupportRequestScreen({
       const resolvedTableId = ctxTableId || `table-${resolvedTableNumber}`;
 
       // Gọi API tạo support request
-      await supportRequestRepository.createSupportRequest({
+      const supportRequest = await supportRequestRepository.createSupportRequest({
         table_id: resolvedTableId,
         table_number: resolvedTableNumber,
+        table_session_id: sessionId || undefined,
         type: option.id,
         priority: option.priority || 'normal',
       });
 
       console.log('✅ Support request sent:', option.title);
 
-      // Hiển thị thông báo thành công
-      Alert.alert(
-        '✅ Đã gửi yêu cầu',
-        `Yêu cầu "${option.title}" đã được gửi đến nhân viên.\n\nNhân viên sẽ đến bàn của bạn trong vài phút.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Gọi callback để chuyển sang màn hình StaffComingScreen
-              if (onRequestSent) {
-                onRequestSent(option.title);
-              }
-            },
-          },
-        ]
+      setToastMessage(
+        `Đã gửi "${option.title}" — nhân viên sẽ đến bàn ${displayTableLabel} trong vài phút`
       );
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 6000);
+
+      setTimeout(() => {
+        if (onRequestSent) {
+          onRequestSent(option.title, supportRequest?.id);
+        }
+      }, 1200);
     } catch (error: any) {
       console.error('❌ Error sending support request:', error);
       const msg =
@@ -198,6 +197,12 @@ export default function SupportRequestScreen({
           </View>
         </View>
       </View>
+
+      <InlineToast
+        visible={showToast}
+        message={toastMessage}
+        icon="hand-right"
+      />
 
       <ScrollView
         style={styles.content}
@@ -278,15 +283,15 @@ export default function SupportRequestScreen({
           }}
           activeOpacity={0.9}
         >
-          <LinearGradient
+          {/* <LinearGradient
             colors={['#BA1A1A', '#D32F2F']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.emergencyGradient}
-          >
-            <Ionicons name="alert-circle" size={24} color="#FFFFFF" />
-            <Text style={styles.emergencyText}>GỌI KHẨN CẤP</Text>
-          </LinearGradient>
+          > */}
+            {/* <Ionicons name="alert-circle" size={24} color="#FFFFFF" />
+            <Text style={styles.emergencyText}>GỌI KHẨN CẤP</Text> */}
+          {/* </LinearGradient> */}
         </TouchableOpacity>
 
         {/* Info Card */}

@@ -13,7 +13,16 @@ interface NotificationItem {
   message: string
   created_at: string
   is_read: boolean
-  data?: { order_id?: string; [key: string]: unknown }
+  data?: {
+    order_id?: string
+    bill_id?: string
+    support_request_id?: string
+    table_id?: string
+    table_number?: string
+    type?: string
+    [key: string]: unknown
+  }
+  dedupe_key?: string
 }
 
 export default function Header() {
@@ -28,6 +37,7 @@ export default function Header() {
   const [unreadCount, setUnreadCount] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notificationPanelRef = useRef<HTMLDivElement>(null)
+  const realtimeNotificationKeysRef = useRef<Set<string>>(new Set())
   const { on, off } = useWebSocket()
 
   const getAuthHeaders = () => {
@@ -51,6 +61,41 @@ export default function Header() {
     } catch (error) {
       console.error('Error fetching notifications:', error)
     }
+  }
+
+  const getNotificationKey = (notif: NotificationItem) => {
+    if (notif.data?.support_request_id) return `support:${notif.data.support_request_id}`
+    if (notif.data?.bill_id) return `bill:${notif.data.bill_id}`
+    if (notif.data?.order_id) return `order:${notif.data.order_id}`
+    return `notification:${notif.id}`
+  }
+
+  const pushRealtimeNotification = (notif: NotificationItem) => {
+    const key = getNotificationKey(notif)
+    if (realtimeNotificationKeysRef.current.has(key)) return
+    realtimeNotificationKeysRef.current.add(key)
+
+    const normalized = { ...notif, dedupe_key: key }
+
+    setNotifications((prev) => {
+      if (prev.some((item) => (item.dedupe_key || getNotificationKey(item)) === key)) return prev
+      return [normalized, ...prev].slice(0, 10)
+    })
+
+    if (!notif.is_read) {
+      setUnreadCount((count) => count + 1)
+    }
+
+    setToastNotifications((prev) => {
+      if (prev.some((item) => (item.dedupe_key || getNotificationKey(item)) === key)) return prev
+      return [normalized, ...prev].slice(0, 3)
+    })
+
+    window.setTimeout(() => {
+      setToastNotifications((prev) =>
+        prev.filter((item) => (item.dedupe_key || getNotificationKey(item)) !== key)
+      )
+    }, 7000)
   }
 
   const markAsRead = async (id: string) => {
@@ -101,22 +146,40 @@ export default function Header() {
 
   useEffect(() => {
     const handleNewNotification = (notif: NotificationItem) => {
-      setNotifications((prev) => {
-        if (prev.some((item) => item.id === notif.id)) return prev
-        return [notif, ...prev].slice(0, 10)
-      })
-      if (!notif.is_read) {
-        setUnreadCount((count) => count + 1)
-      }
-      setToastNotifications((prev) => [notif, ...prev.filter((item) => item.id !== notif.id)].slice(0, 3))
+      pushRealtimeNotification(notif)
+    }
 
-      window.setTimeout(() => {
-        setToastNotifications((prev) => prev.filter((item) => item.id !== notif.id))
-      }, 7000)
+    const handleSupportCreated = (payload: {
+      id?: string
+      table_id?: string
+      table_number?: string
+      type?: string
+      title?: string
+      message?: string
+      created_at?: string
+    }) => {
+      if (!payload.id) return
+      pushRealtimeNotification({
+        id: `support:${payload.id}`,
+        title: payload.title || `Yêu cầu từ bàn ${payload.table_number || '—'}`,
+        message: payload.message || 'Khách cần hỗ trợ',
+        created_at: payload.created_at || new Date().toISOString(),
+        is_read: false,
+        data: {
+          support_request_id: payload.id,
+          table_id: payload.table_id,
+          table_number: payload.table_number,
+          type: payload.type,
+        },
+      })
     }
 
     on('notification:new', handleNewNotification)
-    return () => off('notification:new', handleNewNotification)
+    on('support:request_created', handleSupportCreated)
+    return () => {
+      off('notification:new', handleNewNotification)
+      off('support:request_created', handleSupportCreated)
+    }
   }, [on, off])
 
   const handleSearch = (e: React.FormEvent) => {
@@ -178,6 +241,11 @@ export default function Header() {
 
   const handleNotificationItemActivate = async (notif: NotificationItem) => {
     if (!notif.is_read) await markAsRead(notif.id)
+
+    if (notif.data?.support_request_id) {
+      navigate('/tables')
+      return
+    }
 
     const docId = notif.data?.order_id
     setShowNotifications(false)

@@ -13,6 +13,8 @@ import inventoryRoutes from './inventory.routes';
 import supportRequestRoutes from './support-request.routes';
 import staffRoutes from './staff.routes';
 import reportRoutes from './report.routes';
+import cartRoutes from './cart.routes';
+import billRoutes from './bill.routes';
 import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 
 // Export function để nhận socketManager từ server.ts
@@ -33,6 +35,8 @@ export default function createRoutes(socketManager: SocketManager): Router {
   router.use('/foods', foodRoutes);
   router.use('/notifications', notificationRoutes);
   router.use('/orders', orderRoutes);
+  router.use('/bills', billRoutes);
+  router.use('/cart', cartRoutes);
   router.use('/tables', createTableRoutes(socketManager)); // ✅ Truyền socketManager
   router.use('/inventory', inventoryRoutes);
   router.use('/support-requests', supportRequestRoutes);

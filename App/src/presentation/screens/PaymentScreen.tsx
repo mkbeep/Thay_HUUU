@@ -36,21 +36,38 @@ export default function PaymentScreen({
   const [splitMethod, setSplitMethod] = useState<SplitMethod>('equal');
   const [numberOfPeople, setNumberOfPeople] = useState(2);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('transfer');
-  const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Thêm loading state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [paymentRequested, setPaymentRequested] = useState(false);
 
-  // Lấy tất cả đơn hàng đã phục vụ (served) VÀ CHƯA THANH TOÁN để tính tổng bill
-  const servedOrders = orders.filter(
-    (order) => order.status === 'served' && order.paymentStatus !== 'paid'
+  const payableLines = orders.filter(
+    (line) => line.status === 'served' && line.paymentStatus === 'unpaid'
   );
+  const billLines = orders.filter(
+    (line) =>
+      line.status === 'served' &&
+      (line.paymentStatus === 'unpaid' || line.paymentStatus === 'pending_confirmation')
+  );
+  const waitingConfirmation =
+    paymentRequested || hasPendingPaymentConfirmation();
+
+  useEffect(() => {
+    setSelectedItemIds(payableLines.map((o) => o.id));
+  }, [payableLines.map((o) => o.id).join(',')]);
   
   console.log('💰 Payment calculation:', {
     totalOrders: orders.length,
-    servedOrders: servedOrders.length,
+    payableLines: payableLines.length,
     paidOrders: orders.filter(o => o.paymentStatus === 'paid').length,
   });
   
-  // Tính tổng từ order.total (đã bao gồm thuế khi tạo order)
-  const total = servedOrders.reduce((sum, order) => sum + order.total, 0);
+  const linesToPay =
+    splitMethod === 'byItem'
+      ? payableLines.filter((o) => selectedItemIds.includes(o.id))
+      : payableLines;
+
+  const linesForDisplay = waitingConfirmation ? billLines : linesToPay;
+  const total = linesForDisplay.reduce((sum, line) => sum + line.total, 0);
   
   // Tính ngược lại subtotal và tax từ total
   // total = subtotal + tax
@@ -61,27 +78,27 @@ export default function PaymentScreen({
   const tax = total - subtotal;
   const perPerson = total / numberOfPeople;
 
-  // Lấy tất cả items từ các đơn đã phục vụ
-  const allItems = servedOrders.flatMap((order) => order.items);
+  const allItems = linesForDisplay.flatMap((line) => line.items);
 
-  // Tự động quay về màn hình chính khi tất cả đơn đã thanh toán
-  useEffect(() => {
-    // Chỉ kiểm tra các đơn served và chưa paid
-    const unpaidServedOrders = orders.filter(
-      (order) => order.status === 'served' && order.paymentStatus !== 'paid'
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItemIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
     );
-    
-    const allServedOrdersPaid = servedOrders.length > 0 && unpaidServedOrders.length === 0;
-    
-    if (allServedOrdersPaid) {
-      console.log('✅ All orders paid, navigating back...');
-      // Delay một chút để user thấy thông báo
-      const timer = setTimeout(() => {
-        onPaymentComplete();
-      }, 1500);
+  };
+
+  // Chỉ quay về khi admin đã xác nhận thanh toán (paid), không khi đang chờ duyệt
+  useEffect(() => {
+    const servedLines = orders.filter((line) => line.status === 'served');
+    const allServedPaid =
+      servedLines.length > 0 &&
+      servedLines.every((line) => line.paymentStatus === 'paid');
+
+    if (allServedPaid) {
+      console.log('✅ All orders paid by staff, navigating back...');
+      const timer = setTimeout(() => onPaymentComplete(), 1500);
       return () => clearTimeout(timer);
     }
-  }, [orders, servedOrders.length, onPaymentComplete]);
+  }, [orders, onPaymentComplete]);
 
   const handleIncreasePeople = () => {
     if (numberOfPeople < 10) {
@@ -96,47 +113,38 @@ export default function PaymentScreen({
   };
 
   const handlePayment = async () => {
-    // ✅ Ngăn double-click
-    if (isSubmitting || hasPendingPaymentConfirmation()) {
-      console.log('⚠️ Already submitting or pending confirmation, ignoring click');
+    if (isSubmitting) return;
+
+    const idsToPay =
+      splitMethod === 'byItem'
+        ? selectedItemIds
+        : payableLines.map((l) => l.id);
+
+    if (idsToPay.length === 0) {
+      Alert.alert('Không có món cần thanh toán', 'Vui lòng chọn món đã phục vụ.');
       return;
     }
 
-    console.log('💳 handlePayment called');
-    
-    // Kiểm tra có đơn nào cần thanh toán không
-    const hasServedOrders = servedOrders.length > 0;
-    if (!hasServedOrders) {
-      Alert.alert('Không có đơn cần thanh toán', 'Vui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
-      return;
-    }
-    
     try {
-      setIsSubmitting(true); // ✅ Bắt đầu loading
-      
-      // Gửi yêu cầu thanh toán
-      console.log('📤 Sending payment request...');
-      const methodForApi =
-        selectedPayment === 'cash'
-          ? 'cash'
-          : 'qr';
-      const requested = requestPaymentForServedOrders(methodForApi);
-      
-      if (!requested) {
-        Alert.alert('Không có đơn cần thanh toán', 'Vui lòng chờ món được phục vụ trước khi gửi yêu cầu thanh toán.');
+      setIsSubmitting(true);
+      const methodForApi = selectedPayment === 'cash' ? 'cash' : 'qr';
+      const ok = await requestPaymentForServedOrders(methodForApi, idsToPay);
+      if (!ok) {
+        Alert.alert('Lỗi', 'Không thể gửi yêu cầu thanh toán. Vui lòng thử lại.');
         return;
       }
-
-      console.log('✅ Payment request sent successfully');
-      
-      // Đợi một chút để UI cập nhật
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      setPaymentRequested(true);
+      Alert.alert(
+        'Đã gửi yêu cầu',
+        selectedPayment === 'cash'
+          ? 'Nhân viên sẽ đến bàn để xác nhận thanh toán tiền mặt.'
+          : 'Vui lòng chờ nhân viên/thu ngân xác nhận đã nhận tiền.'
+      );
     } catch (error) {
-      console.error('❌ Error sending payment request:', error);
-      Alert.alert('Không gửi được yêu cầu', 'Có lỗi xảy ra khi gửi yêu cầu thanh toán. Vui lòng thử lại.');
+      console.error('❌ Error marking payment:', error);
+      Alert.alert('Lỗi', 'Có lỗi khi thanh toán. Vui lòng thử lại.');
     } finally {
-      setIsSubmitting(false); // ✅ Kết thúc loading
+      setIsSubmitting(false);
     }
   };
 
@@ -163,6 +171,15 @@ export default function PaymentScreen({
           <Ionicons name="ellipsis-vertical" size={20} color="#5F5E5E" />
         </TouchableOpacity>
       </View>
+
+      {waitingConfirmation && (
+        <View style={styles.toastBanner}>
+          <Ionicons name="hourglass-outline" size={20} color="#AD2C00" />
+          <Text style={styles.toastBannerText}>
+            Đã gửi yêu cầu thanh toán — chờ nhân viên xác nhận
+          </Text>
+        </View>
+      )}
 
       <ScrollView
         style={styles.content}
@@ -279,6 +296,32 @@ export default function PaymentScreen({
               </TouchableOpacity>
             </View>
 
+            {splitMethod === 'byItem' && (
+              <View style={styles.itemPickList}>
+                {payableLines.map((order) => {
+                  const item = order.items[0];
+                  const selected = selectedItemIds.includes(order.id);
+                  return (
+                    <TouchableOpacity
+                      key={order.id}
+                      style={[styles.itemPickRow, selected && styles.itemPickRowActive]}
+                      onPress={() => toggleItemSelection(order.id)}
+                    >
+                      <Ionicons
+                        name={selected ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={selected ? '#AD2C00' : '#A8A29E'}
+                      />
+                      <Text style={styles.itemPickName}>{item?.name}</Text>
+                      <Text style={styles.itemPickPrice}>
+                        {formatCurrency(order.total)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
             {splitMethod === 'equal' && (
               <>
                 <View style={styles.splitDetail}>
@@ -390,33 +433,19 @@ export default function PaymentScreen({
       </ScrollView>
 
       {/* Fixed Payment Button */}
-      {allItems.length > 0 && (
+      {(allItems.length > 0 || waitingConfirmation) && !waitingConfirmation && (
         <View style={styles.bottomAction}>
-          {hasPendingPaymentConfirmation() && (
-            <View style={styles.pendingNotice}>
-              <Ionicons name="time-outline" size={20} color="#AD2C00" />
-              <Text style={styles.pendingText}>
-                {selectedPayment === 'cash'
-                  ? 'Đã gọi nhân viên thu tiền mặt tại bàn'
-                  : 'Đang chờ nhân viên xác nhận thanh toán'}
-              </Text>
-            </View>
-          )}
           <TouchableOpacity
             style={[
               styles.paymentButton,
-              (isSubmitting || hasPendingPaymentConfirmation()) && styles.paymentButtonDisabled
+              isSubmitting && styles.paymentButtonDisabled
             ]}
             onPress={handlePayment}
             activeOpacity={0.9}
-            disabled={isSubmitting || hasPendingPaymentConfirmation()} // ✅ Disable khi đang submit hoặc pending
+            disabled={isSubmitting}
           >
             <LinearGradient
-              colors={
-                isSubmitting || hasPendingPaymentConfirmation()
-                  ? ['#A8A29E', '#78716C']
-                  : ['#AD2C00', '#D83900']
-              }
+              colors={isSubmitting ? ['#A8A29E', '#78716C'] : ['#AD2C00', '#D83900']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.paymentButtonGradient}
@@ -426,21 +455,29 @@ export default function PaymentScreen({
                   <Ionicons name="hourglass-outline" size={24} color="#FFFFFF" />
                   <Text style={styles.paymentButtonText}>Đang gửi...</Text>
                 </>
-              ) : hasPendingPaymentConfirmation() ? (
-                <>
-                  <Ionicons name="checkmark-circle-outline" size={24} color="#FFFFFF" />
-                  <Text style={styles.paymentButtonText}>Đã gửi yêu cầu</Text>
-                </>
               ) : (
                 <>
                   <Text style={styles.paymentButtonText}>
-                    {selectedPayment === 'cash' ? 'Gọi nhân viên thu tiền' : 'Gửi yêu cầu thanh toán'}
+                    {selectedPayment === 'cash' ? 'Gọi nhân viên thu tiền mặt' : 'Gửi yêu cầu thanh toán'}
                   </Text>
                   <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
                 </>
               )}
             </LinearGradient>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {waitingConfirmation && (
+        <View style={styles.bottomAction}>
+          <View style={styles.pendingNotice}>
+            <Ionicons name="time-outline" size={20} color="#AD2C00" />
+            <Text style={styles.pendingText}>
+              {selectedPayment === 'cash'
+                ? 'Đã gọi nhân viên — chờ xác nhận thu tiền mặt'
+                : 'Đang chờ nhân viên xác nhận thanh toán'}
+            </Text>
+          </View>
         </View>
       )}
     </View>
@@ -648,6 +685,35 @@ const styles = StyleSheet.create({
   splitOptionTextActive: {
     color: '#FFFFFF',
   },
+  itemPickList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  itemPickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#F6F3F2',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  itemPickRowActive: {
+    borderColor: '#AD2C00',
+    backgroundColor: '#FFF7ED',
+  },
+  itemPickName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C1B1B',
+  },
+  itemPickPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#AD2C00',
+  },
   splitDetail: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -854,6 +920,26 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#AD2C00',
     textAlign: 'center',
+  },
+  toastBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 24,
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(173, 44, 0, 0.1)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(173, 44, 0, 0.25)',
+  },
+  toastBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#AD2C00',
+    lineHeight: 18,
   },
   bottomAction: {
     position: 'absolute',

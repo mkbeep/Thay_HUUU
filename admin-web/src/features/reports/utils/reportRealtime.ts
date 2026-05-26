@@ -4,6 +4,7 @@ const STORAGE_KEY = 'restaurant:report-updated';
 type ReportUpdatedPayload = {
   reason?: string;
   orderId?: string;
+  billId?: string;
   at?: number;
 };
 

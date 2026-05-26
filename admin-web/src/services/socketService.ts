@@ -29,7 +29,7 @@ class SocketService {
     this.socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       auth: {
-        token: token || localStorage.getItem('token'),
+        token: token || localStorage.getItem('token') || localStorage.getItem('access_token'),
       },
       reconnection: true,
       reconnectionDelay: 1000,
@@ -91,7 +91,8 @@ class SocketService {
 
   // Event listeners
   on(event: string, callback: (...args: any[]) => void): void {
-    this.socket?.on(event, callback);
+    const socket = this.socket || this.connect();
+    socket.on(event, callback);
   }
 
   off(event: string, callback?: (...args: any[]) => void): void {

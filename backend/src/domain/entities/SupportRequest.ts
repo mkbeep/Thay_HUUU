@@ -32,6 +32,7 @@ export interface SupportRequest {
   id: string;
   table_id: string;
   table_number: string;
+  table_session_id?: string;
   type: SupportRequestType;
   status: SupportRequestStatus;
   priority: SupportRequestPriority;
@@ -46,6 +47,7 @@ export interface SupportRequest {
 export interface CreateSupportRequestDTO {
   table_id: string;
   table_number: string;
+  table_session_id?: string;
   type: SupportRequestType;
   priority?: SupportRequestPriority;
   note?: string;

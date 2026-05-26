@@ -6,10 +6,8 @@
 import { io, Socket } from 'socket.io-client';
 import { getApiBaseUrl } from '../utils/apiBaseUrl';
 
-// Lấy base URL và loại bỏ /api/v1
 const getSocketUrl = () => {
   const apiUrl = getApiBaseUrl();
-  // Remove /api/v1 suffix
   return apiUrl.replace(/\/api\/v1\/?$/, '');
 };
 
@@ -18,16 +16,23 @@ class SocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private tableSessionId: string | null = null;
+  private tableRoomRefCount = 0;
 
   connect(tableSessionId?: string): Socket {
+    if (tableSessionId) {
+      this.tableSessionId = tableSessionId;
+    }
+
     if (this.socket?.connected) {
+      return this.socket;
+    }
+
+    if (this.socket && !this.socket.connected) {
       return this.socket;
     }
 
     const socketUrl = getSocketUrl();
     console.log('🔌 Connecting to WebSocket:', socketUrl);
-
-    this.tableSessionId = tableSessionId || this.tableSessionId;
 
     this.socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
@@ -45,35 +50,36 @@ class SocketService {
   private setupEventHandlers(): void {
     if (!this.socket) return;
 
+    this.socket.off('connect');
     this.socket.on('connect', () => {
       console.log('✅ WebSocket connected:', this.socket?.id);
       this.reconnectAttempts = 0;
-      
-      // Join table room if we have a table session ID
-      if (this.tableSessionId) {
+
+      if (this.tableSessionId && this.tableRoomRefCount > 0) {
         this.socket?.emit('join:table', this.tableSessionId);
-        console.log('🪑 Joined table room:', this.tableSessionId);
+        console.log('🪑 Re-joined table room:', this.tableSessionId);
       }
     });
 
+    this.socket.off('disconnect');
     this.socket.on('disconnect', (reason) => {
       console.log('🔌 WebSocket disconnected:', reason);
     });
 
+    this.socket.off('connect_error');
     this.socket.on('connect_error', (error) => {
       console.error('❌ WebSocket connection error:', error);
       this.reconnectAttempts++;
-      
+
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.log('⚠️ Max reconnection attempts reached. Falling back to polling.');
+        console.log('⚠️ Max reconnection attempts reached. Use HTTP polling fallback.');
       }
     });
 
+    this.socket.off('reconnect');
     this.socket.on('reconnect', (attemptNumber) => {
       console.log(`🔄 WebSocket reconnected after ${attemptNumber} attempts`);
-      
-      // Rejoin table room after reconnection
-      if (this.tableSessionId) {
+      if (this.tableSessionId && this.tableRoomRefCount > 0) {
         this.socket?.emit('join:table', this.tableSessionId);
       }
     });
@@ -84,6 +90,7 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
       this.tableSessionId = null;
+      this.tableRoomRefCount = 0;
       console.log('🔌 WebSocket disconnected manually');
     }
   }
@@ -96,7 +103,6 @@ class SocketService {
     return this.socket?.connected || false;
   }
 
-  // Event listeners
   on(event: string, callback: (...args: any[]) => void): void {
     this.socket?.on(event, callback);
   }
@@ -109,17 +115,33 @@ class SocketService {
     this.socket?.emit(event, data);
   }
 
-  // Join table room
   joinTable(tableSessionId: string): void {
     this.tableSessionId = tableSessionId;
-    if (this.socket?.connected) {
-      this.socket.emit('join:table', tableSessionId);
-      console.log('🪑 Joined table room:', tableSessionId);
+    this.tableRoomRefCount += 1;
+
+    const doJoin = () => {
+      if (this.socket?.connected && this.tableSessionId) {
+        this.socket.emit('join:table', this.tableSessionId);
+        console.log('🪑 Joined table room:', this.tableSessionId);
+      }
+    };
+
+    if (!this.socket) {
+      this.connect(tableSessionId);
+    }
+    doJoin();
+
+    if (this.socket && !this.socket.connected) {
+      this.socket.once('connect', doJoin);
     }
   }
 
-  // Leave table room
   leaveTable(): void {
+    if (this.tableRoomRefCount > 0) {
+      this.tableRoomRefCount -= 1;
+    }
+    if (this.tableRoomRefCount > 0) return;
+
     if (this.tableSessionId && this.socket?.connected) {
       this.socket.emit('leave:table', this.tableSessionId);
       console.log('🚪 Left table room:', this.tableSessionId);

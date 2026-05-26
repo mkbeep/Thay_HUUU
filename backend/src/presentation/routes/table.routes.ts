@@ -20,15 +20,19 @@ export default function createTableRoutes(socketManager: SocketManager): Router 
     body('capacity').isNumeric().withMessage('Sức chứa phải là số'),
   ];
 
-  // Public routes (không cần auth)
+  // Public routes (không cần auth) — session routes trước /:id để không bị nuốt param
   router.get('/', tableController.getAll);
-  router.get('/by-number/:number', tableController.getByNumber); // NEW: Get table by number
+  router.get('/by-number/:number', tableController.getByNumber);
+  router.patch('/session/:sessionId/end', tableController.endSession);
+  router.post('/session/:sessionId/ping', tableController.pingSession);
+  router.get('/session/:sessionId/state', tableController.getSessionState);
   router.get('/:id', tableController.getById);
   router.post('/:id/session', tableController.createSession);
-  router.patch('/session/:sessionId/end', tableController.endSession);
 
   // Protected routes (cần auth)
   router.use(authMiddleware);
+
+  router.post('/:tableId/reset', requireRole('staff', 'manager', 'admin'), tableController.forceResetTable);
 
   router.post(
     '/',

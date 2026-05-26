@@ -66,13 +66,37 @@ export class TableRepository {
     }
   }
 
-  async createTableSession(tableId: string, customerCount: number): Promise<any> {
+  async createTableSession(
+    tableId: string,
+    customerCount: number,
+    sessionToken?: string,
+    deviceFingerprint?: string
+  ): Promise<{
+    data: any;
+    conflict: boolean;
+    status: number;
+    minutesSinceActive?: number;
+  }> {
     try {
       const response = await apiClient.post(`/tables/${tableId}/session`, {
         customer_count: customerCount,
+        session_token: sessionToken,
+        device_fingerprint: deviceFingerprint,
       });
-      return response.data.data;
-    } catch (error) {
+      return {
+        data: response.data.data,
+        conflict: response.status === 409 || response.data?.conflict === true,
+        status: response.status,
+      };
+    } catch (error: any) {
+      if (error?.response?.status === 409) {
+        return {
+          data: error.response.data?.data,
+          conflict: true,
+          status: 409,
+          minutesSinceActive: error.response.data?.minutesSinceActive,
+        };
+      }
       console.error('Error creating table session:', error);
       throw error;
     }

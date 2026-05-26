@@ -3,7 +3,7 @@
 ## 📡 Thông tin mạng hiện tại
 
 - **WiFi**: Hoa Nha
-- **IP máy tính**: 192.168.1.2
+- **IP máy tính**: 192.168.1.3
 - **Subnet**: 192.168.1.x
 
 ## 🚀 Cách chạy
@@ -17,7 +17,7 @@ npm run start:lan
 ### Cách 2: Chạy thủ công
 
 ```bash
-npx expo start --lan --host 192.168.1.2
+npx expo start --lan --host 192.168.1.3
 ```
 
 ### Cách 3: Chạy bình thường (sẽ tự động dùng .env)
@@ -31,13 +31,13 @@ npm start
 1. **Kết nối WiFi**: `Hoa Nha` (cùng mạng với máy tính)
 2. **Mở Expo Go app**
 3. **Quét QR code** từ terminal
-4. Hoặc nhập thủ công: `exp://192.168.1.2:8081`
+4. Hoặc nhập thủ công: `exp://192.168.1.3:8081`
 
 ## ⚙️ Cấu hình đã thiết lập
 
 File `.env` đã được tạo với:
 ```
-REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.2
+REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.3
 EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
 ```
 

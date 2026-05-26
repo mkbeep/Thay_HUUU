@@ -106,14 +106,16 @@ function SupportRequestScreenWrapper({ onBack, onNavigate, onRequestSent }: any)
   );
 }
 
-function StaffComingScreenWrapper({ requestType, onBack, onNavigate }: any) {
+function StaffComingScreenWrapper({ requestId, requestType, onBack, onNavigate, onResolved }: any) {
   const { tableNumber } = useTable();
   return (
     <StaffComingScreen
       tableNumber={tableNumber ?? undefined}
+      requestId={requestId}
       requestType={requestType}
       onBack={onBack}
       onNavigate={onNavigate}
+      onResolved={onResolved}
     />
   );
 }
@@ -141,8 +143,9 @@ import SupportRequestScreen from './src/presentation/screens/SupportRequestScree
 import MyTableScreen from './src/presentation/screens/MyTableScreen';
 import StaffComingScreen from './src/presentation/screens/StaffComingScreen';
 import QRScannerScreen from './src/presentation/screens/QRScannerScreen';
+import SessionConflictScreen from './src/presentation/screens/SessionConflictScreen';
 
-type Screen = 'welcome' | 'home' | 'cart' | 'detail' | 'orders' | 'summary' | 'payment' | 'support' | 'supportRequest' | 'table' | 'staffComing' | 'qrScanner';
+type Screen = 'welcome' | 'home' | 'cart' | 'detail' | 'orders' | 'summary' | 'payment' | 'support' | 'supportRequest' | 'table' | 'staffComing' | 'qrScanner' | 'sessionConflict';
 
 interface SelectedMenuItem {
   id: string;
@@ -172,11 +175,12 @@ export default function App() {
 }
 
 function AppScreens() {
-  const { tableNumber, tableId, isLoading } = useTable();
+  const { tableNumber, tableId, isLoading, sessionConflict } = useTable();
   const [currentScreen, setCurrentScreen] = useState<Screen>('welcome');
   const [qrReturnScreen, setQrReturnScreen] = useState<Screen>('welcome');
   const [selectedItem, setSelectedItem] = useState<SelectedMenuItem | null>(null);
   const [requestType, setRequestType] = useState<string>('Yêu cầu hỗ trợ');
+  const [supportRequestId, setSupportRequestId] = useState<string | undefined>();
   const didWebTableDeepLink = useRef(false);
 
   // ✅ Lắng nghe event thanh toán hoàn tất
@@ -241,6 +245,14 @@ function AppScreens() {
     didWebTableDeepLink.current = true;
     setCurrentScreen('home');
   }, [isLoading, tableNumber, tableId]);
+
+  if (sessionConflict) {
+    return (
+      <SessionConflictScreen
+        onBack={() => setCurrentScreen('welcome')}
+      />
+    );
+  }
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -354,8 +366,9 @@ function AppScreens() {
                 setCurrentScreen('table');
               }
             }}
-            onRequestSent={(type: string) => {
+            onRequestSent={(type: string, requestId?: string) => {
               setRequestType(type);
+              setSupportRequestId(requestId);
               setCurrentScreen('staffComing');
             }}
           />
@@ -364,8 +377,10 @@ function AppScreens() {
       case 'staffComing':
         return (
           <StaffComingScreenWrapper
+            requestId={supportRequestId}
             requestType={requestType}
             onBack={() => setCurrentScreen('supportRequest')}
+            onResolved={openCustomerWeb}
             onNavigate={(screen: string) => {
               if (screen === 'explore') {
                 openCustomerWeb();

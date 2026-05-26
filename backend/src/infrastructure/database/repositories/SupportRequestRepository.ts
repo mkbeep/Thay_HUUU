@@ -20,6 +20,7 @@ export class SupportRequestRepository implements ISupportRequestRepository {
     const docRef = await this.collection.add({
       table_id: dto.table_id,
       table_number: dto.table_number,
+      table_session_id: dto.table_session_id || '',
       type: dto.type,
       status: SupportRequestStatus.PENDING,
       priority: dto.priority || SupportRequestPriority.NORMAL,
@@ -106,6 +107,7 @@ export class SupportRequestRepository implements ISupportRequestRepository {
       id,
       table_id: data.table_id,
       table_number: data.table_number,
+      table_session_id: data.table_session_id,
       type: data.type,
       status: data.status,
       priority: data.priority,

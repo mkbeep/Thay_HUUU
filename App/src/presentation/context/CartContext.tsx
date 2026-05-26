@@ -1,12 +1,24 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { MenuItem } from '../../domain/models/MenuItem';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+  useRef,
+  useCallback,
+} from 'react';
+import { useTable } from './TableContext';
 
-// CartItem extends MenuItem và thêm các thuộc tính cho giỏ hàng
+const newLineId = () =>
+  `line_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+import { CartRepository, CartLine } from '../../data/repositories/CartRepository';
+
 export interface CartItem {
   id: string;
+  lineId: string;
   name: string;
-  price: number; // Giá dạng số để tính toán (đơn vị: đồng)
-  priceDisplay: string; // Giá hiển thị "145k"
+  price: number;
+  priceDisplay: string;
   image: any;
   quantity: number;
   options?: string;
@@ -16,10 +28,10 @@ export interface CartItem {
 
 interface CartContextType {
   items: CartItem[];
-  addItem: (item: Omit<CartItem, 'quantity'>) => void;
-  removeItem: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
-  updateNote: (id: string, note: string) => void;
+  addItem: (item: Omit<CartItem, 'quantity' | 'lineId'>) => void;
+  removeItem: (lineId: string) => void;
+  updateQuantity: (lineId: string, quantity: number) => void;
+  updateNote: (lineId: string, note: string) => void;
   clearCart: () => void;
   getTotal: () => number;
   getTax: () => number;
@@ -30,111 +42,128 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+function linesToCartItems(lines: CartLine[]): CartItem[] {
+  return lines.map((line) => ({
+    id: line.food_id,
+    lineId: line.id,
+    name: line.name,
+    price: line.unit_price,
+    priceDisplay: line.price_display || `${line.unit_price}`,
+    image: null,
+    quantity: line.quantity,
+    note: line.note,
+    options: line.options,
+  }));
+}
+
+function itemsToLines(items: CartItem[]): CartLine[] {
+  return items.map((item) => ({
+    id: item.lineId,
+    food_id: item.id,
+    name: item.name,
+    quantity: item.quantity,
+    unit_price: item.price,
+    price_display: item.priceDisplay,
+    note: item.note,
+    options: item.options,
+  }));
+}
+
 export const CartProvider = ({ children }: { children: ReactNode }) => {
-  // ✅ KHÔNG tự động restore từ localStorage - Luôn bắt đầu với giỏ hàng trống
   const [items, setItems] = useState<CartItem[]>([]);
+  const { sessionId } = useTable();
+  const cartRepo = useRef(new CartRepository());
+  const skipNextSync = useRef(false);
 
-  // ✅ Không cần lắng nghe storage event nữa vì không dùng localStorage
-  // useEffect(() => {
-  //   const handleStorageChange = (e: StorageEvent) => {
-  //     if (e.key === 'cart' && e.newValue === null) {
-  //       console.log('🧹 Cart cleared by table change');
-  //       setItems([]);
-  //     }
-  //   };
-  //   
-  //   window.addEventListener('storage', handleStorageChange);
-  //   return () => window.removeEventListener('storage', handleStorageChange);
-  // }, []);
+  useEffect(() => {
+    if (!sessionId) return;
+    skipNextSync.current = true;
+    void cartRepo.current
+      .getCart(sessionId)
+      .then((lines) => {
+        if (lines.length) setItems(linesToCartItems(lines));
+      })
+      .catch((e) => console.error('Load cart failed:', e));
+  }, [sessionId]);
 
-  // ✅ KHÔNG lưu vào localStorage nữa - Chỉ lưu trong memory
-  // Khi đổi bàn, TableContext sẽ clear tất cả và component sẽ unmount/remount
-  // useEffect(() => {
-  //   try {
-  //     if (items.length === 0) {
-  //       localStorage.removeItem('cart');
-  //       console.log('💾 Removed empty cart from localStorage');
-  //     } else {
-  //       localStorage.setItem('cart', JSON.stringify(items));
-  //       console.log('💾 Saved cart to localStorage:', items.length, 'items');
-  //     }
-  //   } catch (error) {
-  //     console.error('Error saving cart to localStorage:', error);
-  //   }
-  // }, [items]);
+  const syncCartToServer = useCallback(
+    async (cartItems: CartItem[]) => {
+      if (!sessionId) return;
+      try {
+        await cartRepo.current.syncCart(sessionId, itemsToLines(cartItems));
+      } catch (e) {
+        console.error('Cart sync failed:', e);
+      }
+    },
+    [sessionId]
+  );
 
-  const addItem = (item: Omit<CartItem, 'quantity'>) => {
-    console.log('🛒 CartContext.addItem called:', item);
-    
+  useEffect(() => {
+    if (skipNextSync.current) {
+      skipNextSync.current = false;
+      return;
+    }
+    void syncCartToServer(items);
+  }, [items, syncCartToServer]);
+
+  const addItem = (item: Omit<CartItem, 'quantity' | 'lineId'>) => {
     setItems((prevItems) => {
-      console.log('📦 Current cart items:', prevItems.length);
-      
-      // Kiểm tra xem món đã có trong giỏ chưa
-      const existingItemIndex = prevItems.findIndex((i) => i.id === item.id);
-      
+      const existingItemIndex = prevItems.findIndex(
+        (i) => i.id === item.id && i.note === item.note && i.options === item.options
+      );
       if (existingItemIndex > -1) {
-        // Nếu đã có, tăng số lượng
         const newItems = [...prevItems];
         newItems[existingItemIndex].quantity += 1;
-        console.log(`✅ Increased quantity for "${item.name}" to ${newItems[existingItemIndex].quantity}`);
         return newItems;
-      } else {
-        // Nếu chưa có, thêm mới với quantity = 1
-        const newItem = { ...item, quantity: 1 };
-        console.log(`✅ Added new item "${item.name}" to cart`);
-        return [...prevItems, newItem];
       }
+      return [...prevItems, { ...item, lineId: newLineId(), quantity: 1 }];
     });
   };
 
-  const removeItem = (id: string) => {
-    setItems((prevItems) => prevItems.filter((item) => item.id !== id));
+  const removeItem = (lineId: string) => {
+    setItems((prev) => {
+      const next = prev.filter((item) => item.lineId !== lineId);
+      if (sessionId) {
+        skipNextSync.current = true;
+        void cartRepo.current
+          .syncCart(sessionId, itemsToLines(next))
+          .catch((e) => console.error('Cart remove sync failed:', e));
+      }
+      return next;
+    });
   };
 
-  const updateQuantity = (id: string, quantity: number) => {
+  const updateQuantity = (lineId: string, quantity: number) => {
     if (quantity <= 0) {
-      removeItem(id);
+      removeItem(lineId);
       return;
     }
-    
     setItems((prevItems) =>
-      prevItems.map((item) =>
-        item.id === id ? { ...item, quantity } : item
-      )
+      prevItems.map((item) => (item.lineId === lineId ? { ...item, quantity } : item))
     );
   };
 
-  const updateNote = (id: string, note: string) => {
+  const updateNote = (lineId: string, note: string) => {
     setItems((prevItems) =>
-      prevItems.map((item) =>
-        item.id === id ? { ...item, note } : item
-      )
+      prevItems.map((item) => (item.lineId === lineId ? { ...item, note } : item))
     );
   };
 
   const clearCart = () => {
     setItems([]);
+    if (sessionId) {
+      skipNextSync.current = true;
+      void cartRepo.current
+        .syncCart(sessionId, [])
+        .catch((e) => console.error('Cart clear sync failed:', e));
+    }
   };
 
-  const getTotal = () => {
-    return items.reduce((total, item) => total + item.price * item.quantity, 0);
-  };
-
-  const getTax = () => {
-    return getTotal() * 0.08; // 8% thuế
-  };
-
-  const getServiceFee = () => {
-    return 0; // Phí dịch vụ = 0
-  };
-
-  const getGrandTotal = () => {
-    return getTotal() + getTax() + getServiceFee();
-  };
-
-  const getItemCount = () => {
-    return items.reduce((count, item) => count + item.quantity, 0);
-  };
+  const getTotal = () => items.reduce((total, item) => total + item.price * item.quantity, 0);
+  const getTax = () => getTotal() * 0.08;
+  const getServiceFee = () => 0;
+  const getGrandTotal = () => getTotal() + getTax() + getServiceFee();
+  const getItemCount = () => items.reduce((count, item) => count + item.quantity, 0);
 
   return (
     <CartContext.Provider

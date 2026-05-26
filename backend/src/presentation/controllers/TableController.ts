@@ -5,18 +5,21 @@
 import { Request, Response, NextFunction } from 'express';
 import { TableRepository } from '../../infrastructure/database/repositories/TableRepository';
 import { NotFoundError } from '../../application/errors/AppError';
-import { TableStatus } from '../../domain/entities/Table';
-import { v4 as uuidv4 } from 'uuid';
 import { attachCustomerMenuUrl } from '../../infrastructure/utils/tableResponse';
+import { enrichTablesWithSessionStats } from '../../infrastructure/utils/enrichTableSessions';
 import { SocketManager } from '../../infrastructure/websocket/SocketManager';
+import { SessionController } from './SessionController';
+import { getSessionAutoCloseService } from '../../application/services/SessionAutoCloseService';
 
 export class TableController {
   private tableRepository: TableRepository;
   private socketManager: SocketManager;
+  private sessionController: SessionController;
 
   constructor(socketManager: SocketManager) {
     this.tableRepository = new TableRepository();
     this.socketManager = socketManager;
+    this.sessionController = new SessionController(socketManager);
   }
 
   /**
@@ -25,7 +28,9 @@ export class TableController {
   getAll = async (_req: Request, res: Response, next: NextFunction) => {
     try {
       // Note: status and capacity filters are not yet implemented in repository
-      const tables = await this.tableRepository.findAllWithSessions();
+      const tables = await enrichTablesWithSessionStats(
+        await this.tableRepository.findAllWithSessions()
+      );
 
       res.status(200).json({
         success: true,
@@ -43,11 +48,13 @@ export class TableController {
   getById = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const table = await this.tableRepository.findByIdWithSession(id);
+      const raw = await this.tableRepository.findByIdWithSession(id);
 
-      if (!table) {
+      if (!raw) {
         throw new NotFoundError('Bàn không tồn tại');
       }
+
+      const [table] = await enrichTablesWithSessionStats([raw]);
 
       res.status(200).json({
         success: true,
@@ -143,8 +150,8 @@ export class TableController {
 
       const table = await this.tableRepository.updateStatus(id, status);
 
-      // ✅ EMIT WEBSOCKET EVENT ĐỂ ADMIN THẤY NGAY
       this.socketManager.notifyTableUpdated(id);
+      this.socketManager.notifyTableDocumentChanged(id);
 
       res.status(200).json({
         success: true,
@@ -162,41 +169,38 @@ export class TableController {
   createSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { customer_count } = req.body;
+      const {
+        customer_count = 1,
+        session_token: clientToken,
+        device_fingerprint: deviceFingerprint,
+      } = req.body;
 
-      const existingSession = await this.tableRepository.findActiveSessionByTableId(id);
-      if (existingSession) {
-        await this.tableRepository.updateStatus(id, TableStatus.OCCUPIED);
-        this.socketManager.notifyTableUpdated(id);
+      const { session, created, conflict, minutesSinceActive } =
+        await this.sessionController.resolveSessionForTable(
+          id,
+          customer_count,
+          clientToken,
+          deviceFingerprint
+        );
 
-        res.status(200).json({
-          success: true,
-          message: 'Phiên bàn đang hoạt động',
-          data: existingSession,
+      this.socketManager.notifyTableUpdated(id);
+      this.socketManager.notifyTableDocumentChanged(id);
+
+      if (conflict) {
+        res.status(409).json({
+          success: false,
+          conflict: true,
+          minutesSinceActive,
+          message:
+            'Bàn đang có khách khác. Nhân viên sẽ kiểm tra — vui lòng chờ hoặc liên hệ quầy.',
+          data: session,
         });
         return;
       }
 
-      // Generate session code
-      const sessionCode = uuidv4().substring(0, 8).toUpperCase();
-
-      const session = await this.tableRepository.createSession({
-        table_id: id,
-        session_code: sessionCode,
-        customer_count,
-        is_active: true,
-        created_by: req.user?.userId,
-      });
-
-      // Update table status to occupied
-      await this.tableRepository.updateStatus(id, TableStatus.OCCUPIED);
-
-      // ✅ NOTIFY ADMIN VỀ TRẠNG THÁI BÀN MỚI
-      this.socketManager.notifyTableUpdated(id);
-
-      res.status(201).json({
+      res.status(created ? 201 : 200).json({
         success: true,
-        message: 'Tạo phiên bàn thành công',
+        message: created ? 'Tạo phiên bàn thành công' : 'Phiên bàn đang hoạt động',
         data: session,
       });
     } catch (error) {
@@ -204,20 +208,33 @@ export class TableController {
     }
   };
 
+  pingSession = (req: Request, res: Response, next: NextFunction) =>
+    this.sessionController.ping(req, res, next);
+
+  getSessionState = (req: Request, res: Response, next: NextFunction) =>
+    this.sessionController.getState(req, res, next);
+
+  forceResetTable = (req: Request, res: Response, next: NextFunction) =>
+    this.sessionController.forceReset(req, res, next);
+
   /**
    * PATCH /api/v1/tables/session/:sessionId/end
    */
   endSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { sessionId } = req.params;
+      const existing = await this.tableRepository.findSessionById(sessionId);
+      if (!existing) {
+        throw new NotFoundError('Phiên không tồn tại');
+      }
 
-      const session = await this.tableRepository.endSession(sessionId);
+      await getSessionAutoCloseService().closeSessionNow(
+        sessionId,
+        existing.table_id,
+        this.socketManager
+      );
 
-      // Update table status to available
-      await this.tableRepository.updateStatus(session.table_id, TableStatus.AVAILABLE);
-
-      // ✅ NOTIFY ADMIN VỀ TRẠNG THÁI BÀN MỚI
-      this.socketManager.notifyTableUpdated(session.table_id);
+      const session = await this.tableRepository.findSessionById(sessionId);
 
       res.status(200).json({
         success: true,

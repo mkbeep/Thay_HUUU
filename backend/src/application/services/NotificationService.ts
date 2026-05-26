@@ -7,6 +7,7 @@ import { firebaseAdmin } from '../../infrastructure/config/firebase.config';
 import { INotificationRepository } from '../../domain/repositories/INotificationRepository';
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { NotificationType, NotificationPriority } from '../../domain/entities/Notification';
+import { SocketManager } from '../../infrastructure/websocket/SocketManager';
 
 export interface SendNotificationDTO {
   user_id: string;
@@ -37,6 +38,22 @@ export class NotificationService {
       priority: dto.priority || NotificationPriority.NORMAL,
       is_read: false,
     });
+
+    try {
+      SocketManager.getInstance().notifyNewNotification({
+        id: notification.id,
+        user_id: notification.user_id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        data: notification.data,
+        priority: notification.priority,
+        is_read: notification.is_read,
+        created_at: notification.created_at,
+      });
+    } catch {
+      /* socket optional */
+    }
 
     // 2. Lấy FCM token của user
     const user = await this.userRepository.findById(dto.user_id);

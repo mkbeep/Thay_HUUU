@@ -5,6 +5,12 @@ import { Plus } from 'lucide-react';
 type TableStatus = 'available' | 'occupied' | 'billing';
 type ZoneType = 'main' | 'terrace' | 'private';
 
+interface SessionStats {
+  minutesUsed: number;
+  unpaidTotal: number;
+  pendingKitchen: number;
+}
+
 interface Table {
   id: string;
   number: string;
@@ -15,6 +21,8 @@ interface Table {
   status: TableStatus;
   qrCode: string;
   sessionId?: string;
+  autoCloseAt?: string | null;
+  sessionStats?: SessionStats;
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
@@ -39,6 +47,12 @@ interface ApiDiningTable {
     is_active: boolean;
     customer_count?: number;
     started_at?: string;
+    auto_close_at?: string | { _seconds: number } | null;
+    session_stats?: {
+      minutes_used: number;
+      unpaid_total: number;
+      pending_kitchen_items: number;
+    };
   };
   /** Do backend tính từ CUSTOMER_WEB_BASE_URL — luôn là link http(s) mở web khách */
   customer_menu_url?: string;
@@ -95,6 +109,8 @@ function mapApiStatus(s: string): TableStatus {
 
 function mapApiTableToUi(t: ApiDiningTable): Table {
   const cap = typeof t.capacity === 'number' ? t.capacity : Number(t.capacity) || 0;
+  const sess = t.current_session;
+  const autoCloseMs = parseFirestoreTime(sess?.auto_close_at);
   return {
     id: t.id,
     number: t.table_number,
@@ -106,7 +122,15 @@ function mapApiTableToUi(t: ApiDiningTable): Table {
       ? 'occupied'
       : mapApiStatus(t.status),
     qrCode: resolveQrCodeUrl(t),
-    sessionId: t.current_session?.id,
+    sessionId: sess?.id,
+    autoCloseAt: autoCloseMs ? new Date(autoCloseMs).toISOString() : null,
+    sessionStats: sess?.session_stats
+      ? {
+          minutesUsed: sess.session_stats.minutes_used,
+          unpaidTotal: sess.session_stats.unpaid_total,
+          pendingKitchen: sess.session_stats.pending_kitchen_items,
+        }
+      : undefined,
   };
 }
 
@@ -114,6 +138,25 @@ function formatVnd(n: number): string {
   if (!n || Number.isNaN(n)) return '0đ';
   const amount = n > 0 && n < 1000 ? n * 1000 : n;
   return `${Math.round(amount).toLocaleString('vi-VN')}đ`;
+}
+
+function parseFirestoreTime(value: unknown): number | null {
+  if (!value) return null;
+  if (typeof value === 'string') return new Date(value).getTime();
+  if (typeof value === 'object' && value !== null && '_seconds' in (value as object)) {
+    return (value as { _seconds: number })._seconds * 1000;
+  }
+  return null;
+}
+
+function formatAutoCloseCountdown(autoCloseAt: string | undefined, nowMs: number): string | null {
+  const closeMs = autoCloseAt ? new Date(autoCloseAt).getTime() : NaN;
+  if (!closeMs || Number.isNaN(closeMs)) return null;
+  const sec = Math.max(0, Math.ceil((closeMs - nowMs) / 1000));
+  if (sec <= 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 export default function TablesPage() {
@@ -128,6 +171,7 @@ export default function TablesPage() {
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [nowTick, setNowTick] = useState(0);
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
+  const [sessionConflictAlert, setSessionConflictAlert] = useState<string | null>(null);
   const [newTable, setNewTable] = useState({
     number: '',
     name: '',
@@ -135,6 +179,37 @@ export default function TablesPage() {
     capacity: '',
     location: ''
   });
+
+  const refreshOneTable = useCallback(async (tableId: string) => {
+    try {
+      const res = await api.get<{ data: ApiDiningTable }>(`/tables/${tableId}`);
+      const row = res.data?.data;
+      if (!row) return;
+      const ui = mapApiTableToUi(row);
+      setTables((prev) => prev.map((t) => (t.id === tableId ? ui : t)));
+      if (ui.sessionId && (ui.status === 'occupied' || ui.status === 'billing')) {
+        const ordersRes = await api.get('/orders', {
+          params: { table_session_id: ui.sessionId },
+        });
+        const list = ordersRes.data?.data || [];
+        const sum = list.reduce(
+          (s: number, o: { total_amount?: number; payment_status?: string }) =>
+            o.payment_status === 'paid' ? s : s + (Number(o.total_amount) || 0),
+          0
+        );
+        setOrderTotals((prev) => ({ ...prev, [tableId]: sum }));
+      } else {
+        setOrderTotals((prev) => {
+          const next = { ...prev };
+          delete next[tableId];
+          return next;
+        });
+      }
+      setLastSyncedAt(new Date());
+    } catch (e) {
+      console.error('Refresh single table failed', e);
+    }
+  }, []);
 
   const loadTablesFromApi = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true;
@@ -177,41 +252,43 @@ export default function TablesPage() {
       return;
     }
 
-    const handleTableStatusChanged = (data: { tableId: string }) => {
-      console.log('📢 Table status changed via WebSocket:', data.tableId);
-      // Reload tables silently để cập nhật trạng thái
-      void loadTablesFromApi({ silent: true });
+    const handleTableEvent = (data: { tableId: string }) => {
+      if (data?.tableId) void refreshOneTable(data.tableId);
     };
 
-    const handleTableUpdated = (data: { tableId: string }) => {
-      console.log('📢 Table updated via WebSocket:', data.tableId);
-      // Reload tables silently để cập nhật trạng thái
-      void loadTablesFromApi({ silent: true });
+    const handleSessionConflict = (data: { tableId: string; message?: string }) => {
+      setSessionConflictAlert(
+        data.message || `Bàn ${data.tableId}: có khách mới quét QR — cần kiểm tra thực tế.`
+      );
+      if (data?.tableId) void refreshOneTable(data.tableId);
     };
 
-    // Lắng nghe cả 2 events
-    socket.on('table:status_changed', handleTableStatusChanged);
-    socket.on('table:updated', handleTableUpdated);
-    
+    socket.on('table:status_changed', handleTableEvent);
+    socket.on('table:updated', handleTableEvent);
+    socket.on('table:document_changed', handleTableEvent);
+    socket.on('session:conflict', handleSessionConflict);
+    socket.on('session:closing_soon', handleTableEvent);
+    socket.on('session:auto_closing', handleTableEvent);
+
     console.log('✅ TablesPage WebSocket listeners registered');
 
     return () => {
-      socket.off('table:status_changed', handleTableStatusChanged);
-      socket.off('table:updated', handleTableUpdated);
+      socket.off('table:status_changed', handleTableEvent);
+      socket.off('table:updated', handleTableEvent);
+      socket.off('table:document_changed', handleTableEvent);
+      socket.off('session:conflict', handleSessionConflict);
+      socket.off('session:closing_soon', handleTableEvent);
+      socket.off('session:auto_closing', handleTableEvent);
       console.log('🔌 TablesPage WebSocket listeners removed');
     };
-  }, [loadTablesFromApi]);
+  }, [refreshOneTable]);
 
   useEffect(() => {
-    // Polling mỗi 5 giây để đồng bộ (giảm từ 90 giây)
-    const t = setInterval(() => void loadTablesFromApi({ silent: true }), 5_000);
+    const hasCountdown = tables.some((t) => t.autoCloseAt);
+    const intervalMs = hasCountdown ? 1000 : 30_000;
+    const t = setInterval(() => setNowTick((n) => n + 1), intervalMs);
     return () => clearInterval(t);
-  }, [loadTablesFromApi]);
-
-  useEffect(() => {
-    const t = setInterval(() => setNowTick((n) => n + 1), 30_000);
-    return () => clearInterval(t);
-  }, []);
+  }, [tables]);
 
   useEffect(() => {
     const targets = tables.filter((t) => t.status === 'occupied' || t.status === 'billing');
@@ -383,6 +460,17 @@ export default function TablesPage() {
     window.print();
   };
 
+  const handleResetTable = async (table: Table) => {
+    if (!confirm(`Reset bàn ${table.number}? Session cũ sẽ đóng và bàn về trống.`)) return;
+    try {
+      await api.post(`/tables/${table.id}/reset`);
+      await refreshOneTable(table.id);
+    } catch (e) {
+      console.error('Reset table failed', e);
+      alert('Không reset được bàn.');
+    }
+  };
+
   const handleDownloadQR = () => {
     if (!selectedTable) return;
     const link = document.createElement('a');
@@ -467,6 +555,10 @@ export default function TablesPage() {
             <span className="w-3 h-3 rounded-full bg-blue-500"></span>
             <span className="text-gray-600 uppercase tracking-wider">Thanh toán</span>
           </div>
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <span className="w-3 h-3 rounded-full bg-gray-400"></span>
+            <span className="text-gray-600 uppercase tracking-wider">Sắp trống</span>
+          </div>
         </div>
       </div>
 
@@ -475,6 +567,18 @@ export default function TablesPage() {
       )}
       {listError && (
         <p className="text-sm text-red-600">{listError}</p>
+      )}
+      {sessionConflictAlert && (
+        <div className="flex items-center justify-between gap-4 text-sm text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3">
+          <span>{sessionConflictAlert}</span>
+          <button
+            type="button"
+            className="shrink-0 font-bold text-amber-900 underline"
+            onClick={() => setSessionConflictAlert(null)}
+          >
+            Đóng
+          </button>
+        </div>
       )}
       {!listLoading && tables.length === 0 && !listError && (
         <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
@@ -489,14 +593,32 @@ export default function TablesPage() {
         {filteredTables.map((table) => {
           const colors = getStatusColor(table.status);
           const total = orderTotals[table.id];
+          const countdown = formatAutoCloseCountdown(table.autoCloseAt ?? undefined, Date.now() + nowTick * 0);
+          const stats = table.sessionStats;
+          const isActiveSession =
+            table.status === 'occupied' || table.status === 'billing';
+          const isAutoClosing = Boolean(countdown && isActiveSession);
           return (
             <div
               key={table.id}
               className="group bg-white p-6 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 relative border border-gray-100"
             >
               <div className="flex justify-between items-start mb-4">
-                <div className={`${colors.badge} ${colors.text} px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest`}>
-                  {getStatusText(table.status)}
+                <div className="flex flex-col gap-1.5 items-start">
+                  {isAutoClosing ? (
+                    <div className="inline-flex flex-col gap-0.5 items-start">
+                      <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
+                        Sắp trống
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 text-gray-700 px-2.5 py-0.5 text-[10px] font-bold tabular-nums">
+                        {countdown}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className={`${colors.badge} ${colors.text} px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest`}>
+                      {getStatusText(table.status)}
+                    </div>
+                  )}
                 </div>
                 <button 
                   type="button"
@@ -518,6 +640,22 @@ export default function TablesPage() {
                 </div>
                 <h3 className="font-bold text-gray-900">{table.name}</h3>
                 <p className="text-xs text-gray-500">{table.capacity} • {table.location}</p>
+                {isActiveSession && stats && (
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center w-full max-w-[220px] mx-auto">
+                    <div className="rounded-lg bg-gray-50 px-1 py-1.5">
+                      <p className="text-[9px] font-bold text-gray-500 uppercase">Đã dùng</p>
+                      <p className="text-xs font-black text-gray-900">{stats.minutesUsed}p</p>
+                    </div>
+                    <div className="rounded-lg bg-orange-50 px-1 py-1.5">
+                      <p className="text-[9px] font-bold text-orange-700 uppercase">Chưa TT</p>
+                      <p className="text-[10px] font-black text-[#AD2C00]">{formatVnd(stats.unpaidTotal)}</p>
+                    </div>
+                    <div className="rounded-lg bg-blue-50 px-1 py-1.5">
+                      <p className="text-[9px] font-bold text-blue-700 uppercase">Bếp</p>
+                      <p className="text-xs font-black text-blue-800">{stats.pendingKitchen}</p>
+                    </div>
+                  </div>
+                )}
                 {(table.status === 'occupied' || table.status === 'billing') && total != null && total > 0 && (
                   <div className={`mt-3 inline-flex flex-col items-center rounded-xl px-4 py-2 ${
                     table.status === 'billing'
@@ -545,6 +683,15 @@ export default function TablesPage() {
                 >
                   Xem mã QR
                 </button>
+                {(table.status === 'occupied' || table.status === 'billing') && (
+                  <button
+                    type="button"
+                    onClick={() => void handleResetTable(table)}
+                    className="w-full py-2.5 border-2 border-amber-300 text-amber-800 rounded-full font-bold text-sm hover:bg-amber-50 transition-colors"
+                  >
+                    Reset bàn (zombie)
+                  </button>
+                )}
                 {table.status === 'available' && (
                   <button 
                     onClick={() => handleDeleteTable(table.id)}

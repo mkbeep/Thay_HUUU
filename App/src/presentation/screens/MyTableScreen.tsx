@@ -27,11 +27,18 @@ export default function MyTableScreen({
   onPayment,
   onQRScan,
 }: MyTableScreenProps) {
-  const { orders, hasPendingPaymentConfirmation, isTableFullyPaid } = useOrder();
+  const {
+    orders,
+    hasPendingPaymentConfirmation,
+    hasUnpaidServedOrders,
+    isTableFullyPaid,
+  } = useOrder();
 
-  // Tính tổng tiền từ các đơn hàng đã served
   const servedOrders = orders.filter((order) => order.status === 'served');
-  const totalAmount = servedOrders.reduce((sum, order) => sum + order.total, 0);
+  const unpaidServedOrders = servedOrders.filter(
+    (order) => order.paymentStatus === 'unpaid'
+  );
+  const totalAmount = unpaidServedOrders.reduce((sum, order) => sum + order.total, 0);
   const subtotal = totalAmount / 1.08; // Tính ngược lại subtotal (vì total đã bao gồm VAT 8%)
   const vat = totalAmount - subtotal;
   const formatCurrency = (amount: number) => {
@@ -51,7 +58,7 @@ export default function MyTableScreen({
   };
 
   const handlePayment = () => {
-    if (servedOrders.length === 0) {
+    if (!hasUnpaidServedOrders()) {
       Alert.alert(
         'Chưa có món nào',
         'Bạn chưa gọi món nào. Vui lòng gọi món trước khi thanh toán.',
@@ -63,7 +70,7 @@ export default function MyTableScreen({
   };
 
   const handleSplitBill = () => {
-    if (servedOrders.length === 0) {
+    if (!hasUnpaidServedOrders()) {
       Alert.alert('Chưa có món nào', 'Bạn chưa gọi món nào để chia bill.', [
         { text: 'OK' },
       ]);
@@ -238,32 +245,37 @@ export default function MyTableScreen({
           </View>
         </View>
 
-        {/* Payment Button */}
-        <TouchableOpacity
-          style={styles.paymentButton}
-          onPress={handlePayment}
-          activeOpacity={0.9}
-        >
-          <LinearGradient
-            colors={['#006A35', '#008645']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.paymentGradient}
+        {hasUnpaidServedOrders() ? (
+          <TouchableOpacity
+            style={styles.paymentButton}
+            onPress={handlePayment}
+            activeOpacity={0.9}
           >
-            <Ionicons name="card" size={24} color="#FFFFFF" />
-            <View style={styles.paymentTextContainer}>
-              <Text style={styles.paymentLabel}>
-                {isTableFullyPaid()
-                  ? 'ĐÃ THANH TOÁN'
-                  : hasPendingPaymentConfirmation()
-                  ? 'ĐANG CHỜ XÁC NHẬN'
-                  : 'THANH TOÁN NGAY'}
-              </Text>
-              <Text style={styles.paymentAmount}>{formatCurrency(totalAmount)}</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
-          </LinearGradient>
-        </TouchableOpacity>
+            <LinearGradient
+              colors={['#006A35', '#008645']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.paymentGradient}
+            >
+              <Ionicons name="card" size={24} color="#FFFFFF" />
+              <View style={styles.paymentTextContainer}>
+                <Text style={styles.paymentLabel}>THANH TOÁN NGAY</Text>
+                <Text style={styles.paymentAmount}>{formatCurrency(totalAmount)}</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : hasPendingPaymentConfirmation() ? (
+          <View style={[styles.paymentButton, styles.paymentPendingBox]}>
+            <Ionicons name="hourglass-outline" size={22} color="#AD2C00" />
+            <Text style={styles.paymentPendingText}>Đang chờ nhân viên xác nhận thanh toán</Text>
+          </View>
+        ) : isTableFullyPaid() ? (
+          <View style={[styles.paymentButton, styles.paymentDoneBox]}>
+            <Ionicons name="checkmark-circle" size={22} color="#006A35" />
+            <Text style={styles.paymentDoneText}>Đã thanh toán xong</Text>
+          </View>
+        ) : null}
 
         {/* Info */}
         <View style={styles.infoCard}>
@@ -549,6 +561,40 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+  },
+  paymentPendingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(173, 44, 0, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(173, 44, 0, 0.25)',
+    shadowColor: '#AD2C00',
+  },
+  paymentPendingText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#AD2C00',
+  },
+  paymentDoneBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(0, 106, 53, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 106, 53, 0.25)',
+    shadowColor: '#006A35',
+  },
+  paymentDoneText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#006A35',
   },
   paymentGradient: {
     flexDirection: 'row',

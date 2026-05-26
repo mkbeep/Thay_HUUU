@@ -13,6 +13,41 @@ import axios from 'axios';
 import { getApiBaseUrl } from '../../utils/apiBaseUrl';
 import { socketService } from '../../services/socketService';
 import { useTable } from './TableContext';
+import { SessionRepository } from '../../data/repositories/SessionRepository';
+import { getApiBaseUrl as getApiOrigin } from '../../utils/apiBaseUrl';
+
+function parseFirestoreDate(value: unknown): Date {
+  if (value == null) return new Date();
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? new Date() : value;
+  if (typeof value === 'object' && value !== null && '_seconds' in (value as object)) {
+    const s = (value as { _seconds: number; _nanoseconds?: number })._seconds;
+    const ns = (value as { _nanoseconds?: number })._nanoseconds ?? 0;
+    const d = new Date(s * 1000 + Math.floor(ns / 1_000_000));
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }
+  if (typeof (value as { toDate?: () => Date }).toDate === 'function') {
+    const d = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }
+  const d = new Date(value as string | number);
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+function resolveFoodImageUrl(rawUrl?: string): { uri: string } | null {
+  if (!rawUrl?.trim()) return null;
+  const url = rawUrl.trim();
+  if (/^https?:\/\//i.test(url) || url.startsWith('//')) {
+    return { uri: url };
+  }
+  const apiOrigin = getApiOrigin().replace(/\/api\/v1\/?$/, '');
+  if (url.startsWith('/images/')) {
+    return { uri: `${apiOrigin}${url}` };
+  }
+  if (url.startsWith('menu/')) {
+    return { uri: `${apiOrigin}/images/${url}` };
+  }
+  return { uri: `${apiOrigin}/images/menu/${url.replace(/^\/+/, '')}` };
+}
 
 // Presentation layer status mapping
 export type OrderStatus = 'pending' | 'confirmed' | 'cooking' | 'ready' | 'served' | 'cancelled';
@@ -21,6 +56,8 @@ export type PaymentStatus = 'unpaid' | 'pending_confirmation' | 'paid';
 // Presentation layer OrderItem (simplified for UI)
 export interface OrderItem {
   id: string;
+  /** order_item ID trên server — trạng thái gắn theo dòng này, không theo tên món */
+  orderItemId?: string;
   name: string;
   price: number;
   priceDisplay: string;
@@ -32,7 +69,9 @@ export interface OrderItem {
 
 // Presentation layer Order (for UI display)
 export interface Order {
+  /** order_item.id — key danh sách */
   id: string;
+  orderId: string;
   orderNumber: string;
   items: OrderItem[];
   total: number;
@@ -48,9 +87,18 @@ interface OrderContextType {
   currentOrder: Order | null;
   createOrder: (items: OrderItem[], total: number, tableNumber: string | number) => Promise<{ success: boolean; error?: any }>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  requestPaymentForServedOrders: (paymentMethod?: 'qr' | 'cash' | 'card' | 'e_wallet') => boolean;
+  payOrderItems: (
+    itemIds: string[],
+    paymentMethod?: 'qr' | 'cash' | 'card' | 'e_wallet'
+  ) => Promise<boolean>;
+  requestPaymentForServedOrders: (
+    paymentMethod?: 'qr' | 'cash' | 'card' | 'e_wallet',
+    lineIds?: string[]
+  ) => Promise<boolean>;
+  loadOrdersFromSession: () => Promise<void>;
   markPaymentConfirmed: () => void;
   hasPendingPaymentConfirmation: () => boolean;
+  hasUnpaidServedOrders: () => boolean;
   isTableFullyPaid: () => boolean;
   getOrderHistory: () => Order[];
   getCurrentOrder: () => Order | null;
@@ -98,10 +146,86 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   // ✅ KHÔNG tự động restore từ localStorage - Luôn bắt đầu với danh sách đơn trống
   const [orders, setOrders] = useState<Order[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [pendingBillId, setPendingBillId] = useState<string | null>(null);
   
   const orderService = new OrderService();
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
-  const { sessionId } = useTable();
+  const { sessionId, sessionToken, tableNumber } = useTable();
+  const sessionRepo = useMemo(() => new SessionRepository(), []);
+
+  const statusMap: Record<string, OrderStatus> = {
+    pending: 'pending',
+    confirmed: 'confirmed',
+    preparing: 'cooking',
+    ready: 'ready',
+    served: 'served',
+    completed: 'served',
+    cancelled: 'cancelled',
+  };
+  const paymentMap: Record<string, PaymentStatus> = {
+    unpaid: 'unpaid',
+    payment_pending_confirmation: 'pending_confirmation',
+    paid: 'paid',
+  };
+
+  const mapRemoteOrderToLines = (remote: any): Order[] => {
+    const lines = remote.items || [];
+    return lines.map((line: any) => {
+      const foodName = line?.food?.name || remote.notes?.split(':')[0] || 'Món';
+      const unitPrice = Number(line?.unit_price || 0);
+      const qty = Number(line?.quantity || 1);
+      const subtotal = unitPrice * qty;
+      const tax = subtotal * 0.08;
+      const itemStatus = (line?.status as string) || 'pending';
+      const imageFromApi = resolveFoodImageUrl(line?.food?.image_url);
+      const orderPayment = paymentMap[remote.payment_status];
+      const linePayment = paymentMap[line.payment_status];
+      const paymentStatus: PaymentStatus =
+        orderPayment === 'pending_confirmation' || orderPayment === 'paid'
+          ? orderPayment
+          : linePayment || 'unpaid';
+      return {
+        id: line.id,
+        orderId: remote.id,
+        orderNumber: remote.order_number || remote.id,
+        items: [
+          {
+            id: line.food_id || line.food?.id,
+            orderItemId: line.id,
+            name: foodName,
+            price: unitPrice,
+            priceDisplay: `${unitPrice}`,
+            image: imageFromApi,
+            quantity: qty,
+            note: line?.special_instructions,
+          },
+        ],
+        total: subtotal + tax,
+        status: statusMap[itemStatus] || 'pending',
+        paymentStatus,
+        createdAt: parseFirestoreDate(remote.created_at),
+        updatedAt: parseFirestoreDate(remote.updated_at),
+        tableNumber: remote.table_number || tableNumber || '',
+      };
+    });
+  };
+
+  const flattenRemoteOrders = (serverOrders: any[]): Order[] =>
+    serverOrders.flatMap((o) => mapRemoteOrderToLines(o));
+
+  const loadOrdersFromSession = async () => {
+    if (!sessionId) return;
+    try {
+      const response = await axios.get(`${apiBaseUrl}/orders/public`, {
+        params: { table_session_id: sessionId },
+      });
+      const serverOrders = response?.data?.data || [];
+      const mapped = flattenRemoteOrders(serverOrders);
+      setOrders(mapped);
+    } catch (error) {
+      console.error('Error loading session orders:', error);
+    }
+  };
 
   // ✅ Không cần lắng nghe storage event nữa vì không dùng localStorage
   // useEffect(() => {
@@ -116,18 +240,32 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   //   return () => window.removeEventListener('storage', handleStorageChange);
   // }, []);
 
-  // ✅ Load orders từ backend khi component mount (thay vì từ localStorage)
   useEffect(() => {
-    const loadOrdersFromBackend = async () => {
-      // Chỉ load nếu có tableNumber
-      if (!orders.length && isInitialLoad) {
-        setIsInitialLoad(false);
-        // Orders sẽ được load từ WebSocket sync bên dưới
-      }
+    if (!sessionId) return;
+    void loadOrdersFromSession();
+    setIsInitialLoad(false);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onRestored = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!Array.isArray(detail)) return;
+      const mapped = flattenRemoteOrders(detail);
+      setOrders(mapped);
     };
-    
-    void loadOrdersFromBackend();
-  }, [orders.length, isInitialLoad]);
+    const onPendingBill = (e: Event) => {
+      const billId = (e as CustomEvent).detail as string | null;
+      setPendingBillId(billId);
+    };
+
+    window.addEventListener('session:orders-restored', onRestored);
+    window.addEventListener('session:pending-bill', onPendingBill);
+    return () => {
+      window.removeEventListener('session:orders-restored', onRestored);
+      window.removeEventListener('session:pending-bill', onPendingBill);
+    };
+  }, [sessionId, tableNumber]);
 
   // ✅ KHÔNG lưu vào localStorage nữa - Chỉ lưu trong memory
   // Khi đổi bàn, TableContext sẽ clear tất cả và component sẽ unmount/remount
@@ -163,14 +301,25 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       return { success: true };
     }
 
+    if (pendingBillId) {
+      return {
+        success: false,
+        error: {
+          message: 'Bàn đang chờ nhân viên xác nhận thanh toán. Vui lòng gọi nhân viên nếu muốn gọi thêm món.',
+        },
+      };
+    }
+
     const createdAt = new Date();
     const localOrders = items.map((item, index) => {
       const subtotal = item.price * item.quantity;
       const tax = subtotal * 0.08;
+      const tempItemId = `tmp_${Date.now()}_${index}`;
       return {
-        id: `order_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`,
+        id: tempItemId,
+        orderId: `order_${Date.now()}_${index}`,
         orderNumber: generateOrderNumber(),
-        items: [item],
+        items: [{ ...item, orderItemId: tempItemId }],
         total: subtotal + tax,
         status: 'pending' as OrderStatus,
         paymentStatus: 'unpaid' as PaymentStatus,
@@ -180,70 +329,38 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
       };
     });
 
-    // Mỗi dòng món là một order riêng để gọi lại cùng món và cập nhật trạng thái độc lập.
     setOrders((prev) => [...localOrders, ...prev]);
 
     try {
       const url = `${apiBaseUrl}/orders`;
-      const responses = await Promise.allSettled(
-        localOrders.map((localOrder) => {
-          const item = localOrder.items[0];
-          const subtotal = item.price * item.quantity;
-          const tax = subtotal * 0.08;
-          const payload = {
-            table_session_id: sessionId || String(tableNumber),
-            table_number: String(tableNumber),
-            order_type: 'dine_in',
-            subtotal,
-            tax_amount: tax,
-            discount_amount: 0,
-            total_amount: subtotal + tax,
-            items: [
-              {
-                food_id: item.id,
-                quantity: item.quantity,
-                unit_price: item.price,
-                notes: item.note,
-              },
-            ],
-            notes: item.note?.trim() ? `${item.name}: ${item.note.trim()}` : '',
-          };
-
-          console.log('🔄 Sending item order to backend:', { url, payload });
-          return axios.post(url, payload).then((response) => ({
-            localId: localOrder.id,
-            serverOrder: response?.data?.data,
-          }));
-        })
+      const orderSubtotal = items.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
       );
+      const orderTax = orderSubtotal * 0.08;
+      const payload = {
+        table_session_id: sessionId || String(tableNumber),
+        table_number: String(tableNumber),
+        order_type: 'dine_in',
+        subtotal: orderSubtotal,
+        tax_amount: orderTax,
+        discount_amount: 0,
+        total_amount: orderSubtotal + orderTax,
+        items: items.map((item) => ({
+          food_id: item.id,
+          quantity: item.quantity,
+          unit_price: item.price,
+          notes: item.note,
+        })),
+        notes: items
+          .filter((i) => i.note?.trim())
+          .map((i) => `${i.name}: ${i.note!.trim()}`)
+          .join('; '),
+      };
 
-      const syncedResponses = responses
-        .filter(
-          (
-            result
-          ): result is PromiseFulfilledResult<{ localId: string; serverOrder: any }> =>
-            result.status === 'fulfilled'
-        )
-        .map((result) => result.value);
+      await axios.post(url, payload);
 
-      setOrders((prev) =>
-        prev.map((order) => {
-          const synced = syncedResponses.find((item) => item.localId === order.id);
-          if (!synced?.serverOrder?.id) return order;
-          return {
-            ...order,
-            id: synced.serverOrder.id,
-            orderNumber: synced.serverOrder.order_number || order.orderNumber,
-          };
-        })
-      );
-
-      const failedResponses = responses.filter((result) => result.status === 'rejected');
-      if (failedResponses.length > 0) {
-        console.error('❌ Some item orders failed to sync:', failedResponses);
-        return { success: false, error: failedResponses };
-      }
-
+      await loadOrdersFromSession();
       return { success: true };
     } catch (error: any) {
       console.error('❌ Error syncing order to backend:', {
@@ -266,66 +383,62 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
-  const requestPaymentForServedOrders = (
-    paymentMethod: 'qr' | 'cash' | 'card' | 'e_wallet' = 'qr'
-  ): boolean => {
-    const eligibleOrderIds = orders
-      .filter((order) => order.status === 'served' && order.paymentStatus === 'unpaid')
-      .map((order) => order.id);
+  const requestPaymentForServedOrders = async (
+    paymentMethod: 'qr' | 'cash' | 'card' | 'e_wallet' = 'qr',
+    _lineIds?: string[]
+  ): Promise<boolean> => {
+    if (!sessionId) return false;
 
-    let hasEligibleOrder = false;
-    
-    // Cập nhật state local NGAY LẬP TỨC
-    setOrders((prev) =>
-      prev.map((order) => {
-        if (order.status === 'served' && order.paymentStatus === 'unpaid') {
-          hasEligibleOrder = true;
-          return {
-            ...order,
-            paymentStatus: 'pending_confirmation',
-            updatedAt: new Date(),
-          };
-        }
-        return order;
-      })
+    const hasUnpaid = orders.some(
+      (line) => line.status !== 'cancelled' && line.paymentStatus === 'unpaid'
     );
+    if (!hasUnpaid) return false;
 
-    // Gửi yêu cầu thanh toán lên backend (best effort)
-    eligibleOrderIds.forEach((orderId) => {
-      axios.patch(`${apiBaseUrl}/orders/${orderId}/request-payment`, {
-        payment_method: paymentMethod,
-      })
-      .then(() => {
-        console.log(`✅ Payment request sent for order ${orderId}`);
-      })
-      .catch((error) => {
-        console.error(`❌ Error requesting payment for order ${orderId}:`, error?.response?.data || error.message);
-        // Rollback nếu lỗi
-        setOrders((prev) =>
-          prev.map((order) =>
-            order.id === orderId
-              ? { ...order, paymentStatus: 'unpaid', updatedAt: new Date() }
-              : order
-          )
-        );
-      });
-    });
-
-    return hasEligibleOrder;
+    try {
+      const bill = await sessionRepo.requestSessionPayment(sessionId, paymentMethod);
+      setPendingBillId(bill.id);
+      console.log('✅ Session payment bill created:', bill.id);
+      return true;
+    } catch (error: any) {
+      console.error('❌ Session payment request failed:', error?.response?.data || error.message);
+      return false;
+    }
   };
 
-  const cancelCustomerOrder = async (orderId: string): Promise<boolean> => {
-    const order = orders.find((o) => o.id === orderId);
-    if (!order || (order.status !== 'pending' && order.status !== 'confirmed')) {
+  const payOrderItems = async (
+    itemIds: string[],
+    paymentMethod: 'qr' | 'cash' | 'card' | 'e_wallet' = 'qr'
+  ): Promise<boolean> => {
+    if (itemIds.length === 0) return false;
+    const methodForApi = paymentMethod;
+    try {
+      await Promise.all(
+        itemIds.map((itemId) =>
+          axios.patch(`${apiBaseUrl}/orders/items/${itemId}/payment`, {
+            payment_method: methodForApi,
+          })
+        )
+      );
+      setOrders((prev) => prev.filter((o) => !itemIds.includes(o.id)));
+      return true;
+    } catch (error: any) {
+      console.error('payOrderItems', error?.response?.data || error?.message);
+      return false;
+    }
+  };
+
+  const cancelCustomerOrder = async (orderItemId: string): Promise<boolean> => {
+    const line = orders.find((o) => o.id === orderItemId);
+    if (!line || (line.status !== 'pending' && line.status !== 'confirmed')) {
       return false;
     }
     try {
-      await axios.patch(`${apiBaseUrl}/orders/${orderId}/cancel`, {
-        table_session_id: sessionId || String(order.tableNumber),
+      await axios.patch(`${apiBaseUrl}/orders/${line.orderId}/cancel`, {
+        table_session_id: sessionId || String(line.tableNumber),
       });
       setOrders((prev) =>
         prev.map((o) =>
-          o.id === orderId ? { ...o, status: 'cancelled' as OrderStatus, updatedAt: new Date() } : o
+          o.id === orderItemId ? { ...o, status: 'cancelled' as OrderStatus, updatedAt: new Date() } : o
         )
       );
       return true;
@@ -336,28 +449,26 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const markPaymentConfirmed = () => {
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.paymentStatus === 'pending_confirmation'
-          ? { ...order, paymentStatus: 'paid', updatedAt: new Date() }
-          : order
-      )
-    );
+    setPendingBillId(null);
+    void loadOrdersFromSession();
   };
 
-  const hasPendingPaymentConfirmation = () =>
-    orders.some((order) => order.paymentStatus === 'pending_confirmation');
+  const hasPendingPaymentConfirmation = () => pendingBillId != null;
+
+  const hasUnpaidServedOrders = () =>
+    orders.some(
+      (order) => order.status === 'served' && order.paymentStatus === 'unpaid'
+    );
 
   const isTableFullyPaid = () => {
-    const servedOrders = orders.filter((order) => order.status === 'served');
-    if (servedOrders.length === 0) return false;
-    return servedOrders.every((order) => order.paymentStatus === 'paid');
+    const unpaid = orders.filter((o) => o.paymentStatus !== 'paid' && o.status !== 'cancelled');
+    return orders.length > 0 && unpaid.length === 0;
   };
 
-  // WebSocket real-time updates
+  // WebSocket — chỉ lắng nghe room của session hiện tại
   useEffect(() => {
-    if (orders.length === 0) return;
-    const tableSessionId = sessionId || String(orders[0].tableNumber);
+    if (!sessionId) return;
+    const tableSessionId = sessionId;
 
     // Initial sync
     const syncOrders = async () => {
@@ -367,34 +478,8 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
         });
         const serverOrders = response?.data?.data || [];
 
-        setOrders((prev) =>
-          prev.map((local) => {
-            const remote = serverOrders.find((item: any) => item.id === local.id);
-            if (!remote) return local;
-
-            const statusMap: Record<string, OrderStatus> = {
-              pending: 'pending',
-              confirmed: 'confirmed',
-              preparing: 'cooking',
-              ready: 'ready',
-              served: 'served',
-              completed: 'served',
-              cancelled: 'cancelled',
-            };
-            const paymentMap: Record<string, PaymentStatus> = {
-              unpaid: 'unpaid',
-              payment_pending_confirmation: 'pending_confirmation',
-              paid: 'paid',
-            };
-
-            return {
-              ...local,
-              status: statusMap[remote.status] || local.status,
-              paymentStatus: paymentMap[remote.payment_status] || local.paymentStatus,
-              updatedAt: remote.updated_at ? new Date(remote.updated_at) : local.updatedAt,
-            };
-          })
-        );
+        const mapped = flattenRemoteOrders(serverOrders);
+        setOrders(mapped.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
       } catch (error) {
         console.error('Error syncing order statuses:', error);
       }
@@ -407,105 +492,87 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
     socketService.joinTable(tableSessionId);
 
     // Listen for order updates
-    const handleOrderUpdated = (updatedOrder: any) => {
-      console.log('🔄 Order updated via WebSocket:', updatedOrder);
+    const handleItemStatusUpdated = ({
+      itemId,
+      status,
+    }: {
+      itemId: string;
+      status: string;
+    }) => {
+      const mapped = statusMap[status];
+      if (!mapped) {
+        void syncOrders();
+        return;
+      }
+      let matched = false;
+      setOrders((prev) =>
+        prev.map((line) => {
+          const isMatch =
+            line.id === itemId || line.items[0]?.orderItemId === itemId;
+          if (!isMatch) return line;
+          matched = true;
+          return {
+            ...line,
+            status: mapped,
+            updatedAt: new Date(),
+          };
+        })
+      );
+      if (!matched) {
+        void syncOrders();
+      }
+    };
 
-      const statusMap: Record<string, OrderStatus> = {
-        pending: 'pending',
-        confirmed: 'confirmed',
-        preparing: 'cooking',
-        ready: 'ready',
-        served: 'served',
-        completed: 'served',
-        cancelled: 'cancelled',
-      };
-      const paymentMap: Record<string, PaymentStatus> = {
-        unpaid: 'unpaid',
-        payment_pending_confirmation: 'pending_confirmation',
-        paid: 'paid',
-      };
-
+    const handleItemPaymentUpdated = ({ itemId }: { itemId: string }) => {
       setOrders((prev) => {
-        const existingOrder = prev.find((o) => o.id === updatedOrder.id);
-        if (!existingOrder) return prev;
-
-        const newStatus = statusMap[updatedOrder.status] || existingOrder.status;
-        const newPaymentStatus = paymentMap[updatedOrder.payment_status] || existingOrder.paymentStatus;
-
-        // Kiểm tra nếu thanh toán được xác nhận
-        if (
-          existingOrder.paymentStatus === 'pending_confirmation' &&
-          newPaymentStatus === 'paid'
-        ) {
-          console.log('💳 Payment confirmed! Order:', existingOrder.id);
-          
-          // Hiện thông báo thanh toán thành công
-          Alert.alert(
-            '✅ Thanh toán thành công',
-            'Cảm ơn bạn đã sử dụng dịch vụ!\n\nChúc bạn ngon miệng! 🍽️',
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  console.log('🧹 User acknowledged payment success');
-                },
-              },
-            ],
-            { cancelable: false }
-          );
-          
-          // ✅ Dispatch event để App.tsx tự động quay về màn hình chính
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new Event('payment:completed'));
-            console.log('📢 Dispatched payment:completed event');
-          }
+        const next = prev.filter((line) => line.id !== itemId);
+        if (next.length === 0 && typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('payment:completed'));
         }
-
-        // Cập nhật order với status mới
-        const updatedOrders = prev.map((order) =>
-          order.id === updatedOrder.id
-            ? {
-                ...order,
-                status: newStatus,
-                paymentStatus: newPaymentStatus,
-                updatedAt: new Date(),
-              }
-            : order
-        );
-
-        // ✅ TỰ ĐỘNG XÓA CÁC ĐƠN ĐÃ THANH TOÁN ĐỂ TRÁNH TÍNH SAI
-        const filteredOrders = updatedOrders.filter(
-          (order) => order.paymentStatus !== 'paid'
-        );
-
-        if (filteredOrders.length < updatedOrders.length) {
-          console.log(
-            `🧹 Auto-removed ${updatedOrders.length - filteredOrders.length} paid order(s) from state`
-          );
-        }
-
-        return filteredOrders;
+        return next;
       });
     };
 
-    const handleOrderStatusChanged = ({ order }: { orderId: string; status: string; order: any }) => {
-      console.log('✅ Order status changed via WebSocket:', order);
-      handleOrderUpdated(order);
+    const handleOrderUpdated = () => {
+      void syncOrders();
     };
 
-    socketService.on('order:updated', handleOrderUpdated);
-    socketService.on('order:status_changed', handleOrderStatusChanged);
+    const handleBillCreated = () => {
+      /* pendingBillId set khi khách vừa gửi request */
+    };
 
-    // Fallback polling every 30 seconds (reduced from 5 seconds)
-    const timer = setInterval(() => void syncOrders(), 30000);
+    const handleBillConfirmed = () => {
+      setPendingBillId(null);
+      void syncOrders();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('payment:completed'));
+      }
+    };
+
+    socketService.on('order:item_status_updated', handleItemStatusUpdated);
+    socketService.on('order:item_payment_updated', handleItemPaymentUpdated);
+    socketService.on('order:updated', handleOrderUpdated);
+    socketService.on('order:created', handleOrderUpdated);
+    socketService.on('order:status_changed', handleOrderUpdated);
+    socketService.on('bill:created', handleBillCreated);
+    socketService.on('bill:confirmed', handleBillConfirmed);
+
+    const pollTimer = setInterval(() => {
+      void syncOrders();
+    }, 12_000);
 
     return () => {
-      clearInterval(timer);
+      clearInterval(pollTimer);
+      socketService.off('order:item_status_updated', handleItemStatusUpdated);
+      socketService.off('order:item_payment_updated', handleItemPaymentUpdated);
       socketService.off('order:updated', handleOrderUpdated);
-      socketService.off('order:status_changed', handleOrderStatusChanged);
+      socketService.off('order:created', handleOrderUpdated);
+      socketService.off('order:status_changed', handleOrderUpdated);
+      socketService.off('bill:created', handleBillCreated);
+      socketService.off('bill:confirmed', handleBillConfirmed);
       socketService.leaveTable();
     };
-  }, [orders.length, orders[0]?.tableNumber, apiBaseUrl, sessionId]);
+  }, [sessionId, apiBaseUrl]);
 
   const getOrderHistory = () => {
     return orders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -525,13 +592,16 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
         currentOrder: getCurrentOrder(),
         createOrder,
         updateOrderStatus,
+        payOrderItems,
         requestPaymentForServedOrders,
         markPaymentConfirmed,
         hasPendingPaymentConfirmation,
+        hasUnpaidServedOrders,
         isTableFullyPaid,
         getOrderHistory,
         getCurrentOrder,
         cancelCustomerOrder,
+        loadOrdersFromSession,
       }}
     >
       {children}

@@ -11,19 +11,24 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { socketService } from '../../services/socketService';
 
 interface StaffComingScreenProps {
   tableNumber?: number | string;
+  requestId?: string;
   requestType?: string;
   onBack: () => void;
   onNavigate?: (screen: string) => void;
+  onResolved?: () => void;
 }
 
 export default function StaffComingScreen({
   tableNumber = 12,
+  requestId,
   requestType = 'Yêu cầu hỗ trợ',
   onBack,
   onNavigate,
+  onResolved,
 }: StaffComingScreenProps) {
   const [countdown, setCountdown] = useState(30);
   const pulseAnim = new Animated.Value(1);
@@ -60,6 +65,19 @@ export default function StaffComingScreen({
       ])
     ).start();
   }, []);
+
+  useEffect(() => {
+    const handleSupportUpdated = (payload: { id?: string; status?: string }) => {
+      if (requestId && payload.id && payload.id !== requestId) return;
+      if (!payload.status || payload.status === 'pending') return;
+      onResolved?.();
+    };
+
+    socketService.on('support:request_updated', handleSupportUpdated);
+    return () => {
+      socketService.off('support:request_updated', handleSupportUpdated);
+    };
+  }, [requestId, onResolved]);
 
   return (
     <View style={styles.container}>

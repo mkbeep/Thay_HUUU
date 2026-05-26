@@ -14,10 +14,10 @@ const controller = new SupportRequestController();
 router.post('/', controller.create);
 
 // Protected routes (cần authentication)
-router.get('/', authMiddleware, roleMiddleware(['admin', 'staff', 'manager']), controller.getAll);
-router.get('/pending', authMiddleware, roleMiddleware(['admin', 'staff', 'manager']), controller.getPending);
-router.get('/:id', authMiddleware, roleMiddleware(['admin', 'staff', 'manager']), controller.getById);
-router.patch('/:id', authMiddleware, roleMiddleware(['admin', 'staff', 'manager']), controller.update);
+router.get('/', authMiddleware, roleMiddleware(['admin', 'staff', 'waiter', 'manager', 'cashier', 'chef']), controller.getAll);
+router.get('/pending', authMiddleware, roleMiddleware(['admin', 'staff', 'waiter', 'manager', 'cashier', 'chef']), controller.getPending);
+router.get('/:id', authMiddleware, roleMiddleware(['admin', 'staff', 'waiter', 'manager', 'cashier', 'chef']), controller.getById);
+router.patch('/:id', authMiddleware, roleMiddleware(['admin', 'staff', 'waiter', 'manager', 'cashier', 'chef']), controller.update);
 router.delete('/:id', authMiddleware, roleMiddleware(['admin', 'manager']), controller.delete);
 
 export default router;
