@@ -23,10 +23,24 @@ export class TableRepository implements ITableRepository {
   private readonly cartRepository = new CartRepository();
   private readonly orderRepository = new OrderRepository();
 
+  private newQrToken(): string {
+    return uuidv4().replace(/-/g, '');
+  }
+
+  private async ensureQrToken(table: DiningTable): Promise<DiningTable> {
+    if (table.qr_token) return table;
+    const qrToken = this.newQrToken();
+    await this.collection.doc(table.id).update({
+      qr_token: qrToken,
+      updated_at: new Date(),
+    });
+    return { ...table, qr_token: qrToken, updated_at: new Date() };
+  }
+
   async findById(id: string): Promise<DiningTable | null> {
     const doc = await this.collection.doc(id).get();
     if (!doc.exists) return null;
-    return { id: doc.id, ...doc.data() } as DiningTable;
+    return this.ensureQrToken({ id: doc.id, ...doc.data() } as DiningTable);
   }
 
   async findByIdWithSession(id: string): Promise<TableWithSession | null> {
@@ -45,7 +59,7 @@ export class TableRepository implements ITableRepository {
     
     if (snapshot.empty) return null;
     const doc = snapshot.docs[0];
-    return { id: doc.id, ...doc.data() } as DiningTable;
+    return this.ensureQrToken({ id: doc.id, ...doc.data() } as DiningTable);
   }
 
   async findByTableNumberWithSession(tableNumber: string | number): Promise<TableWithSession | null> {
@@ -60,7 +74,7 @@ export class TableRepository implements ITableRepository {
     if (snapshot.empty) return null;
     
     const doc = snapshot.docs[0];
-    const table = { id: doc.id, ...doc.data() } as DiningTable;
+    const table = await this.ensureQrToken({ id: doc.id, ...doc.data() } as DiningTable);
     const session = await this.findActiveSessionByTableId(table.id);
     
     return { ...table, current_session: session || undefined };
@@ -83,10 +97,12 @@ export class TableRepository implements ITableRepository {
     query = query.orderBy('table_number', 'asc');
 
     const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as DiningTable));
+    return Promise.all(snapshot.docs.map(doc =>
+      this.ensureQrToken({
+        id: doc.id,
+        ...doc.data()
+      } as DiningTable)
+    ));
   }
 
   async findAllWithSessions(): Promise<TableWithSession[]> {
@@ -112,6 +128,7 @@ export class TableRepository implements ITableRepository {
     const now = new Date();
     const data = {
       ...tableData,
+      qr_token: tableData.qr_token || this.newQrToken(),
       created_at: now,
       updated_at: now,
     };
@@ -298,8 +315,18 @@ export class TableRepository implements ITableRepository {
       });
       await this.cartRepository.deleteBySessionId(session.id);
     }
+    await this.rotateQrToken(tableId);
     await this.updateStatus(tableId, TableStatus.AVAILABLE);
     return { sessionId: session?.id };
+  }
+
+  async rotateQrToken(tableId: string): Promise<string> {
+    const qrToken = this.newQrToken();
+    await this.collection.doc(tableId).update({
+      qr_token: qrToken,
+      updated_at: new Date(),
+    });
+    return qrToken;
   }
 
   async findSessionById(sessionId: string): Promise<TableSession | null> {
@@ -331,6 +358,7 @@ export class TableRepository implements ITableRepository {
 
     const session = await this.findSessionById(sessionId);
     if (!session) throw new Error('Session not found after update');
+    await this.rotateQrToken(session.table_id);
     return session;
   }
 }

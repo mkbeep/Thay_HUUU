@@ -23,13 +23,15 @@ export class SessionRepository {
     tableId: string,
     customerCount: number,
     sessionToken?: string,
-    deviceFingerprint?: string
+    deviceFingerprint?: string,
+    qrToken?: string | null
   ): Promise<{ session: any; conflict?: boolean; status: number; minutesSinceActive?: number }> {
     const token = sessionToken || (await getSessionToken()) || undefined;
     const response = await api.post(`/tables/${tableId}/session`, {
       customer_count: customerCount,
       session_token: token,
       device_fingerprint: deviceFingerprint,
+      qr_token: qrToken || undefined,
     });
     return {
       session: response.data.data,

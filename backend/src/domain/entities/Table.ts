@@ -16,6 +16,7 @@ export interface DiningTable {
   capacity: number;
   status: TableStatus;
   qr_code?: string;
+  qr_token?: string;
   location?: string;
   created_at: Date;
   updated_at: Date;

@@ -40,7 +40,7 @@ interface TableContextType {
   sessionConflict: boolean;
   conflictMinutes?: number;
   isLoading: boolean;
-  setTableInfo: (tableNumber: string | number, tableId: string, sessionId?: string) => Promise<void>;
+  setTableInfo: (tableNumber: string | number, tableId: string, sessionId?: string, qrToken?: string | null) => Promise<void>;
   clearTableInfo: () => Promise<void>;
 }
 
@@ -83,7 +83,7 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const startOrJoinSession = useCallback(
-    async (tid: string, existingToken?: string | null): Promise<{
+    async (tid: string, existingToken?: string | null, qrToken?: string | null): Promise<{
       sessionId: string | null;
       token: string | null;
       conflict: boolean;
@@ -91,7 +91,7 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
       const tableRepo = new TableRepository();
       const token = existingToken || (await getSessionToken()) || undefined;
       const fingerprint = await getDeviceFingerprint();
-      const result = await tableRepo.createTableSession(tid, 1, token || undefined, fingerprint);
+      const result = await tableRepo.createTableSession(tid, 1, token || undefined, fingerprint, qrToken);
       const session = result.data;
       const newToken = session?.session_token;
       if (newToken) {
@@ -148,7 +148,7 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
         if (cancelled || !t) return false;
 
         const storedToken = await getSessionToken();
-        const { sessionId: sid, token, conflict } = await startOrJoinSession(t.id, storedToken);
+        const { sessionId: sid, token, conflict } = await startOrJoinSession(t.id, storedToken, parsed.qrToken);
 
         const info: TableInfo = {
           tableNumber: t.number,
@@ -316,7 +316,8 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
   const setTableInfo = async (
     newTableNumber: string | number,
     newTableId: string,
-    newSessionId?: string
+    newSessionId?: string,
+    qrToken?: string | null
   ) => {
     try {
       const oldTableNumber = tableNumber;
@@ -340,7 +341,7 @@ export const TableProvider = ({ children }: { children: ReactNode }) => {
       let tokenToUse = await getSessionToken();
 
       if (!sessionIdToSave) {
-        const result = await startOrJoinSession(newTableId, tokenToUse);
+        const result = await startOrJoinSession(newTableId, tokenToUse, qrToken);
         sessionIdToSave = result.sessionId || undefined;
         tokenToUse = result.token;
       }

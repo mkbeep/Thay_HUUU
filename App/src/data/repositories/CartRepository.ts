@@ -19,7 +19,10 @@ export interface CartLine {
 }
 
 export class CartRepository {
-  async syncCart(sessionId: string, items: Omit<CartLine, 'id'>[] & { id?: string }[]): Promise<CartLine[]> {
+  async syncCart(
+    sessionId: string,
+    items: (Omit<CartLine, 'id'> & { id?: string })[]
+  ): Promise<CartLine[]> {
     const lines = items.map((item) => ({
       id: item.id || `line_${item.food_id}_${Date.now()}`,
       food_id: item.food_id || (item as { id?: string }).id || '',

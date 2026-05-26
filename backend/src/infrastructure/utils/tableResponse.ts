@@ -9,6 +9,7 @@ export function attachCustomerMenuUrl<T extends { id: string; table_number: stri
     customer_menu_url: buildTableWebUrl({
       tableId: table.id,
       tableNumber: table.table_number,
+      qrToken: 'qr_token' in table ? String(table.qr_token || '') : undefined,
     }),
   };
 }

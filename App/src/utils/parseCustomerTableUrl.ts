@@ -6,12 +6,13 @@
 export type ParsedCustomerTableUrl = {
   tableNumber: string | null;
   tableId: string | null;
+  qrToken: string | null;
 };
 
 export function parseCustomerTableUrl(raw: string): ParsedCustomerTableUrl {
   const s = raw?.trim() ?? '';
   if (!s || !/^https?:\/\//i.test(s)) {
-    return { tableNumber: null, tableId: null };
+    return { tableNumber: null, tableId: null, qrToken: null };
   }
   try {
     const url = new URL(s);
@@ -20,6 +21,11 @@ export function parseCustomerTableUrl(raw: string): ParsedCustomerTableUrl {
       url.searchParams.get('tableId')?.trim() ||
       url.searchParams.get('table_id')?.trim() ||
       null;
+    const qrToken =
+      url.searchParams.get('qrt')?.trim() ||
+      url.searchParams.get('qrToken')?.trim() ||
+      url.searchParams.get('qr_token')?.trim() ||
+      null;
 
     const fromQuery =
       url.searchParams.get('table') ||
@@ -27,16 +33,16 @@ export function parseCustomerTableUrl(raw: string): ParsedCustomerTableUrl {
       url.searchParams.get('n');
     if (fromQuery) {
       const n = decodeURIComponent(fromQuery.trim()) || null;
-      return { tableNumber: n, tableId: tid };
+      return { tableNumber: n, tableId: tid, qrToken };
     }
 
     const parts = url.pathname.split('/').filter(Boolean);
     const idx = parts.findIndex((p) => ['table', 't', 'ban'].includes(p.toLowerCase()));
     const pathNum: string | null =
       idx >= 0 && parts[idx + 1] ? decodeURIComponent(parts[idx + 1]) : null;
-    return { tableNumber: pathNum, tableId: tid };
+    return { tableNumber: pathNum, tableId: tid, qrToken };
   } catch {
-    return { tableNumber: null, tableId: null };
+    return { tableNumber: null, tableId: null, qrToken: null };
   }
 }
 

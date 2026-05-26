@@ -97,7 +97,7 @@ export default function QRScannerScreen({ onCancel }: QRScannerScreenProps) {
             );
             return;
           }
-          await setTableInfo(table.number, table.id);
+          await setTableInfo(table.number, table.id, undefined, parsed.qrToken);
           await Linking.openURL(data);
           setProcessing(false);
           onCancel();
@@ -227,10 +227,11 @@ export default function QRScannerScreen({ onCancel }: QRScannerScreenProps) {
 
       console.log('🎯 Table found:', table.number, '→ mở bản web');
 
-      await setTableInfo(table.number, table.id);
+      const parsedForToken = data.startsWith('http') ? parseCustomerTableUrl(data) : null;
+      await setTableInfo(table.number, table.id, undefined, parsedForToken?.qrToken || null);
 
       try {
-        await Linking.openURL(buildCustomerTableWebUrl(table.number, table.id));
+        await Linking.openURL(buildCustomerTableWebUrl(table.number, table.id, parsedForToken?.qrToken || null));
       } catch {
         setProcessing(false);
         Alert.alert('Không mở được liên kết', 'Hãy quét lại hoặc mở liên kết bằng camera điện thoại.', [

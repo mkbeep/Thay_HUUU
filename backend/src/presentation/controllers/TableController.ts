@@ -173,6 +173,7 @@ export class TableController {
         customer_count = 1,
         session_token: clientToken,
         device_fingerprint: deviceFingerprint,
+        qr_token: qrToken,
       } = req.body;
 
       const { session, created, conflict, minutesSinceActive } =
@@ -180,7 +181,8 @@ export class TableController {
           id,
           customer_count,
           clientToken,
-          deviceFingerprint
+          deviceFingerprint,
+          qrToken
         );
 
       this.socketManager.notifyTableUpdated(id);

@@ -107,13 +107,20 @@ export class SessionController {
     tableId: string,
     customerCount: number,
     clientToken?: string,
-    deviceFingerprint?: string
+    deviceFingerprint?: string,
+    qrToken?: string
   ): Promise<{
     session: import('../../domain/entities/Table').TableSession;
     created: boolean;
     conflict: boolean;
     minutesSinceActive?: number;
   }> {
+    const table = await this.tableRepository.findById(tableId);
+    if (!table) throw new NotFoundError('Bàn không tồn tại');
+    if (table.qr_token && table.qr_token !== qrToken) {
+      throw new AppError('Mã QR đã hết hiệu lực. Vui lòng quét mã QR mới trên bàn.', 410);
+    }
+
     const existing = await this.tableRepository.findActiveSessionByTableId(tableId);
 
     if (existing) {

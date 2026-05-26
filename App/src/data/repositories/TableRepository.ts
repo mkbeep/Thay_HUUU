@@ -70,7 +70,8 @@ export class TableRepository {
     tableId: string,
     customerCount: number,
     sessionToken?: string,
-    deviceFingerprint?: string
+    deviceFingerprint?: string,
+    qrToken?: string | null
   ): Promise<{
     data: any;
     conflict: boolean;
@@ -82,6 +83,7 @@ export class TableRepository {
         customer_count: customerCount,
         session_token: sessionToken,
         device_fingerprint: deviceFingerprint,
+        qr_token: qrToken || undefined,
       });
       return {
         data: response.data.data,
